@@ -820,6 +820,47 @@ app.delete("/api/sessions/:id", async (req, res) => {
 
 // --- prompting ---
 
+/**
+ * Deterministic fallback for "delegate serious work to a subagent": gpt-oss-20b
+ * (Voxa's fast model) was asked, four separate ways this session, to call the
+ * native `subagent` tool for anything the user flags as serious/important -
+ * every attempt it instead wrapped the call as mcp({ tool: "subagent" }),
+ * got a tool-not-found error, retried the same wrong wrapper up to nine times,
+ * then gave up and answered itself anyway. Prompting alone did not fix it, so
+ * this reroutes the whole turn to Strata at the request layer instead of
+ * trusting the model's own tool choice - scoped to gpt-oss-20b only, and only
+ * for sessions this same mechanism switched (never a session the user put on
+ * Strata on purpose), so it reverts to the fast model as soon as an ordinary
+ * message comes in.
+ */
+const SERIOUS_TRIGGER_WORDS = ["serious", "properly", "make sure", "double-check", "double check", "verify", "important"];
+const FAST_MODEL = { provider: "gpt-oss-20b", model: "/models/gpt-oss-20b-MXFP4.gguf" };
+const SERIOUS_MODEL = { provider: "forgeloop-provider", model: "swift-1.5-iq3_xxs" };
+const autoRoutedToSerious = new Set<string>();
+
+function hasSeriousTrigger(text: string): boolean {
+  const lower = text.toLowerCase();
+  return SERIOUS_TRIGGER_WORDS.some((word) => lower.includes(word));
+}
+
+async function applySeriousDelegation(sessionId: string, message: string): Promise<void> {
+  const session = getSession(sessionId);
+  if (!session) return;
+  const current = chatModel(session, getSettings());
+  const triggered = typeof message === "string" && hasSeriousTrigger(message);
+  if (current.provider === FAST_MODEL.provider && triggered) {
+    const client = await sessions.client(sessionId);
+    await client.setModel(SERIOUS_MODEL.provider, SERIOUS_MODEL.model);
+    updateSession(sessionId, { provider: SERIOUS_MODEL.provider, model: SERIOUS_MODEL.model });
+    autoRoutedToSerious.add(sessionId);
+  } else if (autoRoutedToSerious.has(sessionId) && !triggered) {
+    const client = await sessions.client(sessionId);
+    await client.setModel(FAST_MODEL.provider, FAST_MODEL.model);
+    updateSession(sessionId, { provider: FAST_MODEL.provider, model: FAST_MODEL.model });
+    autoRoutedToSerious.delete(sessionId);
+  }
+}
+
 app.post("/api/sessions/:id/prompt", promptJson, async (req, res) => {
   const session = getSession(req.params.id);
   if (!session) return res.status(404).json({ error: "Not found" });
@@ -840,6 +881,7 @@ app.post("/api/sessions/:id/prompt", promptJson, async (req, res) => {
   if (refused) return res.status(400).json({ error: refused });
   try {
     const images = saveImages(IMAGE_ROOT, session.id, parsed);
+    await applySeriousDelegation(session.id, message);
     // Returns as soon as pi accepts the prompt. The run continues server-side
     // regardless of what this browser does next.
     await sessions.prompt(session.id, message, { voice: req.body?.voice === true, images, steer: req.body?.steer === true });

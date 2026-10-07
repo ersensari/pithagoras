@@ -92,7 +92,9 @@ export function containerSpec(script: string, networkMode: string, choice: Voice
       ...(plan.threads ? [`VOICE_THREADS=${plan.threads}`] : []), ...(plan.note ? [`VOICE_PLAN=${plan.note}`] : [])],
     Labels: { 'pithagoras.addon': 'voice', 'pithagoras.voice-network': 'shared-v1', 'pithagoras.voice-recipe': choiceKey(choice) },
     HostConfig: { Binds: [`${VOLUME}:/voice`], NetworkMode: networkMode,
-      ...(usesGpu(choice) ? { DeviceRequests: [{ Driver: 'nvidia', ...gpu, Capabilities: [['gpu']] }] } : {}),
+      // See dockerProbe.run()'s comment above: this host's nvidia-container-runtime is pinned to mode="cdi",
+      // which refuses DeviceRequests-only containers under the default `runc` runtime.
+      ...(usesGpu(choice) ? { DeviceRequests: [{ Driver: 'nvidia', ...gpu, Capabilities: [['gpu']] }], Runtime: 'nvidia' } : {}),
       RestartPolicy: { Name: 'no' }, LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '2' } } } };
 }
 /** The card a container was given. One made before a card was named asked Docker for any one GPU, and has none. */
@@ -154,7 +156,13 @@ const dockerProbe: Probe = {
     await ensureImage(BASE_IMAGE, () => {}, 120000).catch(unanswered);
     const created = await checked<{ Id: string }>('POST', '/containers/create', { Image: BASE_IMAGE, Tty: true, Cmd: ['nvidia-smi', ...SMI_ARGS],
       // nvidia-smi is a utility of the driver: the image says nothing of it, so it is asked for.
-      Env: ['NVIDIA_DRIVER_CAPABILITIES=utility'], Labels: { 'pithagoras.addon': 'voice-probe' }, HostConfig: { DeviceRequests: [{ Driver: 'nvidia', Count: -1, Capabilities: [['gpu']] }] } }).catch(unanswered);
+      Env: ['NVIDIA_DRIVER_CAPABILITIES=utility'], Labels: { 'pithagoras.addon': 'voice-probe' },
+      // Runtime: 'nvidia' is required on hosts where nvidia-container-runtime's config.toml pins mode="cdi":
+      // the default `runc` runtime's prestart hook then refuses DeviceRequests-only containers outright
+      // ("invoking the NVIDIA Container Runtime Hook directly... is not supported"), even though Docker's
+      // default-runtime is runc here (not nvidia) and other GPU services in this stack set `runtime: nvidia`
+      // explicitly per-service rather than relying on the Docker daemon default.
+      HostConfig: { DeviceRequests: [{ Driver: 'nvidia', Count: -1, Capabilities: [['gpu']] }], Runtime: 'nvidia' } }).catch(unanswered);
     const id = created.body.Id;
     try {
       await checked('POST', `/containers/${id}/start`);
