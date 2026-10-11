@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { LuCheck, LuPencil, LuX } from "react-icons/lu";
 import { api, ApiError } from "../api";
-import { LoadFailed, Section, inputCls } from "./SettingsUi";
+import { LoadFailed, Section } from "./SettingsUi";
+import { Select } from "./Select";
 import { ToolGroupList } from "./ToolGroupList";
 import { displayName, nextOff, sourceName } from "../tool-groups";
 import { isEnter, isEscape } from "../shortcuts";
@@ -136,16 +137,13 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
         title={t("Questions from the agent")}
         hint={t("How long the agent's ask_question tool waits for your answer before it carries on without one. By default it waits until you answer; Stop in the message box ends the wait at any time. The setting is read each time a question is asked.")}
       >
-        <select
+        <Select
           aria-label={t("Wait for an answer")}
-          className={`${inputCls} w-48`}
+          className="w-48"
           value={questionWait}
-          onChange={(e) => changeQuestionWait(Number(e.target.value))}
-        >
-          {QUESTION_WAITS.map((m) => (
-            <option key={m} value={m}>{m ? tp(m, "{n} minute", "{n} minutes") : t("Until answered")}</option>
-          ))}
-        </select>
+          onChange={changeQuestionWait}
+          options={QUESTION_WAITS.map((m) => ({ value: m, label: m ? tp(m, "{n} minute", "{n} minutes") : t("Until answered") }))}
+        />
       </Section>
 
       {!tools.length ? (

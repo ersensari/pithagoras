@@ -46,6 +46,7 @@ test('the questions are answered together: one, several, typed, and a ranking pu
   const dialog = await open(page);
   const submit = dialog.getByRole('button', { name: 'Submit' });
   await expect(submit).toBeDisabled();
+  await expect(dialog.locator('select')).toHaveCount(0);
 
   await dialog.getByRole('radio', { name: /SQLite/ }).check();
   await expect(submit).toBeDisabled();
@@ -210,11 +211,13 @@ test('Settings → Tools sets how long a question waits: until answered by defau
   }, { settings: true });
   await page.goto('/settings/tools');
   const wait = page.getByRole('combobox', { name: 'Wait for an answer' });
-  await expect(wait).toHaveValue('15');
-  await expect(wait.locator('option')).toHaveText(['Until answered', '5 minutes', '15 minutes', '30 minutes', '60 minutes']);
-  await wait.selectOption('0');
+  await expect(wait).toContainText('15 minutes');
+  await expect(page.locator('select')).toHaveCount(0);
+  await wait.click();
+  await expect(page.getByRole('option')).toHaveText(['Until answered', '5 minutes', '15 minutes', '30 minutes', '60 minutes']);
+  await page.getByRole('option', { name: 'Until answered' }).click();
   await expect.poll(() => puts).toEqual([{ waitMinutes: 0 }]);
-  await expect(wait).toHaveValue('0');
+  await expect(wait).toContainText('Until answered');
 });
 
 test('the wait for a question is Until answered where the portal sends none', async ({ page }) => {
@@ -222,5 +225,6 @@ test('the wait for a question is Until answered where the portal sends none', as
     if (path === '/api/tools' && method === 'GET') return { tools: [], off: [], names: {} };
   }, { settings: true });
   await page.goto('/settings/tools');
-  await expect(page.getByRole('combobox', { name: 'Wait for an answer' })).toHaveValue('0');
+  await expect(page.getByRole('combobox', { name: 'Wait for an answer' })).toContainText('Until answered');
+  await expect(page.locator('select')).toHaveCount(0);
 });
