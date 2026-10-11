@@ -195,7 +195,7 @@ export class ContainerExecutor implements Executor {
 
     await removeStoppedRunner(opts.sessionId);
     const child = spawn("docker", args, { stdio: ["pipe", "pipe", "pipe"] });
-    return new PiRpcClient(child);
+    return new PiRpcClient(child, opts.dialogs);
   }
 
   async cleanup(sessionId: string): Promise<void> {
