@@ -46,6 +46,9 @@ import {
   setProjectTools,
   setSettings,
   setToolDefaultsOff,
+  setQuestionWaitMinutes,
+  questionWaitMinutes,
+  QUESTION_WAIT_MINUTES,
   setToolGroupNames,
   shownStoredSettings,
   shownTools,
@@ -1055,7 +1058,15 @@ app.get("/api/tools", (_req, res) => {
     })),
     off: [...off].sort(),
     names: toolGroupNames(),
+    questionWaitMinutes: questionWaitMinutes(),
   });
+});
+
+/** How long the agent's ask_question waits for an answer: 0 is until it is answered. Read when a question is asked; the Tools page gets it with the tools. */
+app.put("/api/ask-question", (req, res) => {
+  const waitMinutes = setQuestionWaitMinutes(req.body?.waitMinutes);
+  if (waitMinutes === undefined) return res.status(400).json({ error: `waitMinutes must be one of ${QUESTION_WAIT_MINUTES.join(", ")}` });
+  res.json({ waitMinutes });
 });
 
 /** What each package is called here. Everything not named keeps its own name. */

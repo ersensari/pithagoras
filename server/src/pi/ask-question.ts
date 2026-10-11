@@ -51,12 +51,6 @@ export const MAX_QUESTIONS = 8;
 export const MAX_OPTIONS = 20;
 const MAX_ANSWER = 4000;
 
-/**
- * How long a question may wait. Longer than the five minutes of an extension's menu, as the
- * person may need to look something up; the agent's Stop ends it earlier through the signal.
- */
-export const QUESTION_WAIT_MS = 15 * 60_000;
-
 const KINDS: readonly QuestionKind[] = ["single", "multiple", "text", "ranking"];
 const NEEDS_OPTIONS: readonly QuestionKind[] = ["single", "multiple", "ranking"];
 
@@ -175,8 +169,11 @@ const questionSchema = Type.Object({
   id: Type.Optional(Type.String({ description: "A short name for the question. Defaults to q1, q2, …" })),
 });
 
-/** An ExtensionFactory — see pi's InlineExtension. */
-export function askQuestionTool() {
+/**
+ * An ExtensionFactory — see pi's InlineExtension. `waitMs` is read when a question is asked, so a change
+ * of the setting reaches the chats that are running; 0 is no limit.
+ */
+export function askQuestionTool(waitMs: () => number = () => 0) {
   return (pi: any): void => {
     pi.registerTool({
       name: ASK_QUESTION_TOOL,
@@ -197,7 +194,7 @@ export function askQuestionTool() {
         // The portal's context has it; any other, a mode with no screen, answers every dialog with its default at once.
         if (typeof ctx?.ui?.questions !== "function") fail("There is no screen to ask on in this conversation. Ask in your reply instead.");
         const title = clip(p.title, 200);
-        const value = await ctx.ui.questions({ ...(title ? { title } : {}), questions }, { signal, timeout: QUESTION_WAIT_MS });
+        const value = await ctx.ui.questions({ ...(title ? { title } : {}), questions }, { signal, timeout: waitMs() });
         if (value === undefined) {
           return say("The person closed the dialog without answering, or did not answer in time. Carry on with your best judgement, or ask in your reply.");
         }

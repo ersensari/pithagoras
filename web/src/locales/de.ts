@@ -1548,6 +1548,10 @@ const de: Locale = {
     // components/ToolDefaults.tsx
     "What a conversation starts with. A tool switched off here is not offered to the model in any chat — the extension stays installed and its slash commands still work. One chat can switch any of them the other way for itself, from the blocks icon beside the composer, and a change here reaches every chat that has not.": "Womit ein Gespräch beginnt. Ein hier ausgeschaltetes Tool wird dem Modell in keinem Chat angeboten — die Erweiterung bleibt installiert, und ihre Slash-Befehle funktionieren weiter. Ein Chat kann jedes davon für sich umstellen, über das Baustein-Symbol neben dem Eingabefeld, und eine Änderung hier erreicht jeden Chat, der das nicht getan hat.",
     "Nothing listed yet. Tools appear once a conversation has run — that is when pi builds the list of what its extensions registered.": "Noch nichts aufgelistet. Tools erscheinen, sobald ein Gespräch gelaufen ist — dann stellt pi die Liste dessen zusammen, was seine Erweiterungen registriert haben.",
+    "How long the agent's ask_question tool waits for your answer before it carries on without one. By default it waits until you answer; Stop in the message box ends the wait at any time. The setting is read each time a question is asked.": "Wie lange das Tool ask_question des Agenten auf deine Antwort wartet, bevor er ohne sie weitermacht. Standardmäßig wartet es, bis du antwortest; Stoppen im Eingabefeld beendet das Warten jederzeit. Die Einstellung wird bei jeder Frage neu gelesen.",
+    "Wait for an answer": "Warten auf eine Antwort",
+    "Until answered": "Bis zur Antwort",
+    "{n} minutes": { one: "{n} Minute", other: "{n} Minuten" },
     "Name for {source}": "Name für {source}",
     "Rename — it is {source}": "Umbenennen — es ist {source}",
     "all on": "alle an",

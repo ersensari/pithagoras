@@ -716,7 +716,7 @@ class ChannelSupervisor {
         if (request?.cancelled) {
           if (this.pendingUi.get(session.id)?.id !== request.id) return;
           this.pendingUi.delete(session.id);
-          void packageReply?.("That question timed out.");
+          void packageReply?.(closedQuestionText(request.reason));
           return;
         }
         const question = describeUi(request);
@@ -800,6 +800,16 @@ class ChannelSupervisor {
  * next message picks one. Returns undefined for the one-way calls — notify,
  * setStatus, setWidget — which are not questions and must not block anything.
  */
+/** What a channel is told when a question it relayed is settled without its own answer; why decides the words. */
+function closedQuestionText(reason: unknown): string {
+  switch (reason) {
+    case "answered": return "That question was answered elsewhere.";
+    case "cancelled": return "That question was cancelled.";
+    case "stopped": return "That question was closed because the run was stopped.";
+    default: return "That question timed out.";
+  }
+}
+
 function describeUi(request: any): string | undefined {
   const title = String(request?.title ?? "").trim();
   const message = String(request?.message ?? "").trim();

@@ -93,9 +93,10 @@ pressed **Keep this order**).
 A choice may also take an answer of your own when the agent allows it, and a
 question marked *optional* may be left empty. **Submit** is available once every
 other question is answered. **Cancel**, `Esc` or a click beside the dialog
-closes it, and the agent is told that you did not answer. It waits for 15
-minutes at most, and Stop in the message box ends the wait too and closes the
-dialog in every window that has it. A question that is still waiting stays with
+closes it, and the agent is told that you did not answer. By default it waits
+until you answer; **Settings → Tools → Questions from the agent** sets a limit
+of 5, 15, 30 or 60 minutes instead. Stop in the message box ends the wait too
+and closes the dialog in every window that has it. A question that is still waiting stays with
 its chat: if you reload the page or look at another chat meanwhile, the dialog is
 there again when you come back.
 

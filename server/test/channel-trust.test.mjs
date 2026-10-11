@@ -721,6 +721,32 @@ test("an extension's open question is answered only by the person it was put to 
   await again;
 });
 
+test("a channel waiting on a question is told why it closed: timed out only for a timeout, not for an answer or Cancel given in the portal", async () => {
+  roster();
+  const closed = async (reason) => {
+    let settle;
+    let uiId;
+    sessions.ask = (id, build, opts = {}) => {
+      uiId = `ui-${reason}`;
+      opts.onUi?.({ id: uiId, method: "confirm", title: "Overwrite?" });
+      return new Promise((resolve) => (settle = () => {
+        opts.onUi?.({ id: uiId, cancelled: true, ...(reason ? { reason } : {}) });
+        resolve("done");
+      }));
+    };
+    const said = [];
+    const running = say("kim", "go", `closed-${reason}`, { onReply: (text) => said.push(text) });
+    await new Promise((resolve) => setImmediate(resolve));
+    settle();
+    await running;
+    return said.filter((text) => /That question/.test(text));
+  };
+  assert.deepEqual(await closed("timeout"), ["That question timed out."]);
+  assert.deepEqual(await closed("answered"), ["That question was answered elsewhere."]);
+  assert.deepEqual(await closed("cancelled"), ["That question was cancelled."]);
+  assert.deepEqual(await closed("stopped"), ["That question was closed because the run was stopped."]);
+});
+
 test("a native question's buttons ask the transport whether the one who pressed may answer", async () => {
   roster();
   let release;

@@ -168,3 +168,62 @@ test('keeping a ranking\'s order with the keyboard leaves the focus inside the d
   // On the first row's arrow, not on the page behind the backdrop.
   await expect(dialog.getByRole('button', { name: 'Move Speed down' })).toBeFocused();
 });
+
+test('answering one of two waiting dialogs leaves the other open, though the server\'s cancel for the answered one arrives before the reply', async ({ page }) => {
+  const { answered } = await portal(page);
+  // As the server does: the answered request is settled, and its cancel goes out on the stream, before the POST returns.
+  await page.route('**/api/sessions/a/ui-response', async (route) => {
+    const body = route.request().postDataJSON();
+    answered.push(body);
+    await page.evaluate((id) => (window as any).streams.filter((s: any) => !s.closed).at(-1).emit('message', { seq: -1, type: 'extension_ui_cancel', payload: { id, reason: 'answered' } }), body.id);
+    await new Promise((r) => setTimeout(r, 200));
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.goto('/s/a');
+  await expect.poll(() => page.evaluate(() => (window as any).streams.filter((s: any) => !s.closed).length)).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    const stream = (window as any).streams.filter((s: any) => !s.closed).at(-1);
+    stream.emit('caught-up', {});
+    const one = (id: string, title: string) => ({ id, method: 'questions', title, questions: [{ id: 'x', question: `Pick for ${title}`, kind: 'single', options: [{ label: 'A' }, { label: 'B' }], other: false, optional: false }] });
+    stream.emit('message', { seq: -1, type: 'extension_ui_request', payload: one('q1', 'First') });
+    stream.emit('message', { seq: -1, type: 'extension_ui_request', payload: one('q2', 'Second') });
+    stream.emit('message', { seq: -1, type: 'extension_ui_request', payload: { id: 'c1', method: 'confirm', title: 'Third', message: 'Sure?' } });
+  });
+  const first = page.getByRole('dialog', { name: 'First' });
+  await first.getByRole('radio', { name: 'A' }).check();
+  await first.getByRole('button', { name: 'Submit' }).click();
+  // Past the reply: the second is still there, and can be answered.
+  await expect.poll(() => answered.length).toBe(1);
+  await page.waitForTimeout(500);
+  const second = page.getByRole('dialog', { name: 'Second' });
+  await expect(second).toBeVisible();
+  await second.getByRole('radio', { name: 'B' }).check();
+  await second.getByRole('button', { name: 'Submit' }).click();
+  await page.waitForTimeout(500);
+  // A confirm queued behind them is not lost either.
+  await expect(page.getByRole('dialog', { name: 'Third' })).toBeVisible();
+  expect(answered).toEqual([{ id: 'q1', value: { x: 'A' } }, { id: 'q2', value: { x: 'B' } }]);
+});
+
+test('Settings → Tools sets how long a question waits: until answered by default, and the choice is stored', async ({ page }) => {
+  const puts: any[] = [];
+  await mockPortal(page, ({ path, method, json }) => {
+    if (path === '/api/tools' && method === 'GET') return { tools: [], off: [], names: {}, questionWaitMinutes: 15 };
+    if (path === '/api/ask-question' && method === 'PUT') { puts.push(json()); return { waitMinutes: json().waitMinutes }; }
+  }, { settings: true });
+  await page.goto('/settings/tools');
+  const wait = page.getByRole('combobox', { name: 'Wait for an answer' });
+  await expect(wait).toHaveValue('15');
+  await expect(wait.locator('option')).toHaveText(['Until answered', '5 minutes', '15 minutes', '30 minutes', '60 minutes']);
+  await wait.selectOption('0');
+  await expect.poll(() => puts).toEqual([{ waitMinutes: 0 }]);
+  await expect(wait).toHaveValue('0');
+});
+
+test('the wait for a question is Until answered where the portal sends none', async ({ page }) => {
+  await mockPortal(page, ({ path, method }) => {
+    if (path === '/api/tools' && method === 'GET') return { tools: [], off: [], names: {} };
+  }, { settings: true });
+  await page.goto('/settings/tools');
+  await expect(page.getByRole('combobox', { name: 'Wait for an answer' })).toHaveValue('0');
+});

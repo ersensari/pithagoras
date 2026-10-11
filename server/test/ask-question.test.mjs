@@ -171,3 +171,73 @@ test("a page that opens a chat with a question waiting is sent it before the str
     server.close();
   }
 });
+
+test("a question waits until it is answered by default, and for the minutes the setting gives, then closes as a timeout", async () => {
+  const { setQuestionWaitMinutes } = await import("../dist/db.js");
+  const real = global.setTimeout;
+  const timers = [];
+  // Only the dialog's wait is of interest: a timer set by the portal's dialog code, kept instead of started.
+  global.setTimeout = (fn, ms, ...rest) => (new Error().stack.includes("dist/pi/sdk-client") && ms >= 60_000 ? (timers.push({ fn, ms }), { unref() {} }) : real(fn, ms, ...rest));
+  try {
+    call = { questions: [{ question: "Pick", options: ["A", "B"] }] };
+
+    const idle = await open();
+    try {
+      await idle.client.prompt("Ask me");
+      await until(() => idle.events.some((e) => e.type === "extension_ui_request"));
+      assert.deepEqual(timers, [], "no timer for a question by default");
+    } finally {
+      idle.client.dispose();
+    }
+
+    assert.equal(setQuestionWaitMinutes(15), 15);
+    const timed = await open();
+    try {
+      await timed.client.prompt("Ask me");
+      await until(() => timed.events.some((e) => e.type === "extension_ui_request"));
+      const { id } = timed.events.find((e) => e.type === "extension_ui_request");
+      assert.deepEqual(timers.map((t) => t.ms), [15 * 60_000], "read when the question is asked");
+      timers[0].fn();
+      await until(() => timed.events.some((e) => e.type === "extension_ui_cancel" && e.id === id));
+      assert.equal(timed.events.find((e) => e.type === "extension_ui_cancel" && e.id === id).reason, "timeout");
+      await until(() => timed.events.some((e) => e.type === "agent_settled"));
+      assert.match(timed.events.find((e) => e.type === "tool_execution_end").result.content[0].text, /did not answer in time/);
+    } finally {
+      timed.client.dispose();
+    }
+  } finally {
+    global.setTimeout = real;
+    setQuestionWaitMinutes(0);
+  }
+});
+
+test("the dialog closes on the other pages with the reason it was settled: answered, cancelled or stopped", async () => {
+  call = { questions: [{ question: "Pick", options: ["A", "B"] }] };
+  for (const [reason, settle] of [
+    ["answered", (client, id) => client.respondUi(id, { value: { q1: "A" } })],
+    ["cancelled", (client, id) => client.respondUi(id, { cancelled: true })],
+    ["stopped", (client) => client.abort()],
+  ]) {
+    const { client, events } = await open();
+    try {
+      await client.prompt("Ask me");
+      await until(() => events.some((e) => e.type === "extension_ui_request"));
+      const { id } = events.find((e) => e.type === "extension_ui_request");
+      await settle(client, id);
+      await until(() => events.some((e) => e.type === "extension_ui_cancel" && e.id === id));
+      assert.equal(events.find((e) => e.type === "extension_ui_cancel" && e.id === id).reason, reason);
+    } finally {
+      client.dispose();
+    }
+  }
+});
+
+test("the wait setting takes only the offered minutes", async () => {
+  const { questionWaitMinutes, setQuestionWaitMinutes } = await import("../dist/db.js");
+  assert.equal(questionWaitMinutes(), 0, "until answered by default");
+  for (const bad of [-1, 7, "15", null, NaN]) assert.equal(setQuestionWaitMinutes(bad), undefined);
+  assert.equal(questionWaitMinutes(), 0);
+  assert.equal(setQuestionWaitMinutes(60), 60);
+  assert.equal(questionWaitMinutes(), 60);
+  setQuestionWaitMinutes(0);
+});

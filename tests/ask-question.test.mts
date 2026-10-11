@@ -114,9 +114,21 @@ test('running the tool asks the context, with a wait of its own, and reports wha
   assert.equal(seen[0][0].title, 'Setup');
   assert.equal(seen[0][0].questions.length, 4);
   assert.equal(seen[0][1].signal, signal);
-  assert.ok(seen[0][1].timeout > 300_000, 'longer than an extension menu waits');
+  assert.equal(seen[0][1].timeout, 0, 'no wait limit by default');
   assert.match(out.content[0].text, /Chosen: SQLite/);
   assert.match(out.content[0].text, /Chosen: Export/);
+});
+
+test('the wait is read each time a question is asked', async () => {
+  let minutes = 0;
+  const seen: number[] = [];
+  let registered: any;
+  askQuestionTool(() => minutes * 60_000)({ registerTool: (t: any) => (registered = t) });
+  const ctx = { ui: { questions: async (_p: any, opts: any) => (seen.push(opts.timeout), {}) } };
+  await registered.execute('id', { questions: ask }, undefined, undefined, ctx);
+  minutes = 30;
+  await registered.execute('id', { questions: ask }, undefined, undefined, ctx);
+  assert.deepEqual(seen, [0, 30 * 60_000]);
 });
 
 test('a dialog closed without answers is a result, not an error; a context with no screen is an error', async () => {

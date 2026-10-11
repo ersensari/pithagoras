@@ -582,6 +582,9 @@ function Shell({
     leave?.(how);
   }, [pageKey]);
 
+  /** Closes the dialog that was answered, by its id: the queue may have moved on already, as the cancel the server sends for it arrives before the answer's reply. */
+  const dropUi = (id: string) => () => setUiQueue((q) => q.filter((x) => x.id !== id));
+
   // What the tab says while you are looking at something else, and — if you
   // asked for them — a notification when a chat you left running is done.
   const waiting = Boolean(active && uiQueue[0]);
@@ -834,7 +837,7 @@ function Shell({
           requestId={uiQueue[0].id}
           title={uiQueue[0].title}
           questions={uiQueue[0].questions ?? []}
-          onDone={() => setUiQueue((q) => q.slice(1))}
+          onDone={dropUi(uiQueue[0].id)}
         />
       )}
       {active && uiQueue[0] && uiQueue[0].method !== "questions" && (
@@ -843,7 +846,7 @@ function Shell({
           key={uiQueue[0].id}
           sessionId={active.id}
           request={uiQueue[0]}
-          onDone={() => setUiQueue((q) => q.slice(1))}
+          onDone={dropUi(uiQueue[0].id)}
         />
       )}
 

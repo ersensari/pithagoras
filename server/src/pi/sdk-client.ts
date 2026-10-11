@@ -31,7 +31,7 @@ import { askPrimaryTool } from "./ask-primary.js";
 import { ASK_QUESTION_SOURCE, askQuestionTool, asksQuestions } from "./ask-question.js";
 import { proxyBaseUrl } from "../llama-progress.js";
 import { bridgeSubagents, SUBAGENT_INPUT, SUBAGENT_STOP, type Bridge } from "../subagent-protocol.js";
-import { contextWindowFor, getSkipThinkingProviders, getVoiceInstructions, portalBrowserOn, voiceSpeaks } from "../db.js";
+import { contextWindowFor, getSkipThinkingProviders, questionWaitMs, getVoiceInstructions, portalBrowserOn, voiceSpeaks } from "../db.js";
 import { configStamp, isLlamaProvider } from "../providers.js";
 import { rereadConfig } from "./model-runtime.js";
 import { UNDERSTORY_RULE, understoryOn } from "../features.js";
@@ -452,7 +452,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       if (opts.sessionId && opts.role && opts.role !== "primary") {
         factories.push({ name: "ask-primary", factory: askPrimaryTool(opts.sessionId) });
       }
-      if (asksQuestions(opts)) factories.push({ name: ASK_QUESTION_SOURCE, factory: askQuestionTool() });
+      if (asksQuestions(opts)) factories.push({ name: ASK_QUESTION_SOURCE, factory: askQuestionTool(questionWaitMs) });
       // Only when there is somewhere for it to go — a tool that always fails is
       // worse than no tool, and the model will keep trying it.
       if (opts.routineSlug !== undefined && reportToFor(opts.routineSlug)) {
@@ -680,26 +680,29 @@ export class SdkPiClient extends EventEmitter implements PiClient {
         let shown = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
         // A stopped run closes the dialog on every page that has it, as the timer does.
-        const abort = () => finish(fallback);
-        const finish = (value: unknown) => {
+        const abort = () => finish(fallback, "stopped");
+        const finish = (value: unknown, reason: "answered" | "cancelled" | "timeout" | "stopped") => {
           if (settled) return;
           settled = true;
           // Whatever settled it, every page still showing it closes it; the page that answered has dropped it already.
-          if (shown) this.emit("event", { type: "extension_ui_cancel", id });
+          if (shown) this.emit("event", { type: "extension_ui_cancel", id, reason });
           clearTimeout(timer);
           opts?.signal?.removeEventListener?.("abort", abort);
           this.pendingUi.delete(id);
           this.openQuestions.delete(id);
           resolve(value);
         };
-        this.pendingUi.set(id, (r) => finish(r.cancelled ? fallback : r.value));
+        this.pendingUi.set(id, (r) => (r.cancelled ? finish(fallback, "cancelled") : finish(r.value, "answered")));
 
-        // Never park forever — an unanswered dialog would wedge the session.
+        // An extension's dialog never parks forever: an unanswered one would wedge the session. The caller may
+        // choose its own wait, and 0 is no wait at all (the agent's Stop still ends it).
         const ms = typeof opts?.timeout === "number" ? opts.timeout : 300_000;
-        timer = setTimeout(() => {
-          finish(fallback);
-        }, ms);
-        if (typeof timer.unref === "function") timer.unref();
+        if (ms > 0) {
+          timer = setTimeout(() => {
+            finish(fallback, "timeout");
+          }, ms);
+          if (typeof timer.unref === "function") timer.unref();
+        }
         opts?.signal?.addEventListener?.("abort", abort, { once: true });
         if (opts?.signal?.aborted) { abort(); return; }
 
