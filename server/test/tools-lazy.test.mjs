@@ -252,6 +252,37 @@ test("an MCP server's tools and pi's built-in tools cannot be lazy: the mark is 
   assert.deepEqual(kept.lazy, ["built in", "notes", "pi-heavy", "pi-web-access"]);
 });
 
+test("pi's built-in tools stay out of reach of lazy when the sandbox registers them again under its own name", async () => {
+  // Before the portal has seen one, the name alone tells it.
+  assert.equal((await send("/api/tools/lazy", "PUT", { lazy: [lazyToolEntry("ls")] })).status, 400);
+  // With the sandbox on, its inline extension brings bash, read and the rest once more, so pi files them under "sandbox", not "built in".
+  const sandboxed = ["bash", "read", "write", "edit", "ls", "grep", "find"].map((name) => ({ name, source: "sandbox", package: null, inline: true }));
+  db.rememberTools(sandboxed);
+  // And an extension of the user's that overrides one under its own name.
+  db.rememberTools([{ name: "write", source: "my-extension", package: null }]);
+  db.rememberTools([{ name: "custom_ping", source: "my-extension", package: null }]);
+  for (const tool of sandboxed) assert.equal(db.lazyAllowed(tool), false, `${tool.name} is built in, whoever registers it`);
+  assert.equal(db.lazyAllowed({ name: "custom_ping", source: "my-extension", package: null }), true);
+
+  for (const mark of ["sandbox", lazyToolEntry("bash"), lazyToolEntry("read")]) {
+    const res = await send("/api/tools/lazy", "PUT", { lazy: [mark] });
+    assert.equal(res.status, 400, `${mark} is refused`);
+    assert.equal((await res.json()).code, "lazy-refused");
+  }
+  assert.deepEqual(db.lazyToolSets(), []);
+
+  // A mark that got in some other way does nothing to them, and the page offers no mark for them.
+  db.setLazyToolSets(["sandbox", "my-extension", lazyToolEntry("bash")]);
+  assert.deepEqual([...db.lazyToolNames()], ["custom_ping"]);
+  const page = await json("/api/tools");
+  assert.deepEqual(lazyOf(page), ["custom_ping"]);
+  assert.deepEqual(page.tools.filter((t) => t.noLazy).map((t) => t.name).sort(), ["bash", "edit", "find", "grep", "ls", "read", "write"]);
+  const chat = await json("/api/sessions", "POST", {});
+  const listed = await json(`/api/sessions/${chat.id}/tools`);
+  assert.deepEqual(lazyOf(listed), ["custom_ping"]);
+  assert.deepEqual(sessions.piLazy(sessions.piOff(chat.id)).tools, ["custom_ping"]);
+});
+
 test("the page is told which tools cannot be lazy, so it offers no mark for them", async () => {
   writeMcp({ notes: {} });
   db.rememberTools([

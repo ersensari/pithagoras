@@ -28,7 +28,7 @@ import { findSessionFile } from "./session-file.js";
 import { CONTEXT_FILES, SHARED_FILES } from "./context-files.js";
 import { heartbeatTool } from "./heartbeat-tool.js";
 import { ToolsGateway } from "./tools-gateway.js";
-import { GATEWAY_TOOL } from "./tools-gateway-names.js";
+import { CALLED_TOOL_KEY, GATEWAY_TOOL, calledThrough } from "./tools-gateway-names.js";
 import { askPrimaryTool } from "./ask-primary.js";
 import { proxyBaseUrl } from "../llama-progress.js";
 import { bridgeSubagents, SUBAGENT_INPUT, SUBAGENT_STOP, type Bridge } from "../subagent-protocol.js";
@@ -580,6 +580,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       client.loader = resourceLoader;
       client.sayAudioRuleEachTurn();
     }
+    // The tool a call through the gateway called, from its start to its end.
+    const lazyCalls = new Map<string, string>();
     const unsub = session.subscribe((event: any) => {
       // Before anything is measured against the window: pi swaps the model for the
       // registry's whenever an extension registers a provider, and that undoes it.
@@ -588,9 +590,18 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       // As pi emits it, not as forward() passes it on: a queue_update held
       // behind a settle would be too late for the prompt() that caused it.
       client.noteQueue(event);
+      // A call through the gateway to the lazy tools is a call of the tool it calls, to the pages; all pi's events make of it is `tools`.
+      const starting = event?.type === "tool_execution_start";
+      const ending = event?.type === "tool_execution_end";
+      const called = starting && event.toolName === GATEWAY_TOOL ? calledThrough(event.args)?.name : undefined;
+      if (called) lazyCalls.set(String(event.toolCallId), called);
       // The start of a call of the portal's own picture tools says so: the page draws a picture for those from then on, and never for the tool of that name an extension may bring, which pi keeps instead. Only here is it known which of the two it is, and only the end of a call that made a picture would say so later.
-      const own = event?.type === "tool_execution_start" && ((event.toolName === GENERATE_IMAGE_TOOL && imageTool?.registered()) || (event.toolName === EDIT_IMAGE_TOOL && editTool?.registered()));
-      client.forward(own ? { ...event, [GENERATED_PICTURE_MARK]: true } : event);
+      const tool = called ?? event?.toolName;
+      const own = starting && ((tool === GENERATE_IMAGE_TOOL && imageTool?.registered()) || (tool === EDIT_IMAGE_TOOL && editTool?.registered()));
+      // The end of a call carries no arguments, so it is told again there which tool was called.
+      const was = ending ? lazyCalls.get(String(event.toolCallId)) : undefined;
+      if (ending) lazyCalls.delete(String(event.toolCallId));
+      client.forward(own ? { ...event, [GENERATED_PICTURE_MARK]: true } : was ? { ...event, [CALLED_TOOL_KEY]: was } : event);
     });
     // Replace the placeholder now that we have the real unsubscribe.
     (client as any).unsubscribe = typeof unsub === "function" ? unsub : () => {};

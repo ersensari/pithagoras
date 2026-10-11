@@ -1,7 +1,7 @@
 import type { PortalEvent } from "./api";
 import { unwrapCall } from "./tool-activity";
 import { argsSummary } from "./tool-args";
-import { toolArgsOf, toolNameOf } from "./tool-payload";
+import { calledToolOf, toolArgsOf, toolNameOf } from "./tool-payload";
 import { msg, t } from "./i18n";
 import { GENERATED_PICTURE_MARK } from "../../server/src/generated-picture";
 
@@ -33,7 +33,8 @@ export interface ShownPicture {
  */
 export function shownPicture(payload: any): ShownPicture | undefined {
   if (payload?.isError) return undefined;
-  const name = toolNameOf(payload);
+  // A lazy tool's call ends as one of `tools`; the portal says on it which tool that was.
+  const name = calledToolOf(payload);
   const details = payload?.result?.details;
   if (name === "generate_image" || name === "edit_image" ? details?.[GENERATED_PICTURE_MARK] !== true : name !== "show_image") return undefined;
   if (typeof details?.path !== "string" || !details.path) return undefined;

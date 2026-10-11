@@ -112,6 +112,13 @@ const PICTURE_TOOLS = ["show_image", "generate_image", "edit_image"];
 export const BUILT_IN_SET = "built in";
 
 /**
+ * The names of pi's own tools. By name rather than by set: with the sandbox on, the portal's inline
+ * extension registers these again, and pi then files them under that extension's name, as it does
+ * any extension that brings a tool of one of these names.
+ */
+export const PI_BUILT_IN_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls"];
+
+/**
  * The tool set a tool belongs to: the box the tool lists show it in, which is also what
  * can be made lazy. The portal's own picture tools are one set, whichever extension registered each.
  */

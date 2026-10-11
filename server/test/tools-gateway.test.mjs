@@ -87,14 +87,16 @@ async function run(calls, options = {}) {
     cwd: chat(), sessionDir: mkdtempSync(path.join(home, "chat-")), provider: "fake", modelId: "m", sessionId: `gateway-${n++}`, ...options,
   });
   const results = [];
+  const starts = [];
   const settled = new Promise((resolve) => client.on("event", (e) => {
+    if (e?.type === "tool_execution_start") starts.push(e);
     if (e?.type === "tool_execution_end") results.push(e);
     if (e?.type === "agent_settled") resolve();
   }));
   try {
     await client.prompt("Go on");
     await settled;
-    return { results, requests: [...model.requests], client };
+    return { results, starts, requests: [...model.requests], client };
   } finally {
     client.dispose();
   }
@@ -300,4 +302,25 @@ test("a tool that is lazy answers a call exactly as it does when called directly
   const through = await run([via("call", { name: "docs_open", args: { id: "d-1" } })], lazy);
   assert.equal(direct.results[0].isError, through.results[0].isError);
   assert.equal(textOf(direct.results[0]), textOf(through.results[0]));
+});
+
+test("a call of a lazy tool tells the portal's pages which tool it called, and a direct call is as it was", async () => {
+  // The portal's own show_image, which the pages draw a picture for: pi's events name `tools`, and the end of a call has no arguments.
+  const folder = chat();
+  writeFileSync(path.join(folder, "p.png"), Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]));
+  const shown = { path: "p.png", title: "t" };
+  const direct = await run([{ name: "show_image", args: shown }], { cwd: folder });
+  const through = await run([via("call", { name: "show_image", args: shown }), via("search", { query: "show" })], { cwd: folder, toolsLazy: ["show_image"] });
+
+  assert.equal(direct.results[0].toolName, "show_image");
+  assert.equal(direct.results[0].portalCalledTool, undefined, "a direct call is not a call through anything");
+  assert.equal(through.results[0].toolName, "tools");
+  assert.equal(through.starts[0].toolName, "tools");
+  assert.deepEqual(through.starts[0].args, { action: "call", name: "show_image", args: shown }, "its start has the tool in its arguments");
+  assert.equal(through.results[0].portalCalledTool, "show_image", "its end says which tool it was");
+  assert.deepEqual(through.results[0].result, direct.results[0].result, "and the result is the tool's own");
+  assert.deepEqual(through.results[0].result.details, shown);
+  // A search calls nothing, so it is of no tool.
+  assert.equal(through.results[1].toolName, "tools");
+  assert.equal(through.results[1].portalCalledTool, undefined);
 });

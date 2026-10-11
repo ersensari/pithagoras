@@ -267,14 +267,18 @@ that turn up in it later; marking a tool makes that one lazy. Taking the mark aw
 one again.
 
 Any tool can be made lazy except an MCP server's and pi's own built-in ones (`read`, `bash`, `edit`,
-`write` and the rest of the **built in** group). They have no lazy button, and the portal refuses a mark
-that names them. An MCP server has a way of its own to keep its tools out of the prompt, through the
-[MCP adapter](/guide/mcp), and the built-in tools are what every conversation works with.
+`write`, `grep`, `find` and `ls`). They have no lazy button, and the portal refuses a mark that names
+them, in whichever group they are listed: with the [sandbox](/guide/sandbox) on they are listed under
+**sandbox**, and an extension that brings a tool of one of these names does not make it lazy either. An
+MCP server has a way of its own to keep its tools out of the prompt, through the [MCP adapter](/guide/mcp),
+and the built-in tools are what every conversation works with.
 
 Lazy is not a switch. A lazy tool is **on** like any other, and behaves exactly like one: it is run by
 the same code, held to the same [guard](/guide/security) (the [browser](/guide/browser)'s allowlist, the
 rules after untrusted content, what a colleague may run), its arguments are checked and converted as for
-a direct call, and its result is wrapped as somebody else's words where it would be. The one difference
+a direct call, and its result is wrapped as somebody else's words where it would be. A picture it shows
+or makes appears in the chat and in voice mode, and the browser's window opens for it, as for a direct call.
+The one difference
 is that the model is not shown it up front. The model is shown one short line instead, naming the lazy
 sets, for example "You have browser tools; search for them with the tools tool."
 
