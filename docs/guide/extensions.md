@@ -128,8 +128,11 @@ anything.
 A dialog waits until someone answers it, cancels it or stops the agent; it has
 no time limit of its own, and it stays open on every page that shows the chat. An
 extension that passes its own `timeout` to the call gets a dialog that closes
-when that time is up. A run nobody is watching (a routine, a heartbeat look, a
-channel's message) is cut off by its own time limit like any other, dialog or not.
+when that time is up. A channel's message has no time limit either: it waits for
+the agent until the turn finishes. A routine run (60 minutes) and a heartbeat
+look (20 minutes) have a limit of their own, but it only ends the wait of the
+run's caller with an error: the run and any dialog it has open stay in the chat
+until someone answers the dialog or presses Stop.
 
 A status line or a widget an extension keeps refreshing does not count as use of
 the chat, and does not cut what the agent is writing into pieces: only a dialog

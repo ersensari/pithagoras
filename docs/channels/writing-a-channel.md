@@ -300,8 +300,11 @@ see a change.
   behind, with a line in the log, so that editing a channel and shutting the
   portal down never wait on it. Answer what is open instead of waiting for it,
   as the webhook does with a 503.
-- **`ask` waits for the agent.** It can take minutes on a real task; there is a
-  15 minute ceiling after which it rejects.
+- **`ask` waits for the agent.** It can take minutes on a real task, and the
+  portal applies no time limit to a channel's message: `ask` settles when the
+  agent's turn finishes, and not before. If the agent stops on a question that
+  only the portal's chat can show, `ask` stays open until someone answers it
+  there or presses Stop, so do not count on it to reject.
 
 ## Speaking first, and asking natively
 
