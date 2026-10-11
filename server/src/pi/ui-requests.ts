@@ -6,7 +6,7 @@
  * news that nobody waits on, and an extension sends it on its own clock: one
  * refreshes its status every second whether or not anything is going on.
  */
-const DIALOGS = new Set(["select", "confirm", "input", "editor"]);
+const DIALOGS = new Set(["select", "confirm", "input", "editor", "questions"]);
 
 /** Whether this UI request waits for an answer. What is not known is one-way. */
 export function isDialog(method: unknown): boolean {

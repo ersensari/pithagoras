@@ -81,6 +81,24 @@ Two keys work from anywhere on the page:
 | `/` | Jump to the message box with the command list open. Not while you are typing somewhere else, where it is a character. It is the [command character](/guide/commands#the-command-character), so it is another key if you chose one |
 | `Esc` | In the message box, **stop the run**, whatever is typed: the words stay in the box, so it costs you nothing. Not while an input method is composing a word, and not while the command list is open, where it closes the list |
 
+## Questions from the agent
+
+When the agent cannot go on without a decision or a fact only you have, it uses
+its `ask_question` tool: a dialog opens over the chat with its questions, and
+the agent waits for your answers. A question is one of four kinds: **choose
+one**, **choose several**, **free text**, or **put the options in order** (best
+first, moved with the arrows; they start in the order the agent listed them).
+A choice may also take an answer of your own when the agent allows it, and a
+question marked *optional* may be left empty. **Submit** is available once every
+other question is answered. **Cancel**, `Esc` or a click beside the dialog
+closes it, and the agent is told that you did not answer. It waits for 15
+minutes at most, and Stop in the message box ends the wait too.
+
+The tool is only there in a chat that you are looking at: not in a routine, a
+heartbeat, or a chat reached through a channel, whose questions go out as text.
+It is in the tools list like any other, in a group named `ask-question`, and can
+be switched off there.
+
 ## Looking at a picture
 
 The pictures the agent shows with `show_image` are drawn under their tool line,

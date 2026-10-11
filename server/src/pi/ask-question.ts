@@ -1,0 +1,194 @@
+import { Type } from "typebox";
+import { fail, say } from "./tool-result.js";
+
+/**
+ * Asking the person in front of the screen something, with a dialog of the portal's own.
+ *
+ * pi's `ctx.ui.select()` and `input()` draw one plain menu or one text line, so a
+ * question with several parts, or an answer that is a ranking, took a string of
+ * dialogs or a guess. This tool puts all of them in one dialog: single choice,
+ * several choices, free text and putting options in order. The dialog is the
+ * `questions` request of the portal's UI context (see buildUiContext), answered by
+ * the browser through the same route as every other dialog.
+ */
+
+export const ASK_QUESTION_TOOL = "ask_question";
+
+export type QuestionKind = "single" | "multiple" | "text" | "ranking";
+
+export interface QuestionOption {
+  label: string;
+  description?: string;
+}
+
+/** A question as the dialog draws it: every field settled, so the browser has nothing to guess. */
+export interface Question {
+  id: string;
+  question: string;
+  kind: QuestionKind;
+  options: QuestionOption[];
+  /** Whether a choice may be typed in instead of picked. Only for single and multiple. */
+  other: boolean;
+  /** An answer may be left out. */
+  optional: boolean;
+}
+
+/** What the dialog sends back: the answer to each question it was given, by id. A question left empty has none. */
+export type Answers = Record<string, string | string[]>;
+
+export const MAX_QUESTIONS = 8;
+export const MAX_OPTIONS = 20;
+const MAX_ANSWER = 4000;
+
+/**
+ * How long a question may wait. Longer than the five minutes of an extension's menu, as the
+ * person may need to look something up; the agent's Stop ends it earlier through the signal.
+ */
+export const QUESTION_WAIT_MS = 15 * 60_000;
+
+const KINDS: readonly QuestionKind[] = ["single", "multiple", "text", "ranking"];
+const NEEDS_OPTIONS: readonly QuestionKind[] = ["single", "multiple", "ranking"];
+
+const clip = (text: unknown, max: number) => String(text ?? "").trim().slice(0, max);
+
+/** An answer is text as sent: a number or an object is no answer, not its string form. */
+const asText = (value: unknown) => (typeof value === "string" ? clip(value, MAX_ANSWER) : "");
+
+/**
+ * The questions the model wrote, checked and completed. A mistake is thrown as a
+ * message the model reads and corrects, rather than a dialog drawn half right.
+ */
+export function readQuestions(raw: unknown): Question[] {
+  if (!Array.isArray(raw) || raw.length === 0) fail("Nothing to ask: give at least one question.");
+  if (raw.length > MAX_QUESTIONS) fail(`Too many questions: ask at most ${MAX_QUESTIONS} at once.`);
+  const seen = new Set<string>();
+  return raw.map((entry: any, i: number) => {
+    const at = `Question ${i + 1}`;
+    const question = clip(entry?.question, 1000);
+    if (!question) fail(`${at} has no text.`);
+    const kind = (entry?.kind ?? "single") as QuestionKind;
+    if (!KINDS.includes(kind)) fail(`${at}: kind must be one of ${KINDS.join(", ")}.`);
+
+    const options: QuestionOption[] = [];
+    for (const item of Array.isArray(entry?.options) ? entry.options : []) {
+      // A bare string is a label: models write the short form even when the schema shows the long one.
+      const label = clip(typeof item === "string" ? item : item?.label, 200);
+      if (!label) continue;
+      if (options.some((o) => o.label === label)) fail(`${at}: the option "${label}" is there twice.`);
+      const description = typeof item === "string" ? "" : clip(item?.description, 400);
+      options.push(description ? { label, description } : { label });
+    }
+    if (kind === "text" && options.length) fail(`${at}: a text question has no options.`);
+    if (NEEDS_OPTIONS.includes(kind) && options.length < (kind === "ranking" ? 2 : 1)) {
+      fail(`${at}: a ${kind} question needs ${kind === "ranking" ? "at least two options" : "options"}.`);
+    }
+    if (options.length > MAX_OPTIONS) fail(`${at}: at most ${MAX_OPTIONS} options.`);
+
+    const id = clip(entry?.id, 40) || `q${i + 1}`;
+    if (seen.has(id)) fail(`${at}: the id "${id}" is used twice.`);
+    seen.add(id);
+    return {
+      id,
+      question,
+      kind,
+      options,
+      other: (kind === "single" || kind === "multiple") && entry?.allowOther === true,
+      optional: entry?.optional === true,
+    };
+  });
+}
+
+/**
+ * What the browser sent, held to what was asked. The route that carries it takes any JSON, so an
+ * answer that is not one of the options (and not a typed one where that was allowed), a ranking
+ * that is not the options in some order, or a value of the wrong shape is dropped, never believed.
+ */
+export function readAnswers(questions: Question[], value: unknown): Answers {
+  const given = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const out: Answers = {};
+  for (const q of questions) {
+    const got = given[q.id];
+    const labels = q.options.map((o) => o.label);
+    const allowed = (s: string) => labels.includes(s) || q.other;
+    if (q.kind === "text") {
+      const text = asText(got);
+      if (text) out[q.id] = text;
+    } else if (q.kind === "single") {
+      const pick = asText(got);
+      if (pick && allowed(pick)) out[q.id] = pick;
+    } else if (q.kind === "multiple") {
+      const picks = Array.isArray(got) ? [...new Set(got.map(asText).filter((s) => s && allowed(s)))] : [];
+      if (picks.length) out[q.id] = picks;
+    } else if (Array.isArray(got) && got.length === labels.length && labels.every((l) => got.includes(l))) {
+      out[q.id] = got as string[];
+    }
+  }
+  return out;
+}
+
+/** The answers as the model reads them: each question with what was said, and what was left. */
+export function describeAnswers(questions: Question[], answers: Answers): string {
+  const lines = questions.map((q, i) => {
+    const got = answers[q.id];
+    const head = `${i + 1}. ${q.question}`;
+    if (got === undefined) return `${head}\n   No answer${q.optional ? " (it was optional)" : ""}.`;
+    const labels = q.options.map((o) => o.label);
+    const typed = (s: string) => (q.kind !== "text" && !labels.includes(s) ? `${JSON.stringify(s)} (typed in, not one of the options)` : s);
+    if (q.kind === "ranking") return `${head}\n   In order, first is best: ${(got as string[]).map((s, n) => `${n + 1}) ${s}`).join("  ")}`;
+    if (Array.isArray(got)) return `${head}\n   Chosen: ${got.map(typed).join("; ")}`;
+    return `${head}\n   ${q.kind === "text" ? "Answer" : "Chosen"}: ${typed(got)}`;
+  });
+  return `The person answered:\n\n${lines.join("\n\n")}`;
+}
+
+const optionSchema = Type.Object({
+  label: Type.String({ description: "What the person picks. Short, and different from the others." }),
+  description: Type.Optional(Type.String({ description: "One line on what choosing it means, when the label alone does not say." })),
+});
+
+const questionSchema = Type.Object({
+  question: Type.String({ description: "The question, complete in itself." }),
+  kind: Type.Optional(
+    Type.Union(KINDS.map((k) => Type.Literal(k)), {
+      description:
+        '"single" picks one option (the default), "multiple" any number, "text" is typed in freely, ' +
+        '"ranking" puts all the options in order, best first (they start in the order you give them).',
+    }),
+  ),
+  options: Type.Optional(Type.Array(optionSchema, { description: "For single, multiple and ranking; none for text." })),
+  allowOther: Type.Optional(Type.Boolean({ description: "Single and multiple: also let the person type their own choice." })),
+  optional: Type.Optional(Type.Boolean({ description: "The person may leave this one unanswered." })),
+  id: Type.Optional(Type.String({ description: "A short name for the question. Defaults to q1, q2, …" })),
+});
+
+/** An ExtensionFactory — see pi's InlineExtension. */
+export function askQuestionTool() {
+  return (pi: any): void => {
+    pi.registerTool({
+      name: ASK_QUESTION_TOOL,
+      label: "Ask a question",
+      description:
+        "Ask the person you are working with one or more questions in a dialog over their message box, and " +
+        "wait for the answers. Use it when you cannot go on without a decision or a fact that only they have " +
+        "and guessing would cost them more than asking: a choice between approaches, which of several files " +
+        "to change, how they rank things. Put every question you have into one call. Do not use it for " +
+        "what you can find out yourself, or for confirming what they already told you.",
+      promptSnippet: `${ASK_QUESTION_TOOL} — ask the person questions (choose one, choose several, free text, rank) and wait for the answers`,
+      parameters: Type.Object({
+        title: Type.Optional(Type.String({ description: "A heading for the dialog, when the questions belong together." })),
+        questions: Type.Array(questionSchema, { description: `1 to ${MAX_QUESTIONS} questions, shown together.` }),
+      }),
+      async execute(_id: string, p: any, signal: AbortSignal | undefined, _update: unknown, ctx: any) {
+        const questions = readQuestions(p.questions);
+        // The portal's context has it; any other, a mode with no screen, answers every dialog with its default at once.
+        if (typeof ctx?.ui?.questions !== "function") fail("There is no screen to ask on in this conversation. Ask in your reply instead.");
+        const title = clip(p.title, 200);
+        const value = await ctx.ui.questions({ ...(title ? { title } : {}), questions }, { signal, timeout: QUESTION_WAIT_MS });
+        if (value === undefined) {
+          return say("The person closed the dialog without answering, or did not answer in time. Carry on with your best judgement, or ask in your reply.");
+        }
+        return say(describeAnswers(questions, readAnswers(questions, value)));
+      },
+    });
+  };
+}

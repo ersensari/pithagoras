@@ -28,6 +28,7 @@ import { findSessionFile } from "./session-file.js";
 import { CONTEXT_FILES, SHARED_FILES } from "./context-files.js";
 import { heartbeatTool } from "./heartbeat-tool.js";
 import { askPrimaryTool } from "./ask-primary.js";
+import { askQuestionTool } from "./ask-question.js";
 import { proxyBaseUrl } from "../llama-progress.js";
 import { bridgeSubagents, SUBAGENT_INPUT, SUBAGENT_STOP, type Bridge } from "../subagent-protocol.js";
 import { contextWindowFor, getSkipThinkingProviders, getVoiceInstructions, portalBrowserOn, voiceSpeaks } from "../db.js";
@@ -449,6 +450,11 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       if (opts.sessionId && opts.role && opts.role !== "primary") {
         factories.push({ name: "ask-primary", factory: askPrimaryTool(opts.sessionId) });
       }
+      // Only where a person is looking at the portal: not a routine or a heartbeat, which nobody watches,
+      // and not a chat reached through a channel, whose questions go out as text (see the channel supervisor).
+      if (opts.sessionId && !opts.routineTools && opts.routineSlug === undefined && !opts.heartbeatAgent && (!opts.role || opts.role === "primary")) {
+        factories.push({ name: "ask-question", factory: askQuestionTool() });
+      }
       // Only when there is somewhere for it to go — a tool that always fails is
       // worse than no tool, and the model will keep trying it.
       if (opts.routineSlug !== undefined && reportToFor(opts.routineSlug)) {
@@ -711,6 +717,9 @@ export class SdkPiClient extends EventEmitter implements PiClient {
         ask({ method: "input", title, placeholder }, opts, undefined),
       editor: (title: string, content: string, opts?: any) =>
         ask({ method: "editor", title, defaultValue: content }, opts, undefined),
+      // The portal's own, beside pi's: one dialog for several questions. See ask-question.ts.
+      questions: (payload: { title?: string; questions: unknown[] }, opts?: any) =>
+        ask({ method: "questions", ...payload }, opts, undefined),
       notify: (message: string, type?: string) =>
         fireAndForget({ method: "notify", message, notifyType: type }),
       setStatus: (key: string, text: string) =>

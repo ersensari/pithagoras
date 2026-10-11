@@ -759,6 +759,14 @@ const de: Locale = {
     "Submit": "Absenden",
     "No": "Nein",
     "Yes": "Ja",
+    // components/QuestionDialog.tsx
+    "Questions from the agent": "Fragen des Agenten",
+    "optional": "optional",
+    "Another answer": "Andere Antwort",
+    "Type your own answer": "Eigene Antwort eingeben",
+    "Best first. Move an option with the arrows.": "Beste zuerst. Verschiebe eine Option mit den Pfeilen.",
+    "Move {option} up": "{option} nach oben",
+    "Move {option} down": "{option} nach unten",
     // components/FeatureAddons.tsx
     "Idle chats have it now; {n} busy chats pick it up once they are idle and reloaded (/reload).": { one: "Chats ohne laufende Aufgabe haben es jetzt; ein beschäftigter Chat bekommt es, sobald er frei ist und neu geladen wird (/reload).", other: "Chats ohne laufende Aufgabe haben es jetzt; {n} beschäftigte Chats bekommen es, sobald sie frei sind und neu geladen werden (/reload)." },
     "Chats have it from now on.": "Chats haben es ab jetzt.",
@@ -2371,6 +2379,7 @@ const de: Locale = {
     "Listing {folder}": "Listet {folder} auf",
     "the folder": "den Ordner",
     "Showing a picture": "Zeigt ein Bild",
+    "Asking you a question": "Stellt dir eine Frage",
     "Making a picture": "Erstellt ein Bild",
     "Editing a picture": "Bearbeitet ein Bild",
     "Starting a document": "Beginnt ein Dokument",

@@ -104,7 +104,7 @@ out of it, by `..` or by a link, is refused with 400.
 | `POST /api/sessions/:id/prompt` | `{ message, images?, voice?, steer? }` — `images` is up to eight `{ data }`, each base64 or a `data:` URL of a PNG, JPEG, GIF or WebP under 5 MB. The type is read from the bytes. `message` may be empty when there are pictures. Sent while a run is going, a message waits for the run to end; with `steer: true` it goes into that run instead, after the tools running now |
 | `GET /api/sessions/:id/images/:name` | A picture sent with a message; `portal_prompt` events name them in `payload.images` |
 | `POST /api/sessions/:id/abort` | Stop the current run |
-| `POST /api/sessions/:id/ui-response` | `{ id, value?, cancelled? }` — answer an extension dialog |
+| `POST /api/sessions/:id/ui-response` | `{ id, value?, cancelled? }` — answer an extension dialog. For the agent's `ask_question` (`method: "questions"`) the value is an object of answers by question id |
 | `GET /api/tools` | `{ tools, off }` — every tool the portal has seen, and which are off by default. With `EXECUTOR=container` this and the other tool routes answer 400 with `code: "tools-unsupported"` |
 | `PUT /api/tools` | `{ off: string[] }` — the default for every conversation; applied to the running ones too. A [project](#projects) can bend it with `PUT /api/projects/:name/tools`, and a conversation then holds its exceptions against that |
 | `GET /api/sessions/:id/tools` | `{ tools, live, off }` — every tool the conversation could use and whether it is on. `live` is false when pi is not running to be asked |
