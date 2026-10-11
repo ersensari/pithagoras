@@ -77,6 +77,9 @@ test("a waiting message is taken back, the others keep their order, and the agen
   const [[second]] = waiting(chat);
   await json(`/api/sessions/${chat}/queued/${second}`, { method: "DELETE" });
   assert.deepEqual(waiting(chat).map(([, words]) => words), ["third"]);
+  // Sent again, "third" is still a steer: a plain delete keeps each message's lane.
+  const resent = db.eventsSince(chat, 0).map((e) => e.type === "portal_prompt" && JSON.parse(e.payload)).filter((p) => p && p.queued === true && p.message === "third");
+  assert.equal(resent.at(-1).steer, true);
 
   // Once it is gone it cannot be taken back again.
   const again = await call(`/api/sessions/${chat}/queued/${second}`, { method: "DELETE" });
