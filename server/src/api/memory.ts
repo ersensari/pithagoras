@@ -14,6 +14,8 @@ import * as service from "../extensions/understory-service.js";
  * an HTTPS portal), and the token stays on the server. Only these reads are
  * handed on; the few changes below go through Understory's own write path in
  * the container the portal runs, never through its HTTP API, which has none.
+ * The one thing beyond the reads is the librarian chat, handed on in the same
+ * way: Understory's agent answers there, and writes through its own tools.
  *
  * It is not a documented API, so a failure says what Understory answered
  * rather than pretending the memory is empty.
@@ -56,6 +58,23 @@ export function notePath(value: unknown): string | undefined {
   if (typeof value !== "string" || !/^\/[^\0]*\.md$/.test(value) || value.split("/").includes("..")) return undefined;
   const name = value.split("/").pop();
   return name === "index.md" || name === "log.md" ? undefined : value;
+}
+
+/** The most messages of a conversation passed on: the page keeps its history short, this is a ceiling. */
+const MAX_CHAT_MESSAGES = 200;
+
+/**
+ * A conversation as Understory's chat takes it (the AI SDK's UI messages), cut
+ * down to what it reads: an id, a role and parts, ending with the user's turn.
+ */
+export function chatMessages(value: unknown): { id: string; role: "user" | "assistant"; parts: unknown[] }[] | undefined {
+  if (!Array.isArray(value) || !value.length || value.length > MAX_CHAT_MESSAGES) return undefined;
+  const messages: { id: string; role: "user" | "assistant"; parts: unknown[] }[] = [];
+  for (const m of value) {
+    if (!m || typeof m !== "object" || (m.role !== "user" && m.role !== "assistant") || !Array.isArray(m.parts)) return undefined;
+    messages.push({ id: typeof m.id === "string" ? m.id : `m${messages.length}`, role: m.role, parts: m.parts });
+  }
+  return messages.at(-1)!.role === "user" ? messages : undefined;
 }
 
 export function memoryRouter(): Router {
@@ -126,6 +145,54 @@ export function memoryRouter(): Router {
 
   /** Everything gone: an empty index and log, as a new memory has. */
   router.post("/memory/wipe", changing(() => service.wipe()));
+
+  /**
+   * The librarian: Understory's own agent, which Understory's web UI chats with.
+   * It reads and writes the memory with its own tools, so — like a note edited
+   * by hand — it is offered only in the Understory the portal runs. The page
+   * keeps the conversation and sends it whole each time; the answer is
+   * Understory's stream of UI message chunks, passed on as it comes.
+   */
+  router.post("/memory/chat", async (req, res) => {
+    if (!(await writable().catch(() => false))) {
+      return res.status(409).json({ error: "The librarian can be asked only in the Understory the portal runs, while it is running and the agent's memory." });
+    }
+    const at = understoryAt();
+    const messages = chatMessages(req.body?.messages);
+    if (!at) return res.status(409).json({ error: "Understory is not the agent's memory." });
+    if (!messages) return res.status(400).json({ error: "messages must be a conversation: user and assistant messages with parts, ending in the user's" });
+    // The page leaving (Stop, Clear chat, a closed tab) ends the librarian's turn, rather than letting it run on unseen.
+    const stop = new AbortController();
+    res.on("close", () => stop.abort());
+    try {
+      const answer = await fetch(`${at.origin}/api/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(at.token ? { authorization: `Bearer ${at.token}` } : {}) },
+        body: JSON.stringify({ messages }),
+        signal: stop.signal,
+      });
+      if (!answer.ok || !answer.body) {
+        const text = await answer.text().catch(() => "");
+        let said = `status ${answer.status}`;
+        try {
+          const body = JSON.parse(text);
+          if (body && typeof body.error === "string") said = body.error;
+        } catch {}
+        return res.status(502).json({ error: `Understory did not take the question: ${said}.` });
+      }
+      res.status(200);
+      res.setHeader("content-type", answer.headers.get("content-type") ?? "text/event-stream");
+      res.setHeader("cache-control", "no-cache, no-transform");
+      res.setHeader("x-accel-buffering", "no");
+      res.flushHeaders();
+      for await (const chunk of answer.body as unknown as AsyncIterable<Uint8Array>) res.write(chunk);
+      res.end();
+    } catch (e) {
+      if (stop.signal.aborted) return;
+      if (res.headersSent) return res.end();
+      res.status(502).json({ error: `Could not reach Understory at ${at.origin}: ${(e as Error).message}.` });
+    }
+  });
 
   for (const [name, read] of Object.entries(READS)) {
     router.get(`/memory/${name}`, async (req, res) => {
