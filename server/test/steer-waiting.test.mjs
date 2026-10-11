@@ -330,6 +330,35 @@ test("a message sent while Stop is winding the run down waits for it, and starts
   sessions.waiting.delete("winding");
 });
 
+test("a message sent now starts a run once pi is idle, though its abort came back early, and the others follow in order", async () => {
+  createSession({ id: "sendnow", title: "sendnow", workspace: home, executor: "host" });
+  let idle = false;
+  const client = {
+    ...busyClient(),
+    isIdle: () => idle,
+    // The abort comes back while the run is still winding down.
+    abort: async () => void setTimeout(() => (idle = true), 60),
+    prompt: async (message) => {
+      client.sent.push({ message, idle });
+      idle = false;
+    },
+  };
+  sessions.ensureClient = async () => client;
+  sessions.live.set("sendnow", { client, executor: {} });
+  try {
+    await sessions.prompt("sendnow", "one");
+    await sessions.prompt("sendnow", "two");
+    await sessions.prompt("sendnow", "three");
+    const [, , three] = payloads("sendnow", "portal_prompt");
+    await sessions.takeBackWaiting("sendnow", three.seq, true);
+  } finally {
+    sessions.live.delete("sendnow");
+  }
+  assert.deepEqual(client.sent.slice(3).map((s) => [s.message, s.idle]), [["three", true], ["one", false], ["two", false]]);
+  assert.deepEqual(payloads("sendnow", "portal_prompt").map((p) => [p.message, p.queued]), [["three", undefined], ["one", true], ["two", true]]);
+  sessions.waiting.delete("sendnow");
+});
+
 test("a pi whose queue cannot be cleared keeps what it holds, and it is placed where pi reads it", async () => {
   createSession({ id: "noclear", title: "noclear", workspace: home, executor: "container" });
   const client = busyClient();

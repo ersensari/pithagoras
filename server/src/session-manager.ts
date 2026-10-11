@@ -682,7 +682,12 @@ class SessionManager extends EventEmitter {
     }
     // The pictures of the messages sent again stay on disk; a dropped one's go.
     if (!direct) dropImages(IMAGE_ROOT, sessionId, storedIn(chosen.prompt));
-    if (direct && live.client.running) await this.abort(sessionId);
+    if (direct && live.client.running) {
+      await this.abort(sessionId);
+      // Sent while pi still winds the run down, the message would be queued
+      // into it and read after it, which is not what sending it now means.
+      await this.whenIdle(live.client);
+    }
     for (const m of again) {
       const images = loadImages(IMAGE_ROOT, sessionId, storedIn(m.prompt));
       await this.prompt(sessionId, m.message, {
@@ -691,6 +696,18 @@ class SessionManager extends EventEmitter {
         ...(m.prompt.steer === true ? { steer: true } : {}),
       });
     }
+  }
+
+  /**
+   * Until pi reads as idle after a Stop: a client's abort can return before
+   * the run is over, and a prompt sent in that gap is queued into it. Bounded
+   * like the restart's wait for a run to wind down: a pi that will not settle
+   * gets the message queued, as before, instead of holding the request.
+   */
+  private async whenIdle(client: PiClient): Promise<void> {
+    if (!client.isIdle) return;
+    const deadline = Date.now() + this.abortGraceMs;
+    while (!client.isIdle() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
   }
 
   /** Takes one message off the waiting list; false if it was no longer on it. */

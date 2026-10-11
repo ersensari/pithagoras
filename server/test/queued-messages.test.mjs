@@ -92,6 +92,9 @@ test("send directly stops the run and sends that message first, the others behin
   // The first thing the model is asked after the stop has them in that order: the chosen one, then the other.
   await until(() => model.requests.length >= before + 2, "the message to reach the model");
   assert.deepEqual(userWords(model.requests[before + 1]).slice(-3), ["first", "third", "second"]);
+  // The chosen one started a run of its own; only the other waits in it.
+  const sent = db.eventsSince(chat, 0).filter((e) => e.type === "portal_prompt").map((e) => [JSON.parse(e.payload).message, JSON.parse(e.payload).queued]);
+  assert.deepEqual(sent, [["first", undefined], ["third", undefined], ["second", true]]);
   // Neither was dropped as not sent by the stop.
   assert.deepEqual(db.eventsSince(chat, 0).filter((e) => e.type === "portal_unsent"), []);
   release();
