@@ -134,15 +134,21 @@ export const textOf = (message: ChatMessage): string =>
     .map((p) => p.text)
     .join("\n\n");
 
-/** About how much of a conversation is sent each time: the server takes 2 MB, and a tool's answer can be a whole note. */
+/** About how much of a conversation is sent each time, in bytes: the server takes 2 MB, and a tool's answer can be a whole note. */
 const HISTORY_BYTES = 1_000_000;
+
+/** The most messages sent each time: the server refuses a conversation of more than 200 (MAX_CHAT_MESSAGES), a ceiling this stays well under. */
+const HISTORY_MESSAGES = 100;
+
+/** What a value takes on the wire: UTF-8 bytes, which the server's limit counts, not the UTF-16 units `.length` counts. */
+const wireBytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
 
 /**
  * The conversation as it goes up: only what the model can be given back. A
  * tool call that never got its answer (the turn was stopped, or failed) would
  * make the model's API refuse the whole conversation, so it stays out, and so
  * does an assistant turn left with nothing in it. The oldest messages are
- * dropped when it grows past what is sent.
+ * dropped when it grows past what is sent, in messages or in bytes.
  */
 export function history(messages: ChatMessage[]): ChatMessage[] {
   const kept: ChatMessage[] = [];
@@ -152,12 +158,13 @@ export function history(messages: ChatMessage[]): ChatMessage[] {
     const cleaned = parts.filter((p, i) => p.type !== "step-start" || (parts[i + 1] && parts[i + 1].type !== "step-start"));
     if (m.role === "user" ? cleaned.length : cleaned.some((p) => p.type !== "step-start")) kept.push({ ...m, parts: cleaned });
   }
-  let size = JSON.stringify(kept).length;
-  // The last message is the question: it always goes.
-  while (kept.length > 1 && size > HISTORY_BYTES) {
-    size -= JSON.stringify(kept.shift()).length;
+  let size = wireBytes(kept);
+  const dropOldest = () => {
+    size -= wireBytes(kept.shift());
     // A conversation must start with the user.
-    while (kept.length > 1 && kept[0].role !== "user") size -= JSON.stringify(kept.shift()).length;
-  }
+    while (kept.length > 1 && kept[0].role !== "user") size -= wireBytes(kept.shift());
+  };
+  // The last message is the question: it always goes.
+  while (kept.length > 1 && (size > HISTORY_BYTES || kept.length > HISTORY_MESSAGES)) dropOldest();
   return kept;
 }

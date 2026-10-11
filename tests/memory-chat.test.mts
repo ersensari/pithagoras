@@ -81,12 +81,32 @@ test("what goes up again is only what the model can be given back, and stays und
   assert.ok(JSON.stringify(long).length <= 1_000_000);
 });
 
-// --- the route: only in the Understory the portal runs, handed on with its token, stopped with the page ---
+test("a conversation of many short messages is cut by count, one in a language of wide letters by its bytes, not its characters", () => {
+  const q = (id: string, text: string): ChatMessage => ({ id, role: "user", parts: [{ type: "text", text }] });
+  const a = (id: string, text: string): ChatMessage => ({ id, role: "assistant", parts: [{ type: "text", text }] });
+  // 101 questions with 100 answers are 201 messages: more than the server takes, the 101st question would be refused.
+  const many: ChatMessage[] = [];
+  for (let n = 0; n < 100; n++) many.push(q(`q${n}`, "hi"), a(`a${n}`, "yes"));
+  many.push(q("last", "again"));
+  const sent = history(many);
+  assert.ok(sent.length <= 100, `${sent.length} messages`);
+  assert.equal(sent.at(-1)!.id, "last");
+  assert.equal(sent[0].role, "user");
+  // Nine 100k-letter turns are 900k UTF-16 units, but 2.7 MB on the wire.
+  const wide = "字".repeat(100_000);
+  const cjk = history([...Array.from({ length: 9 }, (_, n) => q(`w${n}`, wide)), q("last", "x")]);
+  assert.ok(Buffer.byteLength(JSON.stringify({ messages: cjk })) <= 1_100_000, "what is sent stays well under the server's 2 MB");
+  assert.equal(cjk.at(-1)!.id, "last");
+});
+
+// --- the route: only in the Understory the portal runs, handed on with its token, one run at a time ---
 
 const understory = {
   seen: [] as { url: string; auth?: string; body: any }[],
   closed: false,
-  mode: "answer" as "answer" | "hang" | "refuse",
+  mode: "answer" as "answer" | "hang" | "refuse" | "cut",
+  /** Ends the hanging answer, as Understory's run finishing. */
+  finish: undefined as (() => void) | undefined,
 };
 const upstream = createServer(async (req: IncomingMessage, res) => {
   let raw = "";
@@ -97,6 +117,9 @@ const upstream = createServer(async (req: IncomingMessage, res) => {
   res.writeHead(200, { "content-type": "text/event-stream" });
   res.write(sse({ type: "start" }));
   if (understory.mode === "answer") return res.end(sse({ type: "text-delta", id: "t", delta: "Hi" }, "[DONE]"));
+  // Understory restarting in the middle of a sentence, with an event half written.
+  if (understory.mode === "cut") return void setTimeout(() => (res.write('data: {"type":"text-del'), res.destroy()), 20);
+  understory.finish = () => res.end(sse("[DONE]"));
 });
 await new Promise<void>((r) => upstream.listen(0, "127.0.0.1", r));
 const upstreamPort = (upstream.address() as { port: number }).port;
@@ -155,7 +178,7 @@ test("the librarian is asked through the portal: its token, the conversation as 
   delete process.env.MEMORY_UNDERSTORY_AUTH_TOKEN;
 });
 
-test("the librarian is asked only in the Understory the portal runs, while it runs; and a page that leaves ends the turn", async () => {
+test("the librarian is asked only in the Understory the portal runs, while it runs", async () => {
   understory.mode = "answer";
   const before = understory.seen.length;
   // Understory elsewhere: read, not written, and its librarian writes.
@@ -168,7 +191,27 @@ test("the librarian is asked only in the Understory the portal runs, while it ru
   container = "running";
   assert.equal((await ask(question)).status, 409, "not while it is not the memory");
   assert.equal(understory.seen.length, before, "nothing of that reached Understory");
+});
 
+test("only the fixed chat of the configured Understory is reached, and a conversation too long to send says so", async () => {
+  mcp(upstreamPort);
+  understory.mode = "answer";
+  const before = understory.seen.length;
+  // Whatever the page puts into the body, the target is Understory's own, from the server's config.
+  const res = await ask({ ...question, url: "http://127.0.0.1:1/x", origin: "http://example.invalid", path: "/api/other", model: "other" });
+  assert.equal(res.status, 200);
+  await res.text();
+  assert.equal(understory.seen.length, before + 1);
+  assert.deepEqual(Object.keys(understory.seen.at(-1)!.body), ["messages"]);
+  assert.equal(understory.seen.at(-1)!.url, "/api/chat");
+
+  const long = await ask({ messages: Array.from({ length: 201 }, (_, n) => ({ role: n % 2 ? "assistant" : "user", parts: [] })) });
+  assert.equal(long.status, 400);
+  assert.match((await long.json()).error, /too long.*clear the chat/);
+  assert.equal(understory.seen.length, before + 1, "it did not reach Understory");
+});
+
+test("Stop does not stop the librarian, so a new question waits until the run has ended", async () => {
   mcp(upstreamPort);
   understory.mode = "hang";
   understory.closed = false;
@@ -179,6 +222,35 @@ test("the librarian is asked only in the Understory the portal runs, while it ru
   await reader.read();
   stop.abort();
   await reader.read().catch(() => {});
-  for (let n = 0; n < 200 && !understory.closed; n++) await new Promise((r) => setTimeout(r, 10));
-  assert.equal(understory.closed, true, "Understory's turn is cut off when the page goes");
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(understory.closed, false, "the portal does not pretend to cut a run Understory goes on with");
+  const before = understory.seen.length;
+  const busy = await ask(question);
+  assert.equal(busy.status, 409);
+  assert.match((await busy.json()).error, /still working on the previous question/);
+  assert.equal(understory.seen.length, before, "a second librarian is not started on the same memory");
+  understory.finish!();
+  understory.mode = "answer";
+  for (let n = 0; n < 200; n++) {
+    const again = await ask(question);
+    if (again.status === 200) return void (await again.text());
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert.fail("the librarian never became free again");
+});
+
+test("an answer cut off by Understory failing ends in an error chunk, so the page does not show half a sentence as whole", async () => {
+  mcp(upstreamPort);
+  understory.mode = "cut";
+  const res = await ask(question);
+  assert.equal(res.status, 200);
+  const reader = eventReader();
+  const chunks = reader.feed(await res.text());
+  assert.deepEqual(chunks[0], { type: "start" });
+  const last = chunks.at(-1) as { type: string; errorText: string };
+  assert.equal(last.type, "error");
+  assert.match(last.errorText, /^Understory stopped answering/);
+  // The page's own reading of the stream ends with the error shown.
+  assert.match(run(sse({ type: "start" }) + 'data: {"type":"text-del\n\n' + sse(last)).error!, /Understory stopped answering/);
+  understory.mode = "answer";
 });

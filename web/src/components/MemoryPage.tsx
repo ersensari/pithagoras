@@ -1077,7 +1077,7 @@ function useLibrarian(onTurnEnded: (usedTools: boolean) => void): Librarian {
   ended.current = onTurnEnded;
   // A count, not a clock: ids must differ however fast the questions come.
   const counter = useRef(0);
-  // A page that is left leaves no turn running behind it.
+  // A page that is left stops listening; Understory's librarian may still finish what it started.
   useEffect(() => () => running.current?.abort(), []);
 
   const send = async (text: string) => {
@@ -1114,7 +1114,7 @@ function useLibrarian(onTurnEnded: (usedTools: boolean) => void): Librarian {
       ended.current(usedTools(turn.message));
     }
   };
-  /** Ends the turn under way; what was said so far stays. */
+  /** Stops listening to the turn under way; what was said so far stays. Understory's librarian is not cut off by it. */
   const stop = () => running.current?.abort();
   /** The conversation from nothing — and a turn in the middle of it ended. */
   const clear = () => {

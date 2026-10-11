@@ -29,8 +29,12 @@ one its web UI chats with: ask it what the memory holds, or tell it what to
 keep. It reads and writes the notes with the same tools the agent has, and links
 in its answers open the notes here. The side and the graph read themselves again
 after an answer in which it used a tool. The conversation is kept while the page
-is open, also while you look at a note; **Clear chat** empties it, and **Stop**
-ends an answer under way. It is offered in the Understory the portal runs only,
+is open, also while you look at a note; **Clear chat** empties it. **Stop**
+(and Clear chat, or leaving the page) stops you listening to an answer under way,
+not the librarian: Understory cannot be told to break off, so it finishes the
+steps it has started, notes it writes included, and the page does not show
+those. A new question waits until that is over ("still working on the previous
+question"); reopen the page afterwards to see the notes. It is offered in the Understory the portal runs only,
 like editing; the model that answers is the one that tidies the memory (see
 [Opt-in features](/guide/features#memory-understory)).
 

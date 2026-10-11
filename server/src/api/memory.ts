@@ -60,7 +60,7 @@ export function notePath(value: unknown): string | undefined {
   return name === "index.md" || name === "log.md" ? undefined : value;
 }
 
-/** The most messages of a conversation passed on: the page keeps its history short, this is a ceiling. */
+/** The most messages of a conversation passed on: the page keeps its history under this (HISTORY_MESSAGES in web/src/memory-chat.ts), this is a ceiling. */
 const MAX_CHAT_MESSAGES = 200;
 
 /**
@@ -79,6 +79,8 @@ export function chatMessages(value: unknown): { id: string; role: "user" | "assi
 
 export function memoryRouter(): Router {
   const router = express.Router();
+  // Whether Understory's librarian is in the middle of a turn that this portal started. See the chat route.
+  let librarianRunning = false;
 
   /** Whether notes can be changed here, and what the bundle's links look like. */
   router.get("/memory/health", async (_req, res) => {
@@ -158,18 +160,25 @@ export function memoryRouter(): Router {
       return res.status(409).json({ error: "The librarian can be asked only in the Understory the portal runs, while it is running and the agent's memory." });
     }
     const at = understoryAt();
-    const messages = chatMessages(req.body?.messages);
     if (!at) return res.status(409).json({ error: "Understory is not the agent's memory." });
+    if (Array.isArray(req.body?.messages) && req.body.messages.length > MAX_CHAT_MESSAGES) {
+      return res.status(400).json({ error: "This conversation is too long to send: clear the chat and ask again." });
+    }
+    const messages = chatMessages(req.body?.messages);
     if (!messages) return res.status(400).json({ error: "messages must be a conversation: user and assistant messages with parts, ending in the user's" });
-    // The page leaving (Stop, Clear chat, a closed tab) ends the librarian's turn, rather than letting it run on unseen.
-    const stop = new AbortController();
-    res.on("close", () => stop.abort());
+    // Understory's chat does not end its run when the connection drops: the librarian goes on with its steps, writes included.
+    // So a second question waits until the first has really ended, rather than two librarians working on one memory.
+    if (librarianRunning) return res.status(409).json({ error: "The librarian is still working on the previous question. Try again in a moment." });
+    librarianRunning = true;
+    // Whether the page is still listening. Its leaving (Stop, Clear chat, a closed tab) does not cut the stream to Understory:
+    // that would not stop the run, only hide when it ends. The rest of the answer is read and dropped.
+    let listening = true;
+    res.on("close", () => (listening = false));
     try {
       const answer = await fetch(`${at.origin}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json", ...(at.token ? { authorization: `Bearer ${at.token}` } : {}) },
         body: JSON.stringify({ messages }),
-        signal: stop.signal,
       });
       if (!answer.ok || !answer.body) {
         const text = await answer.text().catch(() => "");
@@ -178,19 +187,30 @@ export function memoryRouter(): Router {
           const body = JSON.parse(text);
           if (body && typeof body.error === "string") said = body.error;
         } catch {}
-        return res.status(502).json({ error: `Understory did not take the question: ${said}.` });
+        if (listening) res.status(502).json({ error: `Understory did not take the question: ${said}.` });
+        return;
       }
-      res.status(200);
-      res.setHeader("content-type", answer.headers.get("content-type") ?? "text/event-stream");
-      res.setHeader("cache-control", "no-cache, no-transform");
-      res.setHeader("x-accel-buffering", "no");
-      res.flushHeaders();
-      for await (const chunk of answer.body as unknown as AsyncIterable<Uint8Array>) res.write(chunk);
-      res.end();
+      if (listening) {
+        res.status(200);
+        res.setHeader("content-type", answer.headers.get("content-type") ?? "text/event-stream");
+        res.setHeader("cache-control", "no-cache, no-transform");
+        res.setHeader("x-accel-buffering", "no");
+        res.flushHeaders();
+      }
+      for await (const chunk of answer.body as unknown as AsyncIterable<Uint8Array>) if (listening) res.write(chunk);
+      if (listening) res.end();
     } catch (e) {
-      if (stop.signal.aborted) return;
-      if (res.headersSent) return res.end();
+      if (!listening) return;
+      if (res.headersSent) {
+        // The answer is cut off: say so in the stream's own way, or the page would show half a sentence as a whole one.
+        // The empty line first ends an event that was cut in the middle.
+        const why = `Understory stopped answering: ${(e as Error).message}.`;
+        res.write(`\n\ndata: ${JSON.stringify({ type: "error", errorText: why })}\n\n`);
+        return res.end();
+      }
       res.status(502).json({ error: `Could not reach Understory at ${at.origin}: ${(e as Error).message}.` });
+    } finally {
+      librarianRunning = false;
     }
   });
 
