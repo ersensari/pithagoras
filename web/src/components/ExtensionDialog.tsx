@@ -5,6 +5,7 @@ import { isEnter, isEscape } from "../shortcuts";
 import { t } from "../i18n";
 import { useLeaveRef } from "../motion";
 import { useDialogFocus } from "../dialog-focus";
+import type { AgentQuestion } from "./QuestionDialog";
 import { codeAreaCls, inputCls, primarySmCls } from "./SettingsUi";
 
 export interface UiRequest {
@@ -15,6 +16,8 @@ export interface UiRequest {
   options?: string[];
   placeholder?: string;
   defaultValue?: string;
+  /** For "questions", the agent's ask_question tool: see QuestionDialog. */
+  questions?: AgentQuestion[];
 }
 
 /**

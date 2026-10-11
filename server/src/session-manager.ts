@@ -17,7 +17,8 @@ import { projectOf } from "./workspaces.js";
 import { findServerBuiltin, picturesRefused, runBuiltin } from "./pi/builtins.js";
 import { dropMessage, SessionEditError, userTexts, type Scope } from "./pi/session-edit.js";
 import { AUDIO_MESSAGE_PREFIX } from "./pi/voice-first.js";
-import { isDialog } from "./pi/ui-requests.js";
+import { isDialog, showsDialogs } from "./pi/ui-requests.js";
+import { ASK_QUESTION_TOOL, asksQuestions } from "./pi/ask-question.js";
 import { forgetTaint } from "./pi/guard.js";
 import { textOf } from "./pi/entries.js";
 import { removeSessionFiles } from "./session-files.js";
@@ -81,6 +82,7 @@ import {
   routineGuards,
   updateSession,
   type EventRow,
+  type SessionRow,
   sessionSubagentModel,
   anySessionRunning,
   onChannel,
@@ -243,6 +245,9 @@ function plain(text: unknown): string {
   return String(text ?? "").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").trim();
 }
 
+/** Whether the conversation gets the ask_question tool: see asksQuestions. */
+const canAsk = (session: SessionRow) => asksQuestions(session, onChannel(session));
+
 /**
  * A command sent to pi and not yet answered. `inRun`: sent into a run, whose
  * next start is not the command's doing.
@@ -318,7 +323,15 @@ class SessionManager extends EventEmitter {
   /** Model failures pi has not recovered from: see model-errors.ts. */
   private modelErrors = new ModelErrors();
 
-  liveSnapshot(sessionId: string) { return this.stream.snapshot(sessionId); }
+  /**
+   * What a page that attaches is shown beyond the stored events: the message being written, and the
+   * dialogs (confirm, select, input, editor, questions) the agent is waiting on. Dialogs are live events
+   * and never stored, so without this a reload or a visit to another chat lost the dialog.
+   */
+  liveSnapshot(sessionId: string) {
+    const asked = (this.live.get(sessionId)?.client.openDialogRequests?.() ?? []).map((req) => this.stream.ephemeral(sessionId, "extension_ui_request", req));
+    return [...this.stream.snapshot(sessionId), ...asked];
+  }
   /** In-flight ask() per session, so messages in one chat are answered in turn. */
   private asking = new Map<string, Promise<string>>();
   /**
@@ -1027,6 +1040,8 @@ class SessionManager extends EventEmitter {
       // has no business rescheduling anything; a routine run is excluded too,
       // since a routine that can create routines can build a chain unwatched.
       routineTools: session.kind === "agent",
+      questions: canAsk(session),
+      dialogs: showsDialogs(session, onChannel(session)),
       // A routine run gets the report tool instead: it is the one kind of
       // session with nobody on the other end to read what it found.
       routineSlug: session.kind === "routine" ? session.routine_slug : undefined,
@@ -2491,7 +2506,11 @@ class SessionManager extends EventEmitter {
     const defaults = toolDefaultsForSession(session);
     const exceptions = sessionTools(sessionId);
     const servers = view.servers;
-    const shown: { name: string; source: string; description?: string; inline?: true; cached?: true }[] = listed.length ? listed : shownTools(workspace, view);
+    // An idle chat is shown what the portal has seen registered; the tool is not there for every kind of chat (see asksQuestions).
+    const asks = session ? canAsk(session) : true;
+    const shown: { name: string; source: string; description?: string; inline?: true; cached?: true }[] = listed.length
+      ? listed
+      : shownTools(workspace, view).filter((tool) => asks || !(tool.name === ASK_QUESTION_TOOL && tool.inline));
     return {
       tools: shown.map(({ name, source, description, inline, cached }) => ({
         name,
