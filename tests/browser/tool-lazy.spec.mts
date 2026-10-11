@@ -3,8 +3,9 @@ import { test, expect, mockPortal } from './portal-mock';
 
 /**
  * Lazy tool sets in Settings → Tools: a set marked lazy is off in every conversation until one
- * switches it on. The marking is the server's (it puts the set's tools in the default as off);
- * the page shows the mark and what the answer changed.
+ * switches it on, and the model reaches its tools through the `tools` tool meanwhile. The marking is
+ * the server's (it puts the set's tools in the default as off); the page shows the mark, what the
+ * answer changed, and which tools are off but not gone.
  */
 const tools = [
   { name: 'heavy_open', source: 'pi-heavy' },
@@ -44,14 +45,38 @@ test('a set is marked lazy from its header, and its tools show as off', async ({
   await expect(page.getByRole('button', { name: 'Lazy pi-web-access' })).toHaveAttribute('aria-pressed', 'false');
 });
 
+test('the tools of a lazy set say they are reached through the tools tool, and the others do not', async ({ page }) => {
+  await portal(page);
+  await page.getByRole('button', { name: 'Lazy pi-heavy' }).click();
+  await expect(page.getByRole('button', { name: 'Lazy pi-heavy' })).toHaveAttribute('aria-pressed', 'true');
+  // The mark explains itself where it is made.
+  await expect(page.getByRole('button', { name: 'Lazy pi-heavy' })).toHaveAttribute('title', /through the `tools` tool/);
+  await page.getByRole('button', { name: /^pi-heavy/ }).click();
+  await page.getByRole('button', { name: /^pi-web-access/ }).click();
+  for (const name of ['heavy_open', 'heavy_read']) {
+    const row = page.getByRole('listitem').filter({ hasText: name });
+    await expect(row.getByText('lazy', { exact: true })).toHaveAttribute('title', /finds and calls this tool through the `tools` tool/);
+  }
+  await expect(page.getByRole('listitem').filter({ hasText: 'web_search' }).getByText('lazy', { exact: true })).toHaveCount(0);
+  // Switched on in the default, a tool of the set is listed one by one and is not lazy.
+  await page.getByRole('checkbox', { name: /heavy_open/ }).check();
+  await expect(page.getByRole('listitem').filter({ hasText: 'heavy_open' }).getByText('lazy', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('listitem').filter({ hasText: 'heavy_read' }).getByText('lazy', { exact: true })).toHaveCount(1);
+});
+
 test('a lazy set is shown as lazy and can be made ordinary again', async ({ page }) => {
   const { puts } = await portal(page, { lazy: ['pi-heavy'], off: ['heavy_open', 'heavy_read'] });
   const mark = page.getByRole('button', { name: 'Lazy pi-heavy' });
   await expect(mark).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: /^pi-heavy/ })).toContainText('2 off');
+  // The tools of the lazy set are off, but reached through the `tools` tool: the page says so beside each.
+  await page.getByRole('button', { name: /^pi-heavy/ }).click();
+  await expect(page.getByRole('listitem').getByText('lazy', { exact: true })).toHaveCount(2);
   await mark.click();
   await expect.poll(() => puts).toEqual([[]]);
   await expect(mark).toHaveAttribute('aria-pressed', 'false');
-  // Ending it leaves the switches as they were.
+  // Ending it leaves the switches as they were, and the tools off for good: nothing reaches them through the `tools` tool.
   await expect(page.getByRole('button', { name: /^pi-heavy/ })).toContainText('2 off');
+  await expect(page.getByRole('listitem').filter({ hasText: 'heavy_open' })).toBeVisible();
+  await expect(page.getByRole('listitem').getByText('lazy', { exact: true })).toHaveCount(0);
 });

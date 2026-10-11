@@ -49,6 +49,7 @@ import {
   shownStoredSettings,
   shownTools,
   toolDefaultsOff,
+  lazyToolNames,
   lazyToolSets,
   setLazyToolSets,
   toolGroupNames,
@@ -67,7 +68,7 @@ import { deleteNotesOf } from "./activity.js";
 import { EXECUTOR_KIND } from "./executor-kind.js";
 import { sessions, CommandFailed, IMAGE_ROOT } from "./session-manager.js";
 import { ImageError, MAX_IMAGE_BYTES, MAX_IMAGES, imagePath, mimeOf, parseImages, saveImages } from "./prompt-images.js";
-import { defaultsFor, exceptionsFor, heldOffUnshown, toolEnabled, toolSource } from "./tool-policy.js";
+import { defaultsFor, exceptionsFor, heldOffUnshown, toolEnabled, toolLazy, toolSource } from "./tool-policy.js";
 import { mcpRouter, mcpServerNames, onMcpWritten } from "./api/mcp.js";
 import { authEnabled, checkPassword, isAuthed, issueCookie, keptShortPassword, requireAuth, signOut } from "./auth.js";
 import { packagesRouter } from "./api/packages.js";
@@ -477,12 +478,14 @@ app.put("/api/projects/:name/tools", async (req, res) => {
  */
 function layerTools(folder: string, below: string[], exceptions: { off: string[]; on: string[] }) {
   const servers = mcpServerNames();
+  const lazy = lazyToolNames();
   return {
     tools: shownTools(folder).map((tool) => ({
       ...tool,
       source: toolSource(tool.name, tool.source, servers),
       enabled: toolEnabled(tool.name, below, exceptions),
       defaultOn: !below.includes(tool.name),
+      ...(toolLazy(tool.name, lazy, below, exceptions) ? { lazy: true as const } : {}),
     })),
     live: false,
     names: toolGroupNames(),
@@ -1047,11 +1050,14 @@ app.get("/api/tools", (_req, res) => {
   if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
   const off = new Set(toolDefaultsOff());
   const servers = mcpServerNames();
+  const lazy = lazyToolNames();
   res.json({
     tools: shownTools().map((tool) => ({
       ...tool,
       source: toolSource(tool.name, tool.source, servers),
       defaultOn: !off.has(tool.name),
+      // Off by default and reached through the `tools` tool, rather than off for good.
+      ...(lazy.has(tool.name) && off.has(tool.name) ? { lazy: true as const } : {}),
     })),
     off: [...off].sort(),
     names: toolGroupNames(),

@@ -11,7 +11,7 @@ import { agentAt } from "./agents.js";
 import { HEARTBEAT_ROLE } from "./pi/heartbeat-names.js";
 import path from "node:path";
 import type { Draft, PiClient, PiTool, PromptTaken } from "./pi/types.js";
-import { effectiveOff, exceptionsFor, heldOffUnshown, toolEnabled, toolSource } from "./tool-policy.js";
+import { effectiveOff, exceptionsFor, heldOffUnshown, toolEnabled, toolLazy, toolSource } from "./tool-policy.js";
 import { unlisted } from "./mcp-offer.js";
 import { projectOf } from "./workspaces.js";
 import { findServerBuiltin, picturesRefused, runBuiltin } from "./pi/builtins.js";
@@ -83,6 +83,7 @@ import {
   sessionSubagentModel,
   anySessionRunning,
   onChannel,
+  lazyToolNames,
 } from "./db.js";
 
 /**
@@ -1040,7 +1041,7 @@ class SessionManager extends EventEmitter {
       // The session's settled role picks the context files; the live one gates
       // each tool call, so a group conversation follows whoever is speaking.
       role: session.role,
-      toolsOff: this.piOff(sessionId),
+      ...this.toolsFor(sessionId),
       subagentModel: () => sessionSubagentModel(sessionId) ?? undefined,
       // A heartbeat is the agent looking around on its own: its own context,
       // but held to reading by a role of its own. See heartbeat.ts.
@@ -2449,6 +2450,25 @@ class SessionManager extends EventEmitter {
   }
 
   /**
+   * Of what is off (piOff), the tools that are lazy: not offered one by one, and reached through the
+   * `tools` tool. A tool of a lazy set that the defaults leave off, and that this conversation has not
+   * itself switched off; the rest of what is off is off for good.
+   */
+  piLazy(sessionId: string, off: string[], homes?: AgentHome[]): string[] {
+    const lazy = lazyToolNames();
+    if (!lazy.size) return [];
+    const defaults = toolDefaultsForSession(getSession(sessionId), homes);
+    const exceptions = sessionTools(sessionId);
+    return off.filter((name) => toolLazy(name, lazy, defaults, exceptions));
+  }
+
+  /** What pi is told about the tools when a conversation starts: the ones that are off, and the lazy among them. */
+  private toolsFor(sessionId: string): { toolsOff: string[]; toolsLazy: string[] } {
+    const toolsOff = this.piOff(sessionId);
+    return { toolsOff, toolsLazy: this.piLazy(sessionId, toolsOff) };
+  }
+
+  /**
    * What a running chat reported, less the MCP servers' tools the adapter's
    * configuration says no to — still loaded from before it changed, and off
    * (piOff) — with those it lists from its cache marked. And the servers' tools
@@ -2489,6 +2509,7 @@ class SessionManager extends EventEmitter {
     // What the chat's agent, project and routine start it with, which is what it is "default" against.
     const defaults = toolDefaultsForSession(session);
     const exceptions = sessionTools(sessionId);
+    const lazy = lazyToolNames();
     const servers = view.servers;
     const shown: { name: string; source: string; description?: string; inline?: true; cached?: true }[] = listed.length ? listed : shownTools(workspace, view);
     return {
@@ -2501,6 +2522,8 @@ class SessionManager extends EventEmitter {
         ...(cached ? { cached: true as const } : {}),
         enabled: toolEnabled(name, defaults, exceptions),
         defaultOn: !defaults.includes(name),
+        // Off here, and reached through the `tools` tool: the page says so beside the switch.
+        ...(toolLazy(name, lazy, defaults, exceptions) ? { lazy: true as const } : {}),
       })),
       live: Boolean(listed.length),
     };
@@ -2541,7 +2564,8 @@ class SessionManager extends EventEmitter {
     // in every chat, and one that is switched back on in the chat needs one.
     setSessionTools(sessionId, exceptionsFor(heldOffUnshown(wantedOff, shown, held), toolDefaultsForSession(session), answered, held));
     const off = this.offFor(sessionId, listed.map((t) => t.name), view.known().keys());
-    await client?.setToolsOff?.(this.piOff(sessionId, reported.map((t) => t.name), view));
+    const piOff = this.piOff(sessionId, reported.map((t) => t.name), view);
+    await client?.setToolsOff?.(piOff, this.piLazy(sessionId, piOff));
     return off;
   }
 
@@ -2574,7 +2598,8 @@ class SessionManager extends EventEmitter {
         // page showing the opposite of what the database now holds.
         try {
           const listed = client.getTools ? await client.getTools() : [];
-          await client.setToolsOff?.(this.piOff(sessionId, listed.map((t) => t.name), view, homes));
+          const off = this.piOff(sessionId, listed.map((t) => t.name), view, homes);
+          await client.setToolsOff?.(off, this.piLazy(sessionId, off, homes));
           return true;
         } catch (e) {
           console.error(`[portal] could not apply the tool defaults to ${sessionId}: ${(e as Error).message}`);

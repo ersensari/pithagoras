@@ -255,21 +255,46 @@ extension does not quietly bring back something you turned off.
 
 A tool set that is switched on costs the model its schemas, descriptions and rules in
 **every** request, whether or not the conversation ever uses it. For a large set such as the
-[browser](/guide/browser)'s eleven tools that is a few thousand tokens in each chat. A tool that is
-off is not offered at all, so a set that is **lazy** is one that stays off until somebody
-asks for it.
+[browser](/guide/browser)'s eleven tools that is a few thousand tokens in each chat. A set that is
+**lazy** costs none of that until it is needed: its tools are not offered one by one, and the model
+reaches them through a single tool, `tools`.
 
 **Settings → Tools** has a **lazy** button on the header of each group (a package, an MCP server,
 the browser, the **Images** group). Marking a group puts its tools in the default as off, so
-no chat is offered them, and a [project](/guide/projects#tools), an
-[agent](/guide/agents#tools), a [routine](/guide/routines#tools) or a single chat switches the
-set on for itself with the switches it already has. Nothing else about the layers changes.
+no chat is offered them one by one, and each of them shows a **lazy** label in the list. Lazy tools
+are reached through the `tools` tool, which the conversation is offered only while it has a lazy
+tool, so a portal with nothing lazy has no extra tool in any prompt. It has three actions:
+
+| Action | What it does |
+| --- | --- |
+| `search` | `query`: words from a tool's name or from what it does. Lists the matching lazy tools, each with the first line of its description. No query lists them all |
+| `describe` | `name`: the tool's full description and its parameters as a JSON schema |
+| `call` | `name` and `args` (an object): runs the tool and returns its result |
+
+The model describes a tool before it first calls it, so a schema is in the conversation only for a
+tool that is used. A call through `tools` is held to the same rules as a direct one: the
+[guard](/guide/security) runs on the tool that is called, with its own name and arguments, so the
+[browser](/guide/browser)'s allowlist, the rules after untrusted content and what a colleague may run
+apply unchanged, and the result is wrapped as somebody else's words where it would be. A tool that is
+switched off is refused, `call` and `describe` alike.
+
+A [project](/guide/projects#tools), an [agent](/guide/agents#tools), a [routine](/guide/routines#tools)
+or a single chat can switch the set **on** for itself with the switches it already has. The tools are then
+listed one by one in that conversation, as before, and are not lazy there. Switching one **off** in a chat
+means off: that tool is not reachable through `tools` either. The three states are therefore: on (offered
+one by one), lazy (reached through `tools`) and off (not reachable).
 
 What the mark adds to switching a group off: a tool of the group that the portal sees for the
-first time later, after an update or a new MCP tool, starts off too, instead of arriving
-switched on. Ending it leaves the switches as they are (**all on** puts them back at once).
-Nothing is lazy until you say so, so a portal behaves as before. A tool seen for the very first
-time is on in the chat that registers it only until that chat has listed its tools, a moment after it starts.
+first time later, after an update or a new MCP tool, starts lazy too, instead of arriving
+switched on. Ending it leaves the switches as they are, and the tools are then off for good, not lazy
+(**all on** puts them back at once). Nothing is lazy until you say so, so a portal behaves as before.
+A tool seen for the very first time is on in the chat that registers it only until that chat has listed
+its tools, a moment after it starts.
+
+Essential tools are not made lazy for you: the portal does not mark any set on its own, and a model that
+cannot find a tool it needs is better served by a set left on. The tools it reaches through `tools` are
+the ones that are lazy in that conversation; the MCP adapter's own `mcp` tool can still reach an MCP
+server's lazy tools, as it reaches any tool of a server that is not switched off for good.
 
 ::: tip Not the same as uninstalling
 The extension is still loaded, its commands still work, and other chats are

@@ -92,6 +92,15 @@ export function ToolGroupList({
                         {t("cached")}
                       </span>
                     )}
+                    {/* Off in the model's list and reached through the `tools` tool: off, but not gone. */}
+                    {tool.lazy && !tool.enabled && (
+                      <span
+                        title={t("Not in the model's list one by one: it finds and calls this tool through the `tools` tool.")}
+                        className="shrink-0 rounded border border-line px-1 text-[10px] text-fg-faint"
+                      >
+                        {t("lazy")}
+                      </span>
+                    )}
                     {/* Only where this chat disagrees with the default, so the
                         setting is findable from the place it is being overruled. */}
                     {tool.defaultOn !== undefined && tool.defaultOn !== tool.enabled && (

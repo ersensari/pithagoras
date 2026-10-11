@@ -139,6 +139,23 @@ export function toolEnabled(
 }
 
 /**
+ * Is this tool lazy for a conversation: off in what the model is offered, and reached through the
+ * `tools` tool?
+ *
+ * Only a tool of a lazy set that is off because the defaults leave it off. One that the conversation
+ * switched off itself is off, not lazy: the user said they do not want it, and a way to it through
+ * the gateway would be a way round that.
+ */
+export function toolLazy(
+  name: string,
+  lazyTools: ReadonlySet<string>,
+  defaultsOff: Iterable<string>,
+  exceptions: ToolExceptions
+): boolean {
+  return lazyTools.has(name) && !toolEnabled(name, defaultsOff, exceptions) && !exceptions.off.includes(name);
+}
+
+/**
  * The tools that are off by default for a project: the portal-wide default,
  * bent by the project's own exceptions.
  *

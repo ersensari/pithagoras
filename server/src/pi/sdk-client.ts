@@ -27,6 +27,8 @@ import { guardExtension } from "./guard.js";
 import { findSessionFile } from "./session-file.js";
 import { CONTEXT_FILES, SHARED_FILES } from "./context-files.js";
 import { heartbeatTool } from "./heartbeat-tool.js";
+import { ToolsGateway } from "./tools-gateway.js";
+import { GATEWAY_TOOL } from "./tools-gateway-names.js";
 import { askPrimaryTool } from "./ask-primary.js";
 import { proxyBaseUrl } from "../llama-progress.js";
 import { bridgeSubagents, SUBAGENT_INPUT, SUBAGENT_STOP, type Bridge } from "../subagent-protocol.js";
@@ -369,6 +371,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     role?: string;
     /** Tools this conversation has switched off, by name. */
     toolsOff?: string[];
+    /** Of those, the ones that are lazy: not offered one by one, and reached through the `tools` tool instead. */
+    toolsLazy?: string[];
     /** The portal's session id, for tools that record against it. */
     sessionId?: string;
     /** False lets a run act on what it read — see guardExtension. */
@@ -398,6 +402,9 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     const settingsManager = pi.SettingsManager.create(opts.cwd, pi.getAgentDir());
     // What the conversation has switched off: the client's, once there is one.
     let switchedOff: () => ReadonlySet<string> = () => new Set(opts.toolsOff ?? []);
+    // What is off for good: the lazy tools are off in the model's list and open to the `tools` tool, so the guard is told only of the rest.
+    let hardOff: () => ReadonlySet<string> = () => new Set((opts.toolsOff ?? []).filter((name) => !opts.toolsLazy?.includes(name)));
+    const gateway = new ToolsGateway();
     // Whether the model has the tool is settled when pi loads it and by the tool switches: the rule says
     // so only while it has — and it is the portal's, not an extension's of the same name that pi keeps.
     const imageTool = opts.sessionId ? new GenerateImageTool(opts.cwd, () => resourceLoader?.getExtensions?.().extensions ?? [], opts.sessionId) : undefined;
@@ -430,8 +437,10 @@ export class SdkPiClient extends EventEmitter implements PiClient {
             opts.browserNow ?? (() => ({ allowed: false, allowlist: [] })),
             opts.cwd,
             [path.join(pi.getAgentDir(), "skills"), ...(builtinSkills ? [builtinSkills] : [])],
-            () => switchedOff(),
+            () => hardOff(),
           ) },
+        // Offered only while the conversation has a lazy tool: see applyToolsOff.
+        { name: "tools-gateway", factory: gateway.extension },
       ];
       // While the sandbox is on, pi's own tools do what they do to the system as the sandbox user: see sandbox/.
       factories.push({ name: "sandbox", factory: await sandboxTools(pi, opts.cwd) });
@@ -551,6 +560,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
 
     const client = new SdkPiClient(session, modelRuntime, () => {});
     switchedOff = () => client.switchedOff;
+    hardOff = () => client.hardOff;
+    gateway.attach({ session: () => session, lazy: () => client.lazy, off: () => client.hardOff });
     client.portalSessionId = opts.sessionId;
     client.canvases = canvases;
     if (eventBus && resourceLoader) {
@@ -594,6 +605,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     // command that asks the user something silently does nothing.
 
     client.switchedOff = new Set(opts.toolsOff ?? []);
+    client.lazy = new Set(opts.toolsLazy ?? []);
     try {
       await session.bindExtensions({
         uiContext: client.buildUiContext(),
@@ -650,7 +662,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     client.applyLimitQuietly();
     // After binding, not before: a tool an extension registers does not exist
     // until then, and switching it off ahead of time switches off nothing.
-    if (client.switchedOff.size) client.applyToolsOff();
+    // Also with nothing switched off: the gateway is registered active, and is for the lazy tools to bring in.
+    client.applyToolsOff();
     return client;
   }
 
@@ -1126,6 +1139,38 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   switchedOff = new Set<string>();
 
   /**
+   * Of those, the ones that are lazy: out of the model's list like the rest, and reached through the
+   * `tools` tool. A subset of `switchedOff`, so every path that keeps a switched-off tool inactive keeps
+   * these inactive too.
+   */
+  lazy = new Set<string>();
+
+  /** Off for good: what the guard holds a call to, and the `tools` tool refuses. */
+  get hardOff(): ReadonlySet<string> {
+    return new Set([...this.switchedOff].filter((name) => !this.lazy.has(name)));
+  }
+
+  /** Whether the session has a lazy tool for the gateway to reach. */
+  private hasLazy(): boolean {
+    if (!this.lazy.size) return false;
+    try {
+      return (this.session.getAllTools?.() ?? []).some((tool: any) => this.lazy.has(String(tool.name)));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Whether pi keeps this tool out of what the model is offered.
+   *
+   * The switched-off tools, and the gateway while there is no lazy tool to reach through it: a tool
+   * that lists nothing is noise in the prompt of every conversation, which is what lazy tools avoid.
+   */
+  private keptOut(name: string): boolean {
+    return this.switchedOff.has(name) || (name === GATEWAY_TOOL && !this.hasLazy());
+  }
+
+  /**
    * What pi wants active, before the switches take anything out of it.
    *
    * The registry is not that: `getAllTools()` is every definition pi knows,
@@ -1159,7 +1204,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     }
     session.setActiveToolsByName = (names: string[]) => {
       this.wanted = new Set([...names, ...this.heldBack(session, names, this.fromExtension)]);
-      original(names.filter((name) => !this.switchedOff.has(name)));
+      original(names.filter((name) => !this.keptOut(name)));
     };
     this.hearExtensions(session);
   }
@@ -1236,7 +1281,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       return [];
     }
     if (!always && !active.every((name) => names.includes(name))) return [];
-    return [...this.wanted].filter((name) => this.switchedOff.has(name) && !names.includes(name) && known.has(name));
+    return [...this.wanted].filter((name) => this.keptOut(name) && !names.includes(name) && known.has(name));
   }
 
   /**
@@ -1250,7 +1295,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
    */
   async getTools(): Promise<PiTool[]> {
     const all: any[] = this.session.getAllTools?.() ?? [];
-    const offered = this.wanted.size ? all.filter((tool) => this.wanted.has(String(tool.name))) : all;
+    // Not the gateway: it is the portal's way to the lazy tools and no tool to switch.
+    const offered = (this.wanted.size ? all.filter((tool) => this.wanted.has(String(tool.name))) : all).filter((tool) => tool.name !== GATEWAY_TOOL);
     return offered.map((tool) => ({
       name: String(tool.name),
       description: typeof tool.description === "string" ? tool.description : undefined,
@@ -1262,14 +1308,16 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   }
 
   /**
-   * Switch tools off by name.
+   * Switch tools off by name; `lazy`, a subset of them, are the ones the model reaches through the `tools`
+   * tool instead of being offered them.
    *
    * Named rather than listing what stays: pi wants the active set, but that is
    * a snapshot, and a tool registered later would silently never be on. The
    * active set is computed from what pi wants right now, every time.
    */
-  async setToolsOff(names: string[]): Promise<void> {
+  async setToolsOff(names: string[], lazy: string[] = []): Promise<void> {
     this.switchedOff = new Set(names);
+    this.lazy = new Set(lazy.filter((name) => this.switchedOff.has(name)));
     this.applyToolsOff();
     // What the rule says of a tool that is switched off or on is for the next message, as for a reload.
     this.sayAudioRuleAgain();
@@ -1278,7 +1326,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   applyToolsOff(): void {
     try {
       if (!this.activate || !this.wanted.size) return;
-      this.activate([...this.wanted].filter((name) => !this.switchedOff.has(name)));
+      this.activate([...this.wanted].filter((name) => !this.keptOut(name)));
     } catch (e) {
       console.error(`[portal] could not apply the tool switches: ${(e as Error).message}`);
     }

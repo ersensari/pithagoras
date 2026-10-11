@@ -34,7 +34,7 @@ const PICTURE_TOOLS = ["show_image", "generate_image", "edit_image"];
  * What to file a tool under. The portal's own picture tools share one group, whichever way each was
  * registered; an extension's tool of the same name is not the portal's and stays in its own.
  */
-const sourceOf = (tool: PortalTool): string =>
+export const sourceOf = (tool: Pick<PortalTool, "name" | "source" | "inline">): string =>
   tool.inline && PICTURE_TOOLS.includes(tool.name) ? PICTURES : tool.source?.trim() || BUILT_IN;
 
 /** Where a group goes in the list: what is installed first, what the portal brings after it, what is built in last. */

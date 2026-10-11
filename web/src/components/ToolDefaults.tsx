@@ -3,7 +3,7 @@ import { LuCheck, LuPencil, LuX } from "react-icons/lu";
 import { api, ApiError } from "../api";
 import { LoadFailed } from "./SettingsUi";
 import { ToolGroupList } from "./ToolGroupList";
-import { displayName, nextOff, sourceName } from "../tool-groups";
+import { displayName, nextOff, sourceName, sourceOf } from "../tool-groups";
 import { isEnter, isEscape } from "../shortcuts";
 import { t } from "../i18n";
 
@@ -150,7 +150,12 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
               the second changes while this is open. */}
           <ToolGroupList
             roomy
-            tools={tools.map((tool) => ({ ...tool, enabled: !off.includes(tool.name) }))}
+            tools={tools.map((tool) => ({
+              ...tool,
+              enabled: !off.includes(tool.name),
+              // Of a lazy set and off here: reached through the `tools` tool, which the list says beside it.
+              lazy: lazy.includes(sourceOf(tool)) && off.includes(tool.name) ? (true as const) : undefined,
+            }))}
             names={names}
             busy={busy}
             onFlip={flip}
@@ -202,7 +207,7 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
                   disabled={busy}
                   aria-pressed={lazy.includes(group.source)}
                   onClick={() => flipLazy(group.source)}
-                  title={t("Lazy: off in every chat until one switches it on, so its tools are not in the prompt of a chat that never asked for them. A project, an agent, a routine or a chat can switch them on. Tools that turn up later start off too; ending it leaves the switches as they are.")}
+                  title={t("Lazy: off in every chat until one switches it on. Its tools are not in the model's list one by one; the model finds and calls them through the `tools` tool, so nothing in the set is lost to it. A project, an agent, a routine or a chat can switch them on to have them listed. Tools that turn up later start lazy too; ending it leaves the switches as they are, and its tools are then off for good.")}
                   aria-label={t("Lazy {name}", { name: displayName(group.source, names) })}
                   className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] transition hover:bg-fg/5 disabled:opacity-50 ${
                     lazy.includes(group.source) ? "bg-accent/15 text-accent" : "text-fg-subtle hover:text-fg"

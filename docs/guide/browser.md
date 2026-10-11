@@ -220,8 +220,11 @@ second one to keep in step with it.
 
 ::: tip Not in the prompt until it is wanted
 The browser's tools are a large set, and while they are on they sit in the prompt of every chat.
-Mark the group **lazy** in **Settings → Tools** and no chat is offered them until a project, an agent,
-a routine or the chat itself switches them on: see [Lazy tool sets](/guide/extensions#lazy-tool-sets).
+Mark the group **lazy** in **Settings → Tools** and no chat is offered them one by one: the agent finds
+and calls them through the `tools` tool, so a chat that never opens a page carries none of their
+schemas. A project, an agent, a routine or the chat itself can still switch them on to have them listed.
+Lazy tools are reached through the `tools` tool, and a call is held to the allowlist and the other rules
+exactly as a direct one: see [Lazy tool sets](/guide/extensions#lazy-tool-sets).
 :::
 
 Deliberately **not** gated on who is speaking. The agent has its own accounts and

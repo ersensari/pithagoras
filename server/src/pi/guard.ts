@@ -17,6 +17,7 @@ import { loadedAt, loadedPlaces, type LoadedAs, type LoadedPlace } from "./loade
 import { loadedByLinks } from "./loaded-links.js";
 // Only the names: a heartbeat's note is registered for heartbeats alone, and is how one says what it read.
 import { HEARTBEAT_ROLE, NOTE_TOOL } from "./heartbeat-names.js";
+import { GATEWAY_TOOL } from "./tools-gateway-names.js";
 import { runsAsPrimary } from "./runs-as-primary.js";
 
 /**
@@ -80,6 +81,10 @@ function untrustedResult(toolName: string, input: Record<string, unknown>): bool
  * switches one call at a time. Only such a tool: one the configuration leaves
  * out is off for pi too, and the adapter would not reach it anyway; a tool of
  * another extension whose name merely starts like a server's is no script's.
+ *
+ * The `tools` tool, which reaches a conversation's lazy tools, is another such way: `tools({ action:
+ * "call", name })` runs the tool of that name, so it is held to the switches the same, for any tool and
+ * not only a server's. A tool that is lazy is not in `off`: that is what it is reached through it for.
  */
 export function switchedOffVia(
   toolName: string,
@@ -87,11 +92,20 @@ export function switchedOffVia(
   off: ReadonlySet<string>,
   given?: Pick<McpView, "servers" | "serverTool">,
 ): string | undefined {
-  if (!off.size || (toolName !== "mcp" && toolName !== "mcp_script" && toolName !== "mcpScript")) return undefined;
-  const mcp = given ?? mcpView();
+  if (!off.size || (toolName !== GATEWAY_TOOL && toolName !== "mcp" && toolName !== "mcp_script" && toolName !== "mcpScript")) {
+    return undefined;
+  }
   // The adapter takes a name with hyphens for underscores (findToolByName); dots as well, which it
   // writes as underscores, so a name it might take one day is not a way round.
   const same = (name: string) => name.replace(/[-.]/g, "_");
+  if (toolName === GATEWAY_TOOL) {
+    // Searching names nothing, and lists only what is lazy. Describing a tool is a way to it too: its
+    // parameters are what the model is not to learn of a tool it was told is off.
+    const asked = typeof input.name === "string" ? same(input.name.trim()) : "";
+    if ((input.action !== "call" && input.action !== "describe") || !asked) return undefined;
+    return [...off].find((name) => same(name) === asked);
+  }
+  const mcp = given ?? mcpView();
   if (toolName === "mcp") {
     const server = typeof input.server === "string" && input.server ? same(input.server) : undefined;
     for (const key of ["tool", "describe"]) {
@@ -297,7 +311,7 @@ const envelope = (id: string) => ({
  * group conversation changes sender between messages and a launch-time list
  * would freeze capability to whoever happened to speak first.
  */
-const READ_ONLY = new Set(["read", "grep", "find", "ls", "ask_primary", NOTE_TOOL]);
+const READ_ONLY = new Set(["read", "grep", "find", "ls", "ask_primary", NOTE_TOOL, GATEWAY_TOOL]);
 
 /**
  * Playwright's element argument, whatever shape it arrives in.
@@ -943,11 +957,14 @@ export function guardExtension(
         return {
           block: true,
           reason:
-            event.toolName !== "mcp"
-              ? `Refused: "${offTool}" is switched off in this conversation, and an MCP script could reach it. ` +
-                "Call the MCP tools you need one at a time instead."
-              : `Refused: "${offTool}" is switched off in this conversation, and the mcp tool does not reach it ` +
-                "either. Say that it is switched off rather than looking for another way to it.",
+            event.toolName === GATEWAY_TOOL
+              ? `Refused: "${offTool}" is switched off in this conversation, and the ${GATEWAY_TOOL} tool does not reach it ` +
+                "either. Say that it is switched off rather than looking for another way to it."
+              : event.toolName !== "mcp"
+                ? `Refused: "${offTool}" is switched off in this conversation, and an MCP script could reach it. ` +
+                  "Call the MCP tools you need one at a time instead."
+                : `Refused: "${offTool}" is switched off in this conversation, and the mcp tool does not reach it ` +
+                  "either. Say that it is switched off rather than looking for another way to it.",
         };
       }
 

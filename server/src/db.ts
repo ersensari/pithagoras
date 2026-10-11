@@ -2239,18 +2239,33 @@ export function setToolDefaultsOff(names: string[]): string[] {
 }
 
 /**
- * The tool sets that are lazy: opt-in, off for every conversation until one switches them on.
+ * The tool sets that are lazy: opt-in, off for every conversation until one switches them on, and
+ * reached through the `tools` tool meanwhile.
  *
  * A lazy set is not in the model's prompt — schemas, descriptions and guidelines — in a chat
  * that never asked for it, which is what a large set such as the browser's costs otherwise
- * in every request. Not a new switch: the tools of a lazy set are in the portal-wide default as
- * off (`tools_off_default`), so a project, an agent, a routine or a chat switches them on
- * against it like any other tool. What the mark adds is that it holds for a tool of the set that
- * is registered later (rememberTools), and says in the settings which sets are meant that way.
- * Nothing is lazy until someone says so, so an install behaves as it did.
+ * in every request. The model finds a tool of it with `tools` (search, describe, call) instead, so
+ * nothing in the set is lost to it. Not a new switch: the tools of a lazy set are in the portal-wide
+ * default as off (`tools_off_default`), so a project, an agent, a routine or a chat switches them on
+ * against it like any other tool, and then has them listed one by one. What the mark adds is that
+ * it holds for a tool of the set that is registered later (rememberTools), that the tools are
+ * reached through the gateway while they are off (lazyToolNames), and says in the settings which
+ * sets are meant that way. Nothing is lazy until someone says so, so an install behaves as it did.
  */
 export function lazyToolSets(): string[] {
   return parseToolsOff(getSetting("tools_lazy"));
+}
+
+/** The names of the tools the portal has seen in a lazy set: those `tools` can reach where they are off. */
+export function lazyToolNames(): Set<string> {
+  const sets = new Set(lazyToolSets());
+  if (!sets.size) return new Set();
+  const servers = mcpServerNames();
+  return new Set(
+    knownTools()
+      .filter((tool) => sets.has(toolSetOf(tool, servers)))
+      .map((tool) => tool.name),
+  );
 }
 
 /**
