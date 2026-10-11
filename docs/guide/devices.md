@@ -75,7 +75,10 @@ system and the user the client runs as; the client's version; its **mode**:
 - **Folders**: only in the folders the device grants, with commands only where
   a folder allows them.
 - **Full**: everything the client's user can do, with the device's protections
-  (protected paths, risky commands, untrusted chats) still asking.
+  (protected paths, risky commands, untrusted chats) still asking. Full ends
+  by itself after the hours the device sets, and the list follows within half a
+  minute: the portal asks each connected device for its mode and settings again
+  at that pace.
 
 and the tools it offers. A device that is the portal's own machine and user is
 marked as such: a chat reaches nothing there that the portal's own tools do

@@ -72,7 +72,9 @@ const QUICK_TIMEOUT_MS = 30_000;
  * refuses is logged once per `refusedLogMs`, with a count of the rest. The
  * audit events left out are noted `auditNoteMs` after the first of them, when
  * the device says nothing more to note them with. A device that is told
- * something it must have read has `confirmMs` to answer (see `tell`).
+ * something it must have read has `confirmMs` to answer (see `tell`). What a
+ * connected device says about itself is read again every `refreshMs` (see
+ * `refresh`).
  */
 export const TIMING = {
   replaceProbeMs: 3_000,
@@ -81,6 +83,7 @@ export const TIMING = {
   refusedLogMs: 60_000,
   auditNoteMs: 1_000,
   confirmMs: QUICK_TIMEOUT_MS,
+  refreshMs: 30_000,
 };
 /** The longest wait a timer takes: past it Node fires the timer at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
@@ -169,6 +172,8 @@ export class DeviceLink extends EventEmitter {
   private readonly exits = new Map<number, (exit: ExecExit) => void>();
   private lastHeard = Date.now();
   private readonly pinger: NodeJS.Timeout;
+  private readonly refresher: NodeJS.Timeout;
+  private refreshing = false;
   closed = false;
 
   constructor(
@@ -194,6 +199,33 @@ export class DeviceLink extends EventEmitter {
       ws.ping();
     }, PING_EVERY_MS);
     this.pinger.unref();
+    this.refresher = setInterval(() => void this.refresh(), TIMING.refreshMs);
+    this.refresher.unref();
+  }
+
+  /**
+   * Reads the device's mode, folders, tools and settings again. The device
+   * announces a change (`policy.changed`), but not what happens on its own
+   * clock: Full falling back to Ask when its time is up. Without this the
+   * page and the tools would show Full until the next change. A device that
+   * does not answer keeps what it had said before.
+   */
+  async refresh(): Promise<void> {
+    if (this.closed || this.refreshing) return;
+    this.refreshing = true;
+    try {
+      const info = readDeviceInfo(await this.call("device.info", {}, { timeoutMs: QUICK_TIMEOUT_MS }));
+      const policy = this.can("policy") ? readPolicy(await this.call("policy.get", {}, { timeoutMs: QUICK_TIMEOUT_MS })) : undefined;
+      const changed = (a: unknown, b: unknown) => b !== undefined && JSON.stringify(a) !== JSON.stringify(b);
+      const differs = changed(this.info, info) || changed(this.policy, policy);
+      if (info) this.info = info;
+      if (policy) this.policy = policy;
+      if (differs && !this.closed) hub.emit("status", this.deviceId);
+    } catch {
+      // Busy, slow or gone: the next round tries again, and a lost connection is ended elsewhere.
+    } finally {
+      this.refreshing = false;
+    }
   }
 
   /** Anything from the device, a pong or any message, is a sign of life. */
@@ -623,6 +655,7 @@ export class DeviceLink extends EventEmitter {
     if (this.closed) return;
     this.closed = true;
     clearInterval(this.pinger);
+    clearInterval(this.refresher);
     for (const [, entry] of this.pending) if (!entry.abandoned) entry.reject(offline());
     this.pending.clear();
     this.apart = 0;

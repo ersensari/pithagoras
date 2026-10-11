@@ -18,7 +18,7 @@ const { attachSyncUpgrade, linkOf, dropDevice, hub, AUDIT_BURST, TIMING } = awai
 const store = await import("../dist/sync/store.js");
 const { getDb, listAudit, recordAudit, AUDIT_DEVICE_KEEP } = await import("../dist/db.js");
 const { encodeFrame, decodeFrame, FRAME, CLOSE, MAX_APPROVALS, MAX_CALLS, MAX_SETTINGS_DEPTH, MAX_SETTINGS_CHARS } = await import("../dist/sync/protocol.js");
-const { connect: connectTo, until } = await import("./fake-device.mjs");
+const { connect: connectTo, until, INFO } = await import("./fake-device.mjs");
 
 let server;
 let base;
@@ -763,6 +763,44 @@ test("a device that does not say it shares its settings cannot change them", asy
   assert.equal(linkOf(id).policy, undefined);
   assert.equal(device.asked("device.info").length, 2, "its own connect and the call above: none for the change");
   device.ws.close(1001);
+});
+
+test("a device whose Full mode runs out on its own clock is read again, so the page shows the mode it runs by now", async () => {
+  const { connector_token: token, device_id: id } = await paired("expirer");
+  // The client says nothing when Full falls back to Ask by itself: no policy.changed, only a different answer.
+  let mode = "full";
+  const answers = {
+    "device.info": () => ({ ...INFO, mode, mode_expires_ms: mode === "full" ? Date.now() + 60_000 : null }),
+    "policy.get": () => policyOf(`v-${mode}`, { policy: { mode } }),
+  };
+  Object.assign(TIMING, { refreshMs: 100 });
+  const seen = [];
+  const onStatus = (deviceId) => deviceId === id && seen.push(linkOf(id)?.info?.mode);
+  hub.on("status", onStatus);
+  try {
+    const { device } = await connect(token, { ...SHARES, answers });
+    await until(() => linkOf(id)?.info && linkOf(id)?.policy, "the connect");
+    const link = linkOf(id);
+    assert.equal(link.info.mode, "full");
+    assert.equal(link.policy.settings.policy.mode, "full");
+    // Nothing changed: the same answers are not announced as a change.
+    await sleep(350);
+    assert.deepEqual(seen.filter((m) => m !== "full" && m !== undefined), []);
+    mode = "ask";
+    await until(() => link.info.mode === "ask" && link.policy.version === "v-ask", "the mode the device runs by now");
+    assert.equal(link.info.mode_expires_ms, null);
+    assert.ok(seen.includes("ask"), "said as a change of the device");
+    assert.equal(link.closed, false);
+    device.ws.close(1001);
+    await until(() => !linkOf(id), "the link to go");
+    // A link that is gone is not asked any more.
+    const asked = device.asked("device.info").length;
+    await sleep(350);
+    assert.equal(device.asked("device.info").length, asked);
+  } finally {
+    hub.off("status", onStatus);
+    Object.assign(TIMING, { refreshMs: 30_000 });
+  }
 });
 
 test("a device that sends refusals as fast as it can writes one log line and a count, not a line each", async () => {
