@@ -137,3 +137,34 @@ test('a question still waiting is back after the page is reloaded or the person 
   await expect(dialog).toBeHidden();
   expect(answered).toEqual([{ id: 'q1', value: { db: 'Postgres', features: ['Search'], order: ['Speed', 'Cost', 'Safety'] } }]);
 });
+
+test('a required question whose id is an inherited object key is not answered until something is picked', async ({ page }) => {
+  const { answered } = await portal(page);
+  await page.goto('/s/a');
+  await expect.poll(() => page.evaluate(() => (window as any).streams.filter((s: any) => !s.closed).length)).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    const stream = (window as any).streams.filter((s: any) => !s.closed).at(-1);
+    stream.emit('caught-up', {});
+    const qs = [{ id: 'constructor', question: 'Pick one', kind: 'single', options: [{ label: 'A' }, { label: 'B' }], other: false, optional: false }];
+    stream.emit('message', { seq: -1, type: 'extension_ui_request', payload: { id: 'q1', method: 'questions', title: 'One question', questions: qs } });
+  });
+  const dialog = page.getByRole('dialog', { name: 'One question' });
+  const submit = dialog.getByRole('button', { name: 'Submit' });
+  await expect(submit).toBeDisabled();
+  await dialog.getByRole('radio', { name: 'B' }).check();
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(dialog).toBeHidden();
+  expect(answered).toEqual([{ id: 'q1', value: { constructor: 'B' } }]);
+});
+
+test('keeping a ranking\'s order with the keyboard leaves the focus inside the dialog', async ({ page }) => {
+  await portal(page);
+  const dialog = await open(page);
+  const keep = dialog.getByRole('button', { name: 'Keep this order' });
+  await keep.focus();
+  await page.keyboard.press('Enter');
+  await expect(keep).toBeHidden();
+  // On the first row's arrow, not on the page behind the backdrop.
+  await expect(dialog.getByRole('button', { name: 'Move Speed down' })).toBeFocused();
+});

@@ -113,7 +113,7 @@ test("a question nobody answers has no answer, rather than one the object it is 
   }
 });
 
-test("Stop closes the dialog on every page that has it", async () => {
+test("Stop, and an answer given on another page, close the dialog on every page that has it", async () => {
   call = { questions: [{ question: "Pick", options: ["A", "B"] }] };
   const { client, events } = await open();
   try {
@@ -125,6 +125,19 @@ test("Stop closes the dialog on every page that has it", async () => {
     assert.deepEqual(client.openQuestionRequests(), []);
   } finally {
     client.dispose();
+  }
+
+  // Answered: the page that answered has dropped it, and the others hear that it is settled. Once, not twice.
+  const second = await open();
+  try {
+    await second.client.prompt("Ask me");
+    await until(() => second.events.some((e) => e.type === "extension_ui_request"));
+    const { id } = second.events.find((e) => e.type === "extension_ui_request");
+    assert.equal(second.client.respondUi(id, { value: { q1: "A" } }), true);
+    await until(() => second.events.some((e) => e.type === "agent_settled"));
+    assert.equal(second.events.filter((e) => e.type === "extension_ui_cancel" && e.id === id).length, 1);
+  } finally {
+    second.client.dispose();
   }
 });
 

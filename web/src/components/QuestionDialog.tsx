@@ -70,7 +70,7 @@ export function QuestionDialog({
 
   const change = (id: string, patch: Partial<Draft>) => setDrafts((all) => ({ ...all, [id]: { ...all[id], ...patch } }));
   const answers = Object.fromEntries(questions.flatMap((q) => { const a = answerOf(q, drafts[q.id]); return a === undefined ? [] : [[q.id, a]]; }));
-  const complete = questions.every((q) => q.optional || answers[q.id] !== undefined);
+  const complete = questions.every((q) => q.optional || Object.hasOwn(answers, q.id));
 
   const respond = async (payload: { value?: unknown; cancelled?: boolean }) => {
     if (busy) return;
@@ -101,7 +101,9 @@ export function QuestionDialog({
   useLayoutEffect(() => {
     const key = refocus.current;
     refocus.current = null;
-    if (key) arrows.current.get(key)?.focus();
+    const arrow = key ? arrows.current.get(key) : undefined;
+    if (arrow && !arrow.disabled) arrow.focus();
+    else if (key) dialog.current?.focus();
   });
 
   const move = (q: AgentQuestion, from: number, by: number) => {
@@ -112,6 +114,11 @@ export function QuestionDialog({
     const next = by < 0 ? (to === 0 ? "down" : "up") : to === order.length - 1 ? "up" : "down";
     refocus.current = `${q.id}\n${label}\n${next}`;
     change(q.id, { order, ranked: true });
+  };
+  // "Keep this order" goes away once pressed, and the focus with it: it goes to the first row's arrow, or to the dialog when that row cannot move.
+  const keep = (q: AgentQuestion) => {
+    refocus.current = `${q.id}\n${drafts[q.id].order[0]}\ndown`;
+    change(q.id, { ranked: true });
   };
   const arrow = (q: AgentQuestion, label: string, dir: "up" | "down") => (el: HTMLButtonElement | null) => {
     const key = `${q.id}\n${label}\n${dir}`;
@@ -248,7 +255,7 @@ export function QuestionDialog({
                       ))}
                     </ol>
                     {!d.ranked && (
-                      <button type="button" onClick={() => change(q.id, { ranked: true })} className="mt-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/10">
+                      <button type="button" onClick={() => keep(q)} className="mt-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/10">
                         {t("Keep this order")}
                       </button>
                     )}

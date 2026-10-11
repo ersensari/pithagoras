@@ -680,13 +680,12 @@ export class SdkPiClient extends EventEmitter implements PiClient {
         let shown = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
         // A stopped run closes the dialog on every page that has it, as the timer does.
-        const abort = () => {
-          if (shown && !settled) this.emit("event", { type: "extension_ui_cancel", id });
-          finish(fallback);
-        };
+        const abort = () => finish(fallback);
         const finish = (value: unknown) => {
           if (settled) return;
           settled = true;
+          // Whatever settled it, every page still showing it closes it; the page that answered has dropped it already.
+          if (shown) this.emit("event", { type: "extension_ui_cancel", id });
           clearTimeout(timer);
           opts?.signal?.removeEventListener?.("abort", abort);
           this.pendingUi.delete(id);
@@ -698,8 +697,6 @@ export class SdkPiClient extends EventEmitter implements PiClient {
         // Never park forever — an unanswered dialog would wedge the session.
         const ms = typeof opts?.timeout === "number" ? opts.timeout : 300_000;
         timer = setTimeout(() => {
-          if (settled) return;
-          this.emit("event", { type: "extension_ui_cancel", id });
           finish(fallback);
         }, ms);
         if (typeof timer.unref === "function") timer.unref();
