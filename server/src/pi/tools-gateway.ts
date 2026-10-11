@@ -1,5 +1,6 @@
 import { Type } from "typebox";
 import { fail, say } from "./tool-result.js";
+import { piDependency } from "./package.js";
 import { GATEWAY_TOOL } from "./tools-gateway-names.js";
 
 /**
@@ -26,6 +27,9 @@ export interface GatewayHost {
   /** The tools switched off for good, which no way leads to. */
   off: () => ReadonlySet<string>;
 }
+
+/** pi's own check of a call's arguments, which a direct call goes through: loaded from pi's copy of pi-ai. */
+let piAi: Promise<any> | undefined;
 
 /** How many tools one search lists: enough to choose from, few enough not to be the prompt it replaced. */
 const SEARCH_LIMIT = 20;
@@ -141,11 +145,12 @@ export class ToolsGateway {
     // Without the hooks the call would skip the guard, so there is no call.
     if (!definition || typeof runner?.emitToolCall !== "function" || typeof runner.emitToolResult !== "function") return fail(`"${tool.name}" cannot be called from here.`);
 
+    // As pi does for a direct call, in its order: prepare the arguments, then validate (and coerce) them against the
+    // schema, so the hooks and the tool see what they would see from a direct call. A failure is the call's error.
     let args = argsOf(rawArgs);
     if (typeof definition.prepareArguments === "function") args = argsOf(definition.prepareArguments(args));
-    const required: string[] = Array.isArray((tool.parameters as any)?.required) ? (tool.parameters as any).required : [];
-    const missing = required.filter((key) => !(key in args));
-    if (missing.length) return fail(`"${tool.name}" needs ${missing.join(", ")}: describe shows its parameters.`);
+    const { validateToolArguments } = await (piAi ??= piDependency("@earendil-works/pi-ai"));
+    args = validateToolArguments(definition, { type: "toolCall", id, name: tool.name, arguments: args });
 
     // As pi does for a direct call: the hooks before it, which may refuse it or change its arguments in place.
     if (runner.hasHandlers("tool_call")) {
@@ -203,7 +208,11 @@ export class ToolsGateway {
         }),
         query: Type.Optional(Type.String({ description: "search: words from a tool's name or from what it does" })),
         name: Type.Optional(Type.String({ description: "describe and call: the tool's name, as search lists it" })),
-        args: Type.Optional(Type.Object({}, { additionalProperties: true, description: "call: the tool's arguments, as describe lists them" })),
+        args: Type.Optional(
+          Type.Union([Type.Object({}, { additionalProperties: true }), Type.String()], {
+            description: "call: the tool's arguments as an object, or as the JSON text of one, as describe lists them",
+          })
+        ),
       }),
       execute: async (id: string, p: any, signal?: AbortSignal, onUpdate?: unknown, ctx?: unknown) => {
         const name = typeof p?.name === "string" ? p.name.trim() : "";

@@ -2166,6 +2166,28 @@ export function toolDefaultsFor(
   return routine ? defaultsFor(off, routineTools(routine)) : off;
 }
 
+/**
+ * The exceptions of the layers toolDefaultsFor folds in, outermost first, up to the one `upTo`
+ * stops before. A tool one of them switched off is off for good, not lazy (switchedOffIn).
+ */
+export function toolLayersFor(
+  workspace: string | null | undefined,
+  routine?: string | null,
+  upTo?: "agent" | "project" | "routine",
+  homes?: AgentHome[],
+): SessionTools[] {
+  const layers: SessionTools[] = [];
+  if (upTo === "agent") return layers;
+  const agent = agentIdOf(workspace, homes);
+  if (agent) layers.push(agentTools(agent));
+  if (upTo === "project") return layers;
+  const project = projectOf(workspace);
+  if (project) layers.push(projectTools(project));
+  if (upTo === "routine") return layers;
+  if (routine) layers.push(routineTools(routine));
+  return layers;
+}
+
 /** The routine a session is a run of, if it is one: its layer is in its tools. */
 export const routineOf = (session: Pick<SessionRow, "kind" | "routine_slug"> | undefined): string | null =>
   session?.kind === "routine" ? (session.routine_slug ?? null) : null;

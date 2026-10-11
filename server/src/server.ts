@@ -40,6 +40,7 @@ import {
   setRoutineBrowserSwitch,
   seenBrowserTools,
   toolDefaultsFor,
+  toolLayersFor,
   setContextLimit,
   setDefaultContextLimit,
   setProjectTools,
@@ -68,7 +69,7 @@ import { deleteNotesOf } from "./activity.js";
 import { EXECUTOR_KIND } from "./executor-kind.js";
 import { sessions, CommandFailed, IMAGE_ROOT } from "./session-manager.js";
 import { ImageError, MAX_IMAGE_BYTES, MAX_IMAGES, imagePath, mimeOf, parseImages, saveImages } from "./prompt-images.js";
-import { defaultsFor, exceptionsFor, heldOffUnshown, toolEnabled, toolLazy, toolSource } from "./tool-policy.js";
+import { defaultsFor, exceptionsFor, heldOffUnshown, switchedOffIn, toolEnabled, toolLazy, toolSource } from "./tool-policy.js";
 import { mcpRouter, mcpServerNames, onMcpWritten } from "./api/mcp.js";
 import { authEnabled, checkPassword, isAuthed, issueCookie, keptShortPassword, requireAuth, signOut } from "./auth.js";
 import { packagesRouter } from "./api/packages.js";
@@ -442,7 +443,7 @@ app.get("/api/projects/:name/tools", (req, res) => {
   try {
     const project = getProject(WORKSPACE_ROOT, req.params.name);
     if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
-    res.json(layerTools(project.path, toolDefaultsFor(project.path, null, "project"), projectTools(project.name)));
+    res.json(layerTools(project.path, toolDefaultsFor(project.path, null, "project"), projectTools(project.name), toolLayersFor(project.path, null, "project")));
   } catch (e) {
     projectFailure(res, e);
   }
@@ -476,16 +477,18 @@ app.put("/api/projects/:name/tools", async (req, res) => {
  * layers under it say, which is what this one disagrees with. Shaped like a
  * project's and a chat's, so the page draws them all the same way.
  */
-function layerTools(folder: string, below: string[], exceptions: { off: string[]; on: string[] }) {
+function layerTools(folder: string, below: string[], exceptions: { off: string[]; on: string[] }, layersBelow: { off: string[]; on: string[] }[]) {
   const servers = mcpServerNames();
   const lazy = lazyToolNames();
+  // A tool that this layer or one under it switched off is off for good, not lazy.
+  const explicit = switchedOffIn([...layersBelow, exceptions]);
   return {
     tools: shownTools(folder).map((tool) => ({
       ...tool,
       source: toolSource(tool.name, tool.source, servers),
       enabled: toolEnabled(tool.name, below, exceptions),
       defaultOn: !below.includes(tool.name),
-      ...(toolLazy(tool.name, lazy, below, exceptions) ? { lazy: true as const } : {}),
+      ...(toolLazy(tool.name, lazy, below, exceptions, explicit) ? { lazy: true as const } : {}),
     })),
     live: false,
     names: toolGroupNames(),
@@ -497,7 +500,7 @@ function layerTools(folder: string, below: string[], exceptions: { off: string[]
 function layerExceptions(folder: string, below: string[], held: { off: string[]; on: string[] }, off: string[]) {
   const shown = shownTools(folder).map((t) => t.name);
   const answered = [...shown, ...held.off, ...held.on];
-  return exceptionsFor(heldOffUnshown(off, shown, held), below, answered, held);
+  return exceptionsFor(heldOffUnshown(off, shown, held), below, answered, held, lazyToolNames());
 }
 
 /**
@@ -510,7 +513,7 @@ app.get("/api/agents/:id/tools", (req, res) => {
   const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: "No such agent" });
   if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
-  res.json(layerTools(agent.home, toolDefaultsFor(agent.home, null, "agent"), agentTools(agent.id)));
+  res.json(layerTools(agent.home, toolDefaultsFor(agent.home, null, "agent"), agentTools(agent.id), []));
 });
 
 app.put("/api/agents/:id/tools", async (req, res) => {
@@ -547,7 +550,7 @@ app.get("/api/routines/:id/tools", (req, res) => {
   if (!routine) return res.status(404).json({ error: "Not found" });
   if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
   if ("error" in routine) return res.status(409).json({ error: routine.error });
-  res.json(layerTools(routine.folder, toolDefaultsFor(routine.folder, null, "routine"), routineTools(routine.slug)));
+  res.json(layerTools(routine.folder, toolDefaultsFor(routine.folder, null, "routine"), routineTools(routine.slug), toolLayersFor(routine.folder, null, "routine")));
 });
 
 app.put("/api/routines/:id/tools", async (req, res) => {

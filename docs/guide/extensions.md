@@ -269,20 +269,22 @@ tool, so a portal with nothing lazy has no extra tool in any prompt. It has thre
 | --- | --- |
 | `search` | `query`: words from a tool's name or from what it does. Lists the matching lazy tools, each with the first line of its description. No query lists them all |
 | `describe` | `name`: the tool's full description and its parameters as a JSON schema |
-| `call` | `name` and `args` (an object): runs the tool and returns its result |
+| `call` | `name` and `args` (an object, or its JSON text): runs the tool and returns its result |
 
 The model describes a tool before it first calls it, so a schema is in the conversation only for a
 tool that is used. A call through `tools` is held to the same rules as a direct one: the
 [guard](/guide/security) runs on the tool that is called, with its own name and arguments, so the
 [browser](/guide/browser)'s allowlist, the rules after untrusted content and what a colleague may run
-apply unchanged, and the result is wrapped as somebody else's words where it would be. A tool that is
+apply unchanged, and the result is wrapped as somebody else's words where it would be. The arguments are checked against the tool's parameters, and numbers or booleans sent as text are converted, as for a direct call. A tool that is
 switched off is refused, `call` and `describe` alike.
 
 A [project](/guide/projects#tools), an [agent](/guide/agents#tools), a [routine](/guide/routines#tools)
 or a single chat can switch the set **on** for itself with the switches it already has. The tools are then
-listed one by one in that conversation, as before, and are not lazy there. Switching one **off** in a chat
-means off: that tool is not reachable through `tools` either. The three states are therefore: on (offered
-one by one), lazy (reached through `tools`) and off (not reachable).
+listed one by one in that conversation, as before, and are not lazy there. A tool of the set that you
+switch **off** there, after it was on, is off for good: it is not reachable through `tools` either. The same
+holds for a tool that an agent, project or routine switched off, whatever the portal-wide mark says. The three
+states are therefore: on (offered one by one), lazy (reached through `tools`) and off (not reachable). To
+take a single lazy tool away, switch it on and then off again.
 
 What the mark adds to switching a group off: a tool of the group that the portal sees for the
 first time later, after an update or a new MCP tool, starts lazy too, instead of arriving

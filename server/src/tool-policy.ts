@@ -139,20 +139,35 @@ export function toolEnabled(
 }
 
 /**
+ * The tools that a stack of layers switched off for good: the last layer to say anything about a
+ * tool says "off". Layers go from the outermost (agent) to the conversation's own.
+ */
+export function switchedOffIn(layers: Iterable<ToolExceptions>): Set<string> {
+  const off = new Set<string>();
+  for (const layer of layers) {
+    for (const name of layer.off) off.add(name);
+    for (const name of layer.on) off.delete(name);
+  }
+  return off;
+}
+
+/**
  * Is this tool lazy for a conversation: off in what the model is offered, and reached through the
  * `tools` tool?
  *
- * Only a tool of a lazy set that is off because the defaults leave it off. One that the conversation
- * switched off itself is off, not lazy: the user said they do not want it, and a way to it through
- * the gateway would be a way round that.
+ * Only a tool of a lazy set that is off because the defaults leave it off. One that a layer
+ * switched off itself (`explicitOff`, from switchedOffIn: the agent, the project, the routine or the
+ * conversation) is off, not lazy: somebody said they do not want it, and a way to it through the
+ * gateway would be a way round that.
  */
 export function toolLazy(
   name: string,
   lazyTools: ReadonlySet<string>,
   defaultsOff: Iterable<string>,
-  exceptions: ToolExceptions
+  exceptions: ToolExceptions,
+  explicitOff: ReadonlySet<string> = new Set(exceptions.off)
 ): boolean {
-  return lazyTools.has(name) && !toolEnabled(name, defaultsOff, exceptions) && !exceptions.off.includes(name);
+  return lazyTools.has(name) && !toolEnabled(name, defaultsOff, exceptions) && !explicitOff.has(name);
 }
 
 /**
@@ -202,12 +217,16 @@ export function heldOffUnshown(wantedOff: Iterable<string>, shown: Iterable<stri
  * somebody switched here on purpose is theirs, even where the default has since
  * come to agree with it: dropping it on the next unrelated flip would leave a
  * chat that follows whatever the default does next, when it was told not to.
+ *
+ * A lazy tool is off by default, but off there means "reached through the gateway". Switched on here
+ * and then off again, it is the layer's own "off" that is written, which no gateway reaches.
  */
 export function exceptionsFor(
   wantedOff: Iterable<string>,
   defaultsOff: string[],
   known: Iterable<string>,
-  held: ToolExceptions = { off: [], on: [] }
+  held: ToolExceptions = { off: [], on: [] },
+  lazyTools: ReadonlySet<string> = new Set()
 ): ToolExceptions {
   const off = new Set(wantedOff);
   const defaults = new Set(defaultsOff);
@@ -217,7 +236,8 @@ export function exceptionsFor(
   // saw — an extension that failed to load, a server that is not attached —
   // and that exception outlives the default it was silently cancelling.
   for (const name of new Set([...known, ...off])) {
-    if (off.has(name) && (!defaults.has(name) || held.off.includes(name))) exceptions.off.push(name);
+    const offAgain = lazyTools.has(name) && held.on.includes(name);
+    if (off.has(name) && (!defaults.has(name) || held.off.includes(name) || offAgain)) exceptions.off.push(name);
     if (!off.has(name) && (defaults.has(name) || held.on.includes(name))) exceptions.on.push(name);
   }
   exceptions.off.sort();

@@ -131,6 +131,51 @@ test("a tool that a conversation switched off itself is off, not lazy", async ()
   assert.deepEqual(lazyOf(listed), ["heavy_open", "heavy_read"]);
 });
 
+test("a tool a project switched off for good stays off when its set is marked lazy: not lazy, not reachable", async () => {
+  mkdirSync(path.join(home, "ws", "research"), { recursive: true });
+  await json("/api/projects/research/tools", "PUT", { off: ["heavy_read"] });
+  await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
+  const chat = await json("/api/sessions", "POST", { workspace: "research" });
+  const off = sessions.piOff(chat.id);
+  assert.deepEqual(off, ["heavy_open", "heavy_read"]);
+  assert.deepEqual(sessions.piLazy(chat.id, off), ["heavy_open"]);
+  assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), ["heavy_open"]);
+  assert.deepEqual(lazyOf(await json("/api/projects/research/tools")), ["heavy_open"]);
+  // The project can still take it back: on again, it is the set's own off, lazy once more.
+  await json("/api/projects/research/tools", "PUT", { off: ["heavy_open", "heavy_read"] });
+  assert.deepEqual(lazyOf(await json("/api/projects/research/tools")), ["heavy_open"]);
+});
+
+test("a lazy tool a chat switches on and then off again is off for good, through the API", async () => {
+  await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
+  const chat = await json("/api/sessions", "POST", {});
+  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: [] });
+  assert.deepEqual(db.sessionTools(chat.id), { off: [], on: ["heavy_open", "heavy_read"] });
+  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: ["heavy_read"] });
+  assert.deepEqual(db.sessionTools(chat.id), { off: ["heavy_read"], on: ["heavy_open"] });
+  const off = sessions.piOff(chat.id);
+  assert.deepEqual(off, ["heavy_read"]);
+  assert.deepEqual(sessions.piLazy(chat.id, off), [], "off, and no gateway leads to it");
+  assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), []);
+  // Switched on again, it is simply on.
+  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: [] });
+  assert.deepEqual(sessions.piOff(chat.id), []);
+});
+
+test("a tool of a lazy set that the MCP configuration withdrew is not lazy: nothing reaches it", async () => {
+  const mcp = path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json");
+  writeFileSync(mcp, JSON.stringify({ mcpServers: { notes: {} } }));
+  db.rememberTools([{ name: "notes_read", source: "pi-mcp-adapter", package: null }]);
+  await json("/api/tools/lazy", "PUT", { lazy: ["notes"] });
+  const chat = await json("/api/sessions", "POST", {});
+  assert.deepEqual(sessions.piLazy(chat.id, sessions.piOff(chat.id, ["notes_read"])), ["notes_read"]);
+  writeFileSync(mcp, JSON.stringify({ mcpServers: { notes: { disabled: true } } }));
+  const off = sessions.piOff(chat.id, ["notes_read"]);
+  assert.ok(off.includes("notes_read"));
+  assert.deepEqual(sessions.piLazy(chat.id, off), []);
+  writeFileSync(mcp, JSON.stringify({}));
+});
+
 test("a tool that turns up later in a lazy set starts off, one seen before does not change", async () => {
   await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
   // The owner switched one of them on for everyone.

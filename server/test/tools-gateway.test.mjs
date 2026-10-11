@@ -50,6 +50,13 @@ export default function (pi) {
     async execute(_id, p) { writeFileSync(${JSON.stringify(marker + ".deleted")}, p.id); return text("deleted"); },
   });
   pi.registerTool({
+    name: "num_scroll",
+    label: "Scroll",
+    description: "Scroll by an amount.",
+    parameters: { type: "object", properties: { amount: { type: "number" }, mode: { type: "string", enum: ["up", "down"] } }, required: ["amount"] },
+    async execute(_id, p) { return text("amount is " + typeof p.amount + " " + JSON.stringify(p.amount)); },
+  });
+  pi.registerTool({
     name: "mcp_page",
     label: "Page",
     description: "Read a web page.",
@@ -147,7 +154,24 @@ test("a call runs the lazy tool with its arguments", async () => {
 test("a call without what the tool requires says what is missing, and does not run it", async () => {
   const { results } = await run([via("call", { name: "docs_export", args: {} })], lazy);
   assert.equal(results[0].isError, true);
-  assert.match(textOf(results[0]), /needs id/);
+  assert.match(textOf(results[0]), /Validation failed.*\bid\b/);
+});
+
+test("a call is validated and coerced as pi does a direct one", async () => {
+  const toolsOff = ["num_scroll"];
+  const options = { toolsOff, toolsLazy: toolsOff };
+  const bad = await run([via("call", { name: "num_scroll", args: { amount: "300", mode: "sideways" } })], options);
+  assert.equal(bad.results[0].isError, true);
+  assert.match(textOf(bad.results[0]), /Validation failed.*mode/);
+  const good = await run([via("call", { name: "num_scroll", args: { amount: "300", mode: "up" } })], options);
+  assert.equal(good.results[0].isError, false);
+  assert.match(textOf(good.results[0]), /amount is number 300/, "numbers sent as text reach the tool as numbers");
+});
+
+test("the arguments of a call may be the JSON text of an object", async () => {
+  const { results } = await run([via("call", { name: "docs_open", args: '{"id": "doc-9"}' })], lazy);
+  assert.equal(results[0].isError, false);
+  assert.match(textOf(results[0]), /opened doc-9/);
 });
 
 test("a tool that is switched off is refused by the guard, however the call is made", async () => {
