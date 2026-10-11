@@ -2569,7 +2569,7 @@ class SessionManager extends EventEmitter {
     // Against the project's default: an exception here is to what the chat would
     // otherwise have, so a project that switches a tool off needs no entry for it
     // in every chat, and one that is switched back on in the chat needs one.
-    setSessionTools(sessionId, exceptionsFor(heldOffUnshown(wantedOff, shown, held), toolDefaultsForSession(session), answered, held, lazyToolNames()));
+    setSessionTools(sessionId, exceptionsFor(heldOffUnshown(wantedOff, shown, held), toolDefaultsForSession(session), answered, held));
     const off = this.offFor(sessionId, listed.map((t) => t.name), view.known().keys());
     const piOff = this.piOff(sessionId, reported.map((t) => t.name), view);
     await client?.setToolsOff?.(piOff, this.piLazy(sessionId, piOff));

@@ -218,15 +218,15 @@ export function heldOffUnshown(wantedOff: Iterable<string>, shown: Iterable<stri
  * come to agree with it: dropping it on the next unrelated flip would leave a
  * chat that follows whatever the default does next, when it was told not to.
  *
- * A lazy tool is off by default, but off there means "reached through the gateway". Switched on here
- * and then off again, it is the layer's own "off" that is written, which no gateway reaches.
+ * A lazy tool is off by default, and "off" for it means "reached through the gateway". Switched on
+ * here and then off again, the "on" is dropped and nothing is written: it is lazy once more. The
+ * layer's own "off" is only kept where it was held (the layer said it before the set was lazy).
  */
 export function exceptionsFor(
   wantedOff: Iterable<string>,
   defaultsOff: string[],
   known: Iterable<string>,
-  held: ToolExceptions = { off: [], on: [] },
-  lazyTools: ReadonlySet<string> = new Set()
+  held: ToolExceptions = { off: [], on: [] }
 ): ToolExceptions {
   const off = new Set(wantedOff);
   const defaults = new Set(defaultsOff);
@@ -236,8 +236,7 @@ export function exceptionsFor(
   // saw — an extension that failed to load, a server that is not attached —
   // and that exception outlives the default it was silently cancelling.
   for (const name of new Set([...known, ...off])) {
-    const offAgain = lazyTools.has(name) && held.on.includes(name);
-    if (off.has(name) && (!defaults.has(name) || held.off.includes(name) || offAgain)) exceptions.off.push(name);
+    if (off.has(name) && (!defaults.has(name) || held.off.includes(name))) exceptions.off.push(name);
     if (!off.has(name) && (defaults.has(name) || held.on.includes(name))) exceptions.on.push(name);
   }
   exceptions.off.sort();

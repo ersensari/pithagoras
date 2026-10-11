@@ -500,7 +500,7 @@ function layerTools(folder: string, below: string[], exceptions: { off: string[]
 function layerExceptions(folder: string, below: string[], held: { off: string[]; on: string[] }, off: string[]) {
   const shown = shownTools(folder).map((t) => t.name);
   const answered = [...shown, ...held.off, ...held.on];
-  return exceptionsFor(heldOffUnshown(off, shown, held), below, answered, held, lazyToolNames());
+  return exceptionsFor(heldOffUnshown(off, shown, held), below, answered, held);
 }
 
 /**

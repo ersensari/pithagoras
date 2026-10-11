@@ -141,25 +141,35 @@ test("a tool a project switched off for good stays off when its set is marked la
   assert.deepEqual(sessions.piLazy(chat.id, off), ["heavy_open"]);
   assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), ["heavy_open"]);
   assert.deepEqual(lazyOf(await json("/api/projects/research/tools")), ["heavy_open"]);
-  // The project can still take it back: on again, it is the set's own off, lazy once more.
+  // Still off with the other switches flipped: the project's own say-so is kept.
   await json("/api/projects/research/tools", "PUT", { off: ["heavy_open", "heavy_read"] });
   assert.deepEqual(lazyOf(await json("/api/projects/research/tools")), ["heavy_open"]);
+  // The project can take it back: on, and then off again, it is the set's own off, lazy once more.
+  await json("/api/projects/research/tools", "PUT", { off: ["heavy_open"] });
+  assert.deepEqual(db.projectTools("research"), { off: [], on: ["heavy_read"] });
+  assert.deepEqual(lazyOf(await json("/api/projects/research/tools")), ["heavy_open"]);
+  await json("/api/projects/research/tools", "PUT", { off: ["heavy_open", "heavy_read"] });
+  assert.deepEqual(db.projectTools("research"), { off: [], on: [] });
+  assert.deepEqual(lazyOf(await json("/api/projects/research/tools")), ["heavy_open", "heavy_read"]);
+  const again = await json("/api/sessions", "POST", { workspace: "research" });
+  assert.deepEqual(sessions.piOff(again.id), ["heavy_open", "heavy_read"]);
 });
 
-test("a lazy tool a chat switches on and then off again is off for good, through the API", async () => {
+test("a lazy tool a chat switches on and then off again is lazy once more, through the API", async () => {
   await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
   const chat = await json("/api/sessions", "POST", {});
   await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: [] });
   assert.deepEqual(db.sessionTools(chat.id), { off: [], on: ["heavy_open", "heavy_read"] });
-  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: ["heavy_read"] });
-  assert.deepEqual(db.sessionTools(chat.id), { off: ["heavy_read"], on: ["heavy_open"] });
-  const off = sessions.piOff(chat.id);
-  assert.deepEqual(off, ["heavy_read"]);
-  assert.deepEqual(sessions.piLazy(chat.id, off), [], "off, and no gateway leads to it");
   assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), []);
-  // Switched on again, it is simply on.
-  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: [] });
-  assert.deepEqual(sessions.piOff(chat.id), []);
+  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: ["heavy_read"] });
+  assert.deepEqual(db.sessionTools(chat.id), { off: [], on: ["heavy_open"] });
+  assert.deepEqual(sessions.piOff(chat.id), ["heavy_read"]);
+  assert.deepEqual(sessions.piLazy(chat.id, ["heavy_read"]), ["heavy_read"], "off in the list, reached through `tools`");
+  assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), ["heavy_read"]);
+  // And once more on and off: the exception is not a one-way street.
+  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: ["heavy_open", "heavy_read"] });
+  assert.deepEqual(db.sessionTools(chat.id), { off: [], on: [] });
+  assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), ["heavy_open", "heavy_read"]);
 });
 
 test("a tool of a lazy set that the MCP configuration withdrew is not lazy: nothing reaches it", async () => {

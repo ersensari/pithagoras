@@ -280,11 +280,11 @@ switched off is refused, `call` and `describe` alike.
 
 A [project](/guide/projects#tools), an [agent](/guide/agents#tools), a [routine](/guide/routines#tools)
 or a single chat can switch the set **on** for itself with the switches it already has. The tools are then
-listed one by one in that conversation, as before, and are not lazy there. A tool of the set that you
-switch **off** there, after it was on, is off for good: it is not reachable through `tools` either. The same
-holds for a tool that an agent, project or routine switched off, whatever the portal-wide mark says. The three
-states are therefore: on (offered one by one), lazy (reached through `tools`) and off (not reachable). To
-take a single lazy tool away, switch it on and then off again.
+listed one by one in that conversation, as before, and are not lazy there. Switch a tool **off** there again
+and it is lazy once more: the "on" is withdrawn, nothing else is written. A tool that an agent, project or
+routine switched off itself, before the set was marked lazy, stays off whatever the portal-wide mark says, and
+is not reachable through `tools` either. The three states are therefore: on (offered one by one), lazy
+(reached through `tools`) and off (not reachable). Switching an off tool on and then off again makes it lazy.
 
 What the mark adds to switching a group off: a tool of the group that the portal sees for the
 first time later, after an update or a new MCP tool, starts lazy too, instead of arriving
