@@ -105,7 +105,8 @@ out of it, by `..` or by a link, is refused with 400.
 | `GET /api/sessions/:id/images/:name` | A picture sent with a message; `portal_prompt` events name them in `payload.images` |
 | `POST /api/sessions/:id/abort` | Stop the current run |
 | `POST /api/sessions/:id/ui-response` | `{ id, value?, cancelled? }` — answer an extension dialog. For the agent's `ask_question` (`method: "questions"`) the value is an object of answers by question id |
-| `GET /api/tools` | `{ tools, off }` — every tool the portal has seen, and which are off by default. With `EXECUTOR=container` this and the other tool routes answer 400 with `code: "tools-unsupported"` |
+| `GET /api/tools` | `{ tools, off, questionWaitMinutes }` — every tool the portal has seen, which are off by default, and how long the agent's questions wait (see `PUT /api/ask-question`). With `EXECUTOR=container` this and the other tool routes answer 400 with `code: "tools-unsupported"` |
+| `PUT /api/ask-question` | `{ waitMinutes }` — how long a question from the agent's `ask_question` waits for an answer: `0` (until answered), `5`, `15`, `30` or `60`. Read when a question is asked, so it applies to the next one |
 | `PUT /api/tools` | `{ off: string[] }` — the default for every conversation; applied to the running ones too. A [project](#projects) can bend it with `PUT /api/projects/:name/tools`, and a conversation then holds its exceptions against that |
 | `GET /api/sessions/:id/tools` | `{ tools, live, off }` — every tool the conversation could use and whether it is on. `live` is false when pi is not running to be asked |
 | `PUT /api/sessions/:id/tools` | `{ off: string[] }` — switch tools off by name; everything not named is on |

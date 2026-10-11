@@ -205,6 +205,34 @@ test('answering one of two waiting dialogs leaves the other open, though the ser
   expect(answered).toEqual([{ id: 'q1', value: { x: 'A' } }, { id: 'q2', value: { x: 'B' } }]);
 });
 
+test('answering one of two waiting extension dialogs leaves the other open, though the server\'s cancel for the answered one arrives before the reply', async ({ page }) => {
+  const { answered } = await portal(page);
+  await page.route('**/api/sessions/a/ui-response', async (route) => {
+    const body = route.request().postDataJSON();
+    answered.push(body);
+    await page.evaluate((id) => (window as any).streams.filter((s: any) => !s.closed).at(-1).emit('message', { seq: -1, type: 'extension_ui_cancel', payload: { id, reason: 'answered' } }), body.id);
+    await new Promise((r) => setTimeout(r, 200));
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.goto('/s/a');
+  await expect.poll(() => page.evaluate(() => (window as any).streams.filter((s: any) => !s.closed).length)).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    const stream = (window as any).streams.filter((s: any) => !s.closed).at(-1);
+    stream.emit('caught-up', {});
+    stream.emit('message', { seq: -1, type: 'extension_ui_request', payload: { id: 'c1', method: 'confirm', title: 'First confirm', message: 'Sure?' } });
+    stream.emit('message', { seq: -1, type: 'extension_ui_request', payload: { id: 'c2', method: 'confirm', title: 'Second confirm', message: 'Really?' } });
+  });
+  await page.getByRole('dialog', { name: 'First confirm' }).getByRole('button', { name: 'Yes' }).click();
+  await expect.poll(() => answered.length).toBe(1);
+  await page.waitForTimeout(500);
+  const second = page.getByRole('dialog', { name: 'Second confirm' });
+  await expect(second).toBeVisible();
+  await second.getByRole('button', { name: 'No' }).click();
+  await expect.poll(() => answered.length).toBe(2);
+  await expect(second).toBeHidden();
+  expect(answered).toEqual([{ id: 'c1', value: true }, { id: 'c2', value: false }]);
+});
+
 test('Settings → Tools sets how long a question waits: until answered by default, and the choice is stored', async ({ page }) => {
   const puts: any[] = [];
   await mockPortal(page, ({ path, method, json }) => {
