@@ -1543,6 +1543,9 @@ const de: Locale = {
     "Rename — it is {source}": "Umbenennen — es ist {source}",
     "all on": "alle an",
     "all off": "alle aus",
+    "lazy": "lazy",
+    "Lazy {name}": "{name} lazy laden",
+    "Lazy: off in every chat until one switches it on, so its tools are not in the prompt of a chat that never asked for them. A project, an agent, a routine or a chat can switch them on. Tools that turn up later start off too; ending it leaves the switches as they are.": "Lazy: in jedem Chat aus, bis einer es einschaltet, damit die Tools nicht im Prompt eines Chats stehen, der sie nie wollte. Ein Projekt, ein Agent, eine Routine oder ein Chat kann sie einschalten. Tools, die später dazukommen, starten ebenfalls aus; wird Lazy beendet, bleiben die Schalter, wie sie sind.",
     // components/ToolSwitches.tsx
     "These are the tools earlier chats had. What you switch here is what every chat in this agent's home starts with, and every run it does on its own; the portal-wide defaults stay as they are.": "Das sind die Tools, die frühere Chats hatten. Was du hier umschaltest, ist das, womit jeder Chat im Zuhause dieses Agenten beginnt, und jeder Lauf, den er von sich aus macht; die portalweiten Standards bleiben, wie sie sind.",
     "These are the tools earlier chats had. What you switch here is what every run of this routine starts with, against what its agent and project leave.": "Das sind die Tools, die frühere Chats hatten. Was du hier umschaltest, ist das, womit jeder Lauf dieser Routine beginnt, gegenüber dem, was sein Agent und sein Projekt vorgeben.",

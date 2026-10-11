@@ -1078,7 +1078,10 @@ class SessionManager extends EventEmitter {
     // before you can say "off everywhere" would be the wrong way round.
     void client
       .getTools?.()
-      .then((tools) => rememberTools(tools.map(remembered)))
+      .then((tools) => {
+        // A tool of a lazy set that this chat was started with, because nobody had seen it before, is taken away again.
+        if (rememberTools(tools.map(remembered)).length) return this.applyToolDefaults();
+      })
       .catch(() => {
         // A session that cannot list its tools still works; the catalogue
         // simply stays as it was.
@@ -2478,7 +2481,7 @@ class SessionManager extends EventEmitter {
   async getTools(sessionId: string): Promise<{ tools: PiTool[]; live: boolean }> {
     const client = this.live.get(sessionId)?.client;
     const reported = client?.getTools ? await client.getTools() : [];
-    if (reported.length) rememberTools(reported.map(remembered));
+    if (reported.length && rememberTools(reported.map(remembered)).length) await this.applyToolDefaults();
     const session = getSession(sessionId);
     const workspace = session?.workspace;
     const view = mcpView();

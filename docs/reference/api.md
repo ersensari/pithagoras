@@ -105,8 +105,9 @@ out of it, by `..` or by a link, is refused with 400.
 | `GET /api/sessions/:id/images/:name` | A picture sent with a message; `portal_prompt` events name them in `payload.images` |
 | `POST /api/sessions/:id/abort` | Stop the current run |
 | `POST /api/sessions/:id/ui-response` | `{ id, value?, cancelled? }` — answer an extension dialog |
-| `GET /api/tools` | `{ tools, off }` — every tool the portal has seen, and which are off by default. With `EXECUTOR=container` this and the other tool routes answer 400 with `code: "tools-unsupported"` |
+| `GET /api/tools` | `{ tools, off, names, lazy }` — every tool the portal has seen, which are off by default, and which tool sets are [lazy](/guide/extensions#lazy-tool-sets). With `EXECUTOR=container` this and the other tool routes answer 400 with `code: "tools-unsupported"` |
 | `PUT /api/tools` | `{ off: string[] }` — the default for every conversation; applied to the running ones too. A [project](#projects) can bend it with `PUT /api/projects/:name/tools`, and a conversation then holds its exceptions against that |
+| `PUT /api/tools/lazy` | `{ lazy: string[] }` — the lazy tool sets, named as the tools list names its boxes (a package, an MCP server, `<portal:images>` for the picture tools). Answers `{ lazy, off, applied }`: a set that becomes lazy has the tools seen of it added to the default as off |
 | `GET /api/sessions/:id/tools` | `{ tools, live, off }` — every tool the conversation could use and whether it is on. `live` is false when pi is not running to be asked |
 | `PUT /api/sessions/:id/tools` | `{ off: string[] }` — switch tools off by name; everything not named is on |
 | `GET /api/tool-names` | What each package is called here; everything unnamed keeps its own name |

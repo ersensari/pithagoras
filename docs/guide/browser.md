@@ -218,6 +218,12 @@ is no moment in between where every conversation has the browser.
 second one to keep in step with it.
 :::
 
+::: tip Not in the prompt until it is wanted
+The browser's tools are a large set, and while they are on they sit in the prompt of every chat.
+Mark the group **lazy** in **Settings → Tools** and no chat is offered them until a project, an agent,
+a routine or the chat itself switches them on: see [Lazy tool sets](/guide/extensions#lazy-tool-sets).
+:::
+
 Deliberately **not** gated on who is speaking. The agent has its own accounts and
 uses them as itself, including when it is helping a colleague. What balances
 that is visibility: every page it opens is recorded in [Audit](/guide/sessions#audit).

@@ -31,6 +31,8 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
   const [tries, setTries] = useState(0);
   const [busy, setBusy] = useState(false);
   const [names, setNames] = useState<Record<string, string>>({});
+  /** The sets that are opt-in: off in every conversation until one switches them on. */
+  const [lazy, setLazy] = useState<string[]>([]);
   /** The group being renamed, and what has been typed so far. */
   const [renaming, setRenaming] = useState<{ source: string; value: string } | null>(null);
 
@@ -42,6 +44,7 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
         setTools(r.tools);
         setOff(r.off);
         setNames(r.names ?? {});
+        setLazy(r.lazy ?? []);
       })
       // A deployment where this cannot work says so in place of the list — the
       // same as the switches beside the composer, and for the same reason. Only
@@ -60,6 +63,26 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
       setOff(r.off);
     } catch (e) {
       setOff(before);
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Make a set lazy, or ordinary again.
+   *
+   * Lazy puts its tools in the default as off, so what the list shows changes with the answer;
+   * ordinary leaves the switches as they were, and only the tools that turn up later follow the default.
+   */
+  const flipLazy = async (source: string) => {
+    const wanted = lazy.includes(source) ? lazy.filter((s) => s !== source) : [...lazy, source];
+    setBusy(true);
+    try {
+      const r = await api.setLazyToolSets(wanted);
+      setLazy(r.lazy);
+      setOff(r.off);
+    } catch (e) {
       onError((e as Error).message);
     } finally {
       setBusy(false);
@@ -173,15 +196,30 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
             }
             // Only here, not in the chat popover: naming a thing is a settings decision, and the popover is for one chat.
             beside={(group) => (
-              <button
-                type="button"
-                onClick={() => setRenaming({ source: group.source, value: names[group.source] ?? "" })}
-                title={t("Rename — it is {source}", { source: sourceName(group.source) })}
-                aria-label={t("Rename {name}", { name: sourceName(group.source) })}
-                className="shrink-0 rounded p-1 text-fg-subtle transition hover:bg-fg/5 hover:text-fg"
-              >
-                <LuPencil className="h-3 w-3" />
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  aria-pressed={lazy.includes(group.source)}
+                  onClick={() => flipLazy(group.source)}
+                  title={t("Lazy: off in every chat until one switches it on, so its tools are not in the prompt of a chat that never asked for them. A project, an agent, a routine or a chat can switch them on. Tools that turn up later start off too; ending it leaves the switches as they are.")}
+                  aria-label={t("Lazy {name}", { name: displayName(group.source, names) })}
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] transition hover:bg-fg/5 disabled:opacity-50 ${
+                    lazy.includes(group.source) ? "bg-accent/15 text-accent" : "text-fg-subtle hover:text-fg"
+                  }`}
+                >
+                  {t("lazy")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRenaming({ source: group.source, value: names[group.source] ?? "" })}
+                  title={t("Rename — it is {source}", { source: sourceName(group.source) })}
+                  aria-label={t("Rename {name}", { name: sourceName(group.source) })}
+                  className="shrink-0 rounded p-1 text-fg-subtle transition hover:bg-fg/5 hover:text-fg"
+                >
+                  <LuPencil className="h-3 w-3" />
+                </button>
+              </>
             )}
           />
         </div>

@@ -558,7 +558,12 @@ export const api = {
       tools: { name: string; source: string; defaultOn: boolean; inline?: true }[];
       off: string[];
       names: Record<string, string>;
+      /** The tool sets that are opt-in: off in every conversation until one switches them on. */
+      lazy?: string[];
     }>("/api/tools"),
+  /** Which tool sets are lazy, as the boxes of the tools list name them; their tools go into the default as off. */
+  setLazyToolSets: (lazy: string[]) =>
+    json<{ lazy: string[]; off: string[]; applied: number }>("/api/tools/lazy", { method: "PUT", body: JSON.stringify({ lazy }) }),
   /** Which tools are off unless a conversation says otherwise. */
   setToolDefaults: (off: string[]) =>
     json<{ off: string[]; applied: number }>("/api/tools", { method: "PUT", body: JSON.stringify({ off }) }),

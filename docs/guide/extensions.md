@@ -251,6 +251,26 @@ way round. It fills in as soon as any conversation has run.
 A switch for a tool that is not loaded right now is kept, so reinstalling an
 extension does not quietly bring back something you turned off.
 
+### Lazy tool sets
+
+A tool set that is switched on costs the model its schemas, descriptions and rules in
+**every** request, whether or not the conversation ever uses it. For a large set such as the
+[browser](/guide/browser)'s eleven tools that is a few thousand tokens in each chat. A tool that is
+off is not offered at all, so a set that is **lazy** is one that stays off until somebody
+asks for it.
+
+**Settings → Tools** has a **lazy** button on the header of each group (a package, an MCP server,
+the browser, the **Images** group). Marking a group puts its tools in the default as off, so
+no chat is offered them, and a [project](/guide/projects#tools), an
+[agent](/guide/agents#tools), a [routine](/guide/routines#tools) or a single chat switches the
+set on for itself with the switches it already has. Nothing else about the layers changes.
+
+What the mark adds to switching a group off: a tool of the group that the portal sees for the
+first time later, after an update or a new MCP tool, starts off too, instead of arriving
+switched on. Ending it leaves the switches as they are (**all on** puts them back at once).
+Nothing is lazy until you say so, so a portal behaves as before. A tool seen for the very first
+time is on in the chat that registers it only until that chat has listed its tools, a moment after it starts.
+
 ::: tip Not the same as uninstalling
 The extension is still loaded, its commands still work, and other chats are
 unaffected. The tool is simply not offered to the model in this one.

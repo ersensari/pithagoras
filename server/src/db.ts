@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { inTurnWithSettings, piSetting, readPiSettings, readProjectPiSettings } from "./pi-settings.js";
 import { packageIndex, packageKey, packageLabel, toolAvailability } from "./extension-switch.js";
 import { EDIT_IMAGE_SOURCE, EDIT_IMAGE_TOOL, GENERATE_IMAGE_SOURCE, GENERATE_IMAGE_TOOL, SHOW_IMAGE_SOURCE, imageEditingReady, imageGenerationReady } from "./image-generation.js";
-import { PORTAL_BROWSER_TOOLS, browserTool, defaultsFor, mcpServerOf, toolEnabled } from "./tool-policy.js";
+import { PORTAL_BROWSER_TOOLS, browserTool, defaultsFor, mcpServerOf, toolEnabled, toolSetOf } from "./tool-policy.js";
 import { projectOf } from "./workspaces.js";
 import { browserServers, dropMcpCache, mcpAdapter, mcpCachePath, mcpConfigPath, mcpServerNames, onMcpWritten, readMcpCache, readMcpFile, readableMcpConfig, serversAndBrowsers } from "./api/mcp.js";
 import { mcpCatalogue, mcpOffer, unlisted, type McpOffer } from "./mcp-offer.js";
@@ -2239,6 +2239,41 @@ export function setToolDefaultsOff(names: string[]): string[] {
 }
 
 /**
+ * The tool sets that are lazy: opt-in, off for every conversation until one switches them on.
+ *
+ * A lazy set is not in the model's prompt — schemas, descriptions and guidelines — in a chat
+ * that never asked for it, which is what a large set such as the browser's costs otherwise
+ * in every request. Not a new switch: the tools of a lazy set are in the portal-wide default as
+ * off (`tools_off_default`), so a project, an agent, a routine or a chat switches them on
+ * against it like any other tool. What the mark adds is that it holds for a tool of the set that
+ * is registered later (rememberTools), and says in the settings which sets are meant that way.
+ * Nothing is lazy until someone says so, so an install behaves as it did.
+ */
+export function lazyToolSets(): string[] {
+  return parseToolsOff(getSetting("tools_lazy"));
+}
+
+/**
+ * Make the sets in `sets` the lazy ones. A set that becomes lazy has the tools the portal has seen
+ * of it put in the default as off. One that stops being lazy keeps its switches as they are: they
+ * are what the settings page shows and the owner can change them, and "all on" is one click.
+ */
+export function setLazyToolSets(sets: string[]): { lazy: string[]; off: string[] } {
+  const before = new Set(lazyToolSets());
+  const lazy = clean(sets);
+  putSetting("tools_lazy", lazy.join("\n"));
+  const added = new Set(lazy.filter((set) => !before.has(set)));
+  if (added.size) {
+    const servers = mcpServerNames();
+    const names = knownTools()
+      .filter((tool) => added.has(toolSetOf(tool, servers)))
+      .map((tool) => tool.name);
+    if (names.length) setToolDefaultsOff([...toolDefaultsOff(), ...names]);
+  }
+  return { lazy, off: toolDefaultsOff() };
+}
+
+/**
  * Every tool the portal has seen a session register, so the settings page can
  * offer a default for one without a conversation being open.
  *
@@ -2665,8 +2700,11 @@ export async function packageRemoved(source: string): Promise<void> {
  * Take up what a session reported. Merged rather than replaced: another
  * session may have extensions this one does not, and an extension that is
  * merely not loaded today should not lose the default somebody set for it.
+ *
+ * Returns the tools that arrived in a lazy set and were put in the default as off, for a caller
+ * that has conversations running which were started without knowing them.
  */
-export function rememberTools(reported: KnownTool[]): void {
+export function rememberTools(reported: KnownTool[]): string[] {
   // A session that still has a package loaded which has since been uninstalled
   // would write its tools straight back; a package no longer listed is not
   // remembered. One switched off still is, for when it comes back.
@@ -2689,7 +2727,7 @@ export function rememberTools(reported: KnownTool[]): void {
   const tools = reported.filter(
     (t) => (typeof t.package !== "string" || !listed || listed.has(packageKey(t.package))) && !noServer(t),
   );
-  if (!tools.length) return;
+  if (!tools.length) return [];
   const merged = new Map(knownTools().map((t) => [t.name, t]));
   const fresh = tools.map((t) => t.name).filter((name) => !merged.has(name));
   for (const tool of tools) {
@@ -2718,6 +2756,23 @@ export function rememberTools(reported: KnownTool[]): void {
   // The first moment the browser's tools can be told apart from the rest, and
   // every moment a new one turns up.
   adoptBrowserGrants(getDb(), fresh);
+  return lazyArrivals(tools, fresh);
+}
+
+/**
+ * The tools that turned up just now in a set that is lazy, put in the default as off.
+ * Only the ones never seen before: one that is known has been decided about, in the
+ * settings or by the mark, and a later report must not undo that. Returned so a caller
+ * with conversations running can tell them.
+ */
+function lazyArrivals(reported: KnownTool[], fresh: string[]): string[] {
+  const lazy = new Set(lazyToolSets());
+  if (!lazy.size || !fresh.length) return [];
+  const servers = mcpServerNames();
+  const arrived = new Set(fresh);
+  const names = reported.filter((tool) => arrived.has(tool.name) && lazy.has(toolSetOf(tool, servers))).map((tool) => tool.name);
+  if (names.length) setToolDefaultsOff([...toolDefaultsOff(), ...names]);
+  return names;
 }
 
 /**

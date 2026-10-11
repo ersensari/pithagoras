@@ -49,6 +49,8 @@ import {
   shownStoredSettings,
   shownTools,
   toolDefaultsOff,
+  lazyToolSets,
+  setLazyToolSets,
   toolGroupNames,
   updateSession,
 } from "./db.js";
@@ -1053,6 +1055,7 @@ app.get("/api/tools", (_req, res) => {
     })),
     off: [...off].sort(),
     names: toolGroupNames(),
+    lazy: lazyToolSets(),
   });
 });
 
@@ -1081,6 +1084,20 @@ app.put("/api/tools", async (req, res) => {
   const stored = setToolDefaultsOff(off);
   const applied = await sessions.applyToolDefaults();
   res.json({ off: stored, applied });
+});
+
+/**
+ * Which tool sets are lazy: off for every conversation until one switches them on, and so not in
+ * the model's prompt before that. The sets are the boxes of the tools list, named as it names them.
+ * Marking one puts its tools in the default as off, which reaches the running conversations too.
+ */
+app.put("/api/tools/lazy", async (req, res) => {
+  if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
+  const lazy = req.body?.lazy;
+  if (!isToolList(lazy)) return res.status(400).json({ error: "lazy must be a list of tool set names" });
+  const stored = setLazyToolSets(lazy);
+  const applied = await sessions.applyToolDefaults();
+  res.json({ ...stored, applied });
 });
 
 app.post("/api/sessions/:id/abort", async (req, res) => {

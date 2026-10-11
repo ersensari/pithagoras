@@ -98,6 +98,28 @@ export function toolSource(name: string, source: string, servers: Iterable<strin
   return mcpServerOf(name, servers) ?? source;
 }
 
+/**
+ * The key of the set the portal's picture tools share, as the tool lists show them in one box.
+ * Brackets, as no package, file or MCP server is called: a set an extension's tool of the same
+ * name could be filed in by accident. The web app keys the same box the same way.
+ */
+export const PICTURES_SET = "<portal:images>";
+
+/** Showing a picture, making one, changing one: the tools that make up PICTURES_SET. */
+const PICTURE_TOOLS = ["show_image", "generate_image", "edit_image"];
+
+/** What the web app calls the tools that say nothing about where they came from. */
+const BUILT_IN_SET = "built in";
+
+/**
+ * The tool set a tool belongs to: the box the tool lists show it in, which is also what
+ * can be made lazy. The portal's own picture tools are one set, whichever extension registered each.
+ */
+export function toolSetOf(tool: { name: string; source: string; inline?: boolean }, servers: Iterable<string>): string {
+  if (tool.inline && PICTURE_TOOLS.includes(tool.name)) return PICTURES_SET;
+  return toolSource(tool.name, tool.source, servers).trim() || BUILT_IN_SET;
+}
+
 export interface ToolExceptions {
   /** Off here, whatever the default says. */
   off: string[];
