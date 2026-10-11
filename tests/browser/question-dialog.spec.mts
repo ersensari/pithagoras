@@ -46,13 +46,14 @@ test('the questions are answered together: one, several, typed, and a ranking pu
   await dialog.getByRole('radio', { name: /SQLite/ }).check();
   await expect(submit).toBeDisabled();
   await dialog.getByRole('checkbox', { name: 'Export' }).check();
-  await expect(submit).toBeEnabled();
+  await expect(submit).toBeDisabled();
   await dialog.getByRole('checkbox', { name: 'Search' }).check();
   await dialog.getByRole('checkbox', { name: 'Search' }).uncheck();
   await dialog.getByRole('textbox', { name: 'Anything else?' }).fill('  soon  ');
   await dialog.getByRole('button', { name: 'Move Safety up' }).click();
   await dialog.getByRole('button', { name: 'Move Speed down' }).click();
   await expect(dialog.getByRole('button', { name: 'Move Speed up' })).toBeEnabled();
+  await expect(submit).toBeEnabled();
 
   await submit.click();
   await expect(dialog).toBeHidden();
@@ -65,7 +66,12 @@ test('a question may be answered in the person\'s own words, and an optional one
   await dialog.getByRole('textbox', { name: 'Type your own answer' }).fill('MySQL');
   await expect(dialog.getByRole('radio', { name: 'Another answer' })).toBeChecked();
   await dialog.getByRole('checkbox', { name: 'Search' }).check();
-  await dialog.getByRole('button', { name: 'Submit' }).click();
+  // A ranking nobody touched is not an answer: it is the order the model listed them in.
+  const submit = dialog.getByRole('button', { name: 'Submit' });
+  await expect(submit).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Keep this order' }).click();
+  await expect(dialog.getByRole('button', { name: 'Keep this order' })).toBeHidden();
+  await submit.click();
   await expect(dialog).toBeHidden();
   expect(answered).toEqual([{ id: 'q1', value: { db: 'MySQL', features: ['Search'], order: ['Speed', 'Cost', 'Safety'] } }]);
 });
@@ -76,4 +82,58 @@ test('closing the dialog answers it as cancelled', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   expect(answered).toEqual([{ id: 'q1', cancelled: true }]);
+});
+
+test('an optional ranking may be left alone, and is then not reported as chosen', async ({ page }) => {
+  const { answered } = await portal(page);
+  await page.goto('/s/a');
+  await expect.poll(() => page.evaluate(() => (window as any).streams.filter((s: any) => !s.closed).length)).toBeGreaterThan(0);
+  const optional = [{ id: 'order', question: 'Rank them', kind: 'ranking', options: [{ label: 'Speed' }, { label: 'Cost' }], other: false, optional: true }];
+  await page.evaluate((qs) => {
+    const stream = (window as any).streams.filter((s: any) => !s.closed).at(-1);
+    stream.emit('caught-up', {});
+    stream.emit('message', { seq: -1, type: 'extension_ui_request', payload: { id: 'q1', method: 'questions', title: 'A few questions', questions: qs } });
+  }, optional);
+  const dialog = page.getByRole('dialog', { name: 'A few questions' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Submit' })).toBeEnabled();
+  await dialog.getByRole('button', { name: 'Submit' }).click();
+  await expect(dialog).toBeHidden();
+  expect(answered).toEqual([{ id: 'q1', value: {} }]);
+});
+
+test('moving a ranking row with the keyboard keeps the focus on the same button', async ({ page }) => {
+  await portal(page);
+  const dialog = await open(page);
+  const down = dialog.getByRole('button', { name: 'Move Speed down' });
+  await down.focus();
+  await page.keyboard.press('Enter');
+  // Speed is second now: the same button is still where the focus is, and it works again.
+  await expect(dialog.getByRole('button', { name: 'Move Speed down' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(dialog.getByRole('button', { name: 'Move Speed down' })).toBeDisabled();
+  // Last in the list: the focus goes to the other arrow rather than to the page.
+  await expect(dialog.getByRole('button', { name: 'Move Speed up' })).toBeFocused();
+});
+
+test('a question still waiting is back after the page is reloaded or the person comes back to the chat', async ({ page }) => {
+  const { answered } = await portal(page);
+  const dialog = await open(page);
+  await dialog.getByRole('radio', { name: /SQLite/ }).check();
+  // The server sends what is waiting before it says the stream is caught up, on every new stream.
+  const resend = () => page.evaluate((qs) => {
+    const stream = (window as any).streams.filter((s: any) => !s.closed).at(-1);
+    stream.emit('message', { seq: -1, type: 'extension_ui_request', payload: { id: 'q1', method: 'questions', title: 'A few questions', questions: qs } });
+    stream.emit('caught-up', {});
+  }, questions);
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => (window as any).streams.filter((s: any) => !s.closed).length)).toBeGreaterThan(0);
+  await resend();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('radio', { name: /Postgres/ }).check();
+  await dialog.getByRole('checkbox', { name: 'Search' }).check();
+  await dialog.getByRole('button', { name: 'Keep this order' }).click();
+  await dialog.getByRole('button', { name: 'Submit' }).click();
+  await expect(dialog).toBeHidden();
+  expect(answered).toEqual([{ id: 'q1', value: { db: 'Postgres', features: ['Search'], order: ['Speed', 'Cost', 'Safety'] } }]);
 });

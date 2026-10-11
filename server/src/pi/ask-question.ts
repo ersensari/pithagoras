@@ -13,6 +13,17 @@ import { fail, say } from "./tool-result.js";
  */
 
 export const ASK_QUESTION_TOOL = "ask_question";
+/** What the portal files the tool under, as the other inline tools are: the name of its factory. */
+export const ASK_QUESTION_SOURCE = "ask-question";
+
+/**
+ * Whether a conversation gets the tool: only where a person is looking at the portal. Not a routine or a
+ * heartbeat, which nobody watches, not a chat reached through a channel, whose questions go out as text
+ * (see the channel supervisor), and not a conversation for a lower role than the owner's.
+ */
+export function asksQuestions(who: { sessionId?: string; routineTools?: boolean; routineSlug?: string | null; heartbeatAgent?: string; role?: string }): boolean {
+  return Boolean(who.sessionId) && !who.routineTools && who.routineSlug === undefined && !who.heartbeatAgent && (!who.role || who.role === "primary");
+}
 
 export type QuestionKind = "single" | "multiple" | "text" | "ranking";
 
@@ -71,7 +82,8 @@ export function readQuestions(raw: unknown): Question[] {
 
     const options: QuestionOption[] = [];
     for (const item of Array.isArray(entry?.options) ? entry.options : []) {
-      // A bare string is a label: models write the short form even when the schema shows the long one.
+      // A bare string is a label: models write the short form even when the schema shows the long one,
+      // so the schema takes both (pi refuses a call before it gets here otherwise).
       const label = clip(typeof item === "string" ? item : item?.label, 200);
       if (!label) continue;
       if (options.some((o) => o.label === label)) fail(`${at}: the option "${label}" is there twice.`);
@@ -105,9 +117,10 @@ export function readQuestions(raw: unknown): Question[] {
  */
 export function readAnswers(questions: Question[], value: unknown): Answers {
   const given = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-  const out: Answers = {};
+  // No prototype: the model names the ids, and `constructor` or `__proto__` must not read or write anything but an answer.
+  const out: Answers = Object.create(null);
   for (const q of questions) {
-    const got = given[q.id];
+    const got = Object.hasOwn(given, q.id) ? given[q.id] : undefined;
     const labels = q.options.map((o) => o.label);
     const allowed = (s: string) => labels.includes(s) || q.other;
     if (q.kind === "text") {
@@ -123,13 +136,14 @@ export function readAnswers(questions: Question[], value: unknown): Answers {
       out[q.id] = got as string[];
     }
   }
-  return out;
+  // A plain object for the caller; an own `__proto__` key stays a key when spread.
+  return { ...out };
 }
 
 /** The answers as the model reads them: each question with what was said, and what was left. */
 export function describeAnswers(questions: Question[], answers: Answers): string {
   const lines = questions.map((q, i) => {
-    const got = answers[q.id];
+    const got = Object.hasOwn(answers, q.id) ? answers[q.id] : undefined;
     const head = `${i + 1}. ${q.question}`;
     if (got === undefined) return `${head}\n   No answer${q.optional ? " (it was optional)" : ""}.`;
     const labels = q.options.map((o) => o.label);
@@ -155,7 +169,7 @@ const questionSchema = Type.Object({
         '"ranking" puts all the options in order, best first (they start in the order you give them).',
     }),
   ),
-  options: Type.Optional(Type.Array(optionSchema, { description: "For single, multiple and ranking; none for text." })),
+  options: Type.Optional(Type.Array(Type.Union([Type.String(), optionSchema]), { description: "For single, multiple and ranking; none for text." })),
   allowOther: Type.Optional(Type.Boolean({ description: "Single and multiple: also let the person type their own choice." })),
   optional: Type.Optional(Type.Boolean({ description: "The person may leave this one unanswered." })),
   id: Type.Optional(Type.String({ description: "A short name for the question. Defaults to q1, q2, …" })),

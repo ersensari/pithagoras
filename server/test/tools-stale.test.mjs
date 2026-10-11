@@ -13,6 +13,8 @@ const OFF = (source) => ({ source, extensions: [], skills: [], prompts: [], them
 const { createSession, forgetPackageTools, knownTools, rememberTools, shownTools } = await import("../dist/db.js");
 const { sessions } = await import("../dist/session-manager.js");
 
+// The portal's own tool, listed before any chat has reported it.
+const ASK = "ask_question";
 const TODO = "npm:@juicesharp/rpiv-todo";
 const names = () => knownTools().map((t) => t.name).sort();
 
@@ -22,23 +24,23 @@ test("the tools of a package that is switched off are not listed, and come back 
     { name: "todo", source: "@juicesharp/rpiv-todo", package: TODO },
     { name: "bash", source: "built in", package: null },
   ]);
-  assert.deepEqual(shownTools().map((t) => t.name), ["bash", "todo"]);
+  assert.deepEqual(shownTools().map((t) => t.name), ["bash", "todo", ASK]);
 
   listPackages([OFF(TODO)]);
-  assert.deepEqual(shownTools().map((t) => t.name), ["bash"]);
+  assert.deepEqual(shownTools().map((t) => t.name), ["bash", ASK]);
   // An idle chat is offered what is shown, not the whole catalogue.
   createSession({ id: "idle", title: "idle", workspace: home, executor: "host" });
-  assert.deepEqual((await sessions.getTools("idle")).tools.map((t) => t.name), ["bash"]);
+  assert.deepEqual((await sessions.getTools("idle")).tools.map((t) => t.name), ["bash", ASK]);
   // Remembered all the same, for when the package is switched on again.
   assert.deepEqual(names(), ["bash", "todo"]);
 
   listPackages([TODO]);
-  assert.deepEqual((await sessions.getTools("idle")).tools.map((t) => t.name), ["bash", "todo"]);
+  assert.deepEqual((await sessions.getTools("idle")).tools.map((t) => t.name), ["bash", "todo", ASK]);
 });
 
 test("a package that is gone from the settings takes its tools out of the list", () => {
   listPackages([]);
-  assert.deepEqual(shownTools().map((t) => t.name), ["bash"]);
+  assert.deepEqual(shownTools().map((t) => t.name), ["bash", ASK]);
 });
 
 test("a session that still has an uninstalled package loaded does not bring its tools back", () => {

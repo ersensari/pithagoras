@@ -4,6 +4,7 @@ import { interruptCanvasWrites } from "./canvases.js";
 import { eventsRouter } from "./api/events.js";
 import { serveWeb } from "./web-static.js";
 import { clampLevel } from "./pi/model-runtime.js";
+import { ASK_QUESTION_TOOL } from "./pi/ask-question.js";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
@@ -473,10 +474,11 @@ app.put("/api/projects/:name/tools", async (req, res) => {
  * layers under it say, which is what this one disagrees with. Shaped like a
  * project's and a chat's, so the page draws them all the same way.
  */
-function layerTools(folder: string, below: string[], exceptions: { off: string[]; on: string[] }) {
+function layerTools(folder: string, below: string[], exceptions: { off: string[]; on: string[] }, unwatched = false) {
   const servers = mcpServerNames();
   return {
-    tools: shownTools(folder).map((tool) => ({
+    // A routine's runs have nobody to ask (see asksQuestions), so its page does not offer the tool.
+    tools: shownTools(folder).filter((tool) => !(unwatched && tool.name === ASK_QUESTION_TOOL && tool.inline)).map((tool) => ({
       ...tool,
       source: toolSource(tool.name, tool.source, servers),
       enabled: toolEnabled(tool.name, below, exceptions),
@@ -505,7 +507,7 @@ app.get("/api/agents/:id/tools", (req, res) => {
   const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: "No such agent" });
   if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
-  res.json(layerTools(agent.home, toolDefaultsFor(agent.home, null, "agent"), agentTools(agent.id)));
+  res.json(layerTools(agent.home, toolDefaultsFor(agent.home, null, "agent"), agentTools(agent.id), true));
 });
 
 app.put("/api/agents/:id/tools", async (req, res) => {
@@ -542,7 +544,7 @@ app.get("/api/routines/:id/tools", (req, res) => {
   if (!routine) return res.status(404).json({ error: "Not found" });
   if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
   if ("error" in routine) return res.status(409).json({ error: routine.error });
-  res.json(layerTools(routine.folder, toolDefaultsFor(routine.folder, null, "routine"), routineTools(routine.slug)));
+  res.json(layerTools(routine.folder, toolDefaultsFor(routine.folder, null, "routine"), routineTools(routine.slug), true));
 });
 
 app.put("/api/routines/:id/tools", async (req, res) => {

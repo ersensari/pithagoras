@@ -29,5 +29,5 @@ before(async () => {
 test("the portal's picture tools are marked, also one kept before the mark; an extension's of the same name, even under the portal's label, and other tools are not", async () => {
   const { tools } = await (await fetch(`${base}/api/tools`)).json();
   const marked = Object.fromEntries(tools.map((t) => [t.name, t.inline === true]));
-  assert.deepEqual(marked, { edit_image: true, generate_image: false, show_image: true, web_search: false });
+  assert.deepEqual(marked, { ask_question: true, edit_image: true, generate_image: false, show_image: true, web_search: false });
 });

@@ -28,7 +28,7 @@ import { findSessionFile } from "./session-file.js";
 import { CONTEXT_FILES, SHARED_FILES } from "./context-files.js";
 import { heartbeatTool } from "./heartbeat-tool.js";
 import { askPrimaryTool } from "./ask-primary.js";
-import { askQuestionTool } from "./ask-question.js";
+import { ASK_QUESTION_SOURCE, askQuestionTool, asksQuestions } from "./ask-question.js";
 import { proxyBaseUrl } from "../llama-progress.js";
 import { bridgeSubagents, SUBAGENT_INPUT, SUBAGENT_STOP, type Bridge } from "../subagent-protocol.js";
 import { contextWindowFor, getSkipThinkingProviders, getVoiceInstructions, portalBrowserOn, voiceSpeaks } from "../db.js";
@@ -294,6 +294,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   private loader?: { appendedByPi(): string };
   /** Dialogs an extension is waiting on, keyed by request id. */
   private pendingUi = new Map<string, (r: { cancelled?: boolean; value?: unknown }) => void>();
+  /** The questions dialogs among them, as they were sent: a page that opens later is shown them again. */
+  private openQuestions = new Map<string, Record<string, unknown>>();
   /** The chat box's text, kept by the portal: see useDrafts. */
   private drafts?: DraftStore;
 
@@ -450,11 +452,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       if (opts.sessionId && opts.role && opts.role !== "primary") {
         factories.push({ name: "ask-primary", factory: askPrimaryTool(opts.sessionId) });
       }
-      // Only where a person is looking at the portal: not a routine or a heartbeat, which nobody watches,
-      // and not a chat reached through a channel, whose questions go out as text (see the channel supervisor).
-      if (opts.sessionId && !opts.routineTools && opts.routineSlug === undefined && !opts.heartbeatAgent && (!opts.role || opts.role === "primary")) {
-        factories.push({ name: "ask-question", factory: askQuestionTool() });
-      }
+      if (asksQuestions(opts)) factories.push({ name: ASK_QUESTION_SOURCE, factory: askQuestionTool() });
       // Only when there is somewhere for it to go — a tool that always fails is
       // worse than no tool, and the model will keep trying it.
       if (opts.routineSlug !== undefined && reportToFor(opts.routineSlug)) {
@@ -679,14 +677,20 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       new Promise((resolve) => {
         const id = randomUUID();
         let settled = false;
+        let shown = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
-        const abort = () => finish(fallback);
+        // A stopped run closes the dialog on every page that has it, as the timer does.
+        const abort = () => {
+          if (shown && !settled) this.emit("event", { type: "extension_ui_cancel", id });
+          finish(fallback);
+        };
         const finish = (value: unknown) => {
           if (settled) return;
           settled = true;
           clearTimeout(timer);
           opts?.signal?.removeEventListener?.("abort", abort);
           this.pendingUi.delete(id);
+          this.openQuestions.delete(id);
           resolve(value);
         };
         this.pendingUi.set(id, (r) => finish(r.cancelled ? fallback : r.value));
@@ -702,7 +706,10 @@ export class SdkPiClient extends EventEmitter implements PiClient {
         opts?.signal?.addEventListener?.("abort", abort, { once: true });
         if (opts?.signal?.aborted) { abort(); return; }
 
-        this.emit("event", { type: "extension_ui_request", id, ...payload });
+        const request = { type: "extension_ui_request", id, ...payload };
+        if (payload.method === "questions") this.openQuestions.set(id, request);
+        shown = true;
+        this.emit("event", request);
       });
 
     const fireAndForget = (payload: Record<string, unknown>) =>
@@ -776,6 +783,14 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       getToolsExpanded: () => false,
       setToolsExpanded: () => {},
     };
+  }
+
+  /**
+   * The questions dialogs still waiting for an answer, as they were sent. Live events are not
+   * stored, so a page that opens or switches to this chat while one waits asks for them here.
+   */
+  openQuestionRequests(): Record<string, unknown>[] {
+    return [...this.openQuestions.values()];
   }
 
   /** Answer a dialog the UI just resolved. */

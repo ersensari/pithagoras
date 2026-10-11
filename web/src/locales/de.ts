@@ -765,6 +765,7 @@ const de: Locale = {
     "Another answer": "Andere Antwort",
     "Type your own answer": "Eigene Antwort eingeben",
     "Best first. Move an option with the arrows.": "Beste zuerst. Verschiebe eine Option mit den Pfeilen.",
+    "Keep this order": "Diese Reihenfolge behalten",
     "Move {option} up": "{option} nach oben",
     "Move {option} down": "{option} nach unten",
     // components/FeatureAddons.tsx

@@ -109,14 +109,14 @@ test("what the configuration says no to is not listed, is off in pi, and what co
   ]);
   const shown = shownTools();
   // jira's other tools are listed from the cache, as every server's are; create_issue is excluded, brave-search is off.
-  assert.deepEqual(names(shown), ["bash", "jira_admin_delete", "jira_read_project_list", "jira_search", "mcp"]);
+  assert.deepEqual(names(shown), ["ask_question", "bash", "jira_admin_delete", "jira_read_project_list", "jira_search", "mcp"]);
   assert.equal(shown.find((t) => t.name === "jira_search").cached, true);
   assert.equal(shown.find((t) => t.name === "bash").cached, undefined);
   assert.deepEqual(withdrawnMcpTools(), ["brave_search_web_search", "jira_create_issue"]);
 
   createSession({ id: "idle", title: "idle", workspace: home, executor: "host" });
   const { tools } = await sessions.getTools("idle");
-  assert.deepEqual(names(tools), ["bash", "jira_admin_delete", "jira_read_project_list", "jira_search", "mcp"]);
+  assert.deepEqual(names(tools), ["ask_question", "bash", "jira_admin_delete", "jira_read_project_list", "jira_search", "mcp"]);
   assert.equal(tools.find((t) => t.name === "jira_search").cached, true);
   // What pi is told is off includes them; what the page is told, and what is written down, does not.
   assert.deepEqual(sessions.piOff("idle"), ["brave_search_web_search", "jira_create_issue"]);
@@ -126,7 +126,7 @@ test("what the configuration says no to is not listed, is off in pi, and what co
 
   // Allowed again: listed again, and nothing was written down against it meanwhile.
   mcpFile({ mcpServers: { jira: { command: "j", directTools: true }, "brave-search": { command: "b", directTools: true } } });
-  assert.deepEqual(names(shownTools()), ["bash", "brave_search_web_search", "jira_admin_delete", "jira_create_issue", "jira_read_project_list", "jira_search", "mcp"]);
+  assert.deepEqual(names(shownTools()), ["ask_question", "bash", "brave_search_web_search", "jira_admin_delete", "jira_create_issue", "jira_read_project_list", "jira_search", "mcp"]);
   assert.deepEqual(sessions.piOff("idle"), ["bash"]);
 });
 

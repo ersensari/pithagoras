@@ -50,7 +50,8 @@ beforeEach(async () => {
   await json("/api/tools", "PUT", { off: ["web_fetch"] });
   db.getDb().exec("DELETE FROM project_tools");
 });
-const states = (r) => Object.fromEntries(r.tools.map((t) => [t.name, t.enabled]));
+// The portal's own ask_question is in every list; what is asked here is about the tools the tests set up.
+const states = (r) => Object.fromEntries(r.tools.filter((t) => t.name !== "ask_question").map((t) => [t.name, t.enabled]));
 
 test("a project with nothing said lists every tool as the portal-wide default has it", async () => {
   const r = await json("/api/projects/research/tools");

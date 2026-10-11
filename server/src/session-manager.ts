@@ -18,6 +18,7 @@ import { findServerBuiltin, picturesRefused, runBuiltin } from "./pi/builtins.js
 import { dropMessage, SessionEditError, userTexts, type Scope } from "./pi/session-edit.js";
 import { AUDIO_MESSAGE_PREFIX } from "./pi/voice-first.js";
 import { isDialog } from "./pi/ui-requests.js";
+import { ASK_QUESTION_TOOL, asksQuestions } from "./pi/ask-question.js";
 import { forgetTaint } from "./pi/guard.js";
 import { textOf } from "./pi/entries.js";
 import { removeSessionFiles } from "./session-files.js";
@@ -317,7 +318,15 @@ class SessionManager extends EventEmitter {
   /** Model failures pi has not recovered from: see model-errors.ts. */
   private modelErrors = new ModelErrors();
 
-  liveSnapshot(sessionId: string) { return this.stream.snapshot(sessionId); }
+  /**
+   * What a page that attaches is shown beyond the stored events: the message being written, and the
+   * questions the agent is waiting on. Dialogs are live events and never stored, so without this a
+   * reload or a visit to another chat lost the question and left the agent waiting out its time.
+   */
+  liveSnapshot(sessionId: string) {
+    const asked = (this.live.get(sessionId)?.client.openQuestionRequests?.() ?? []).map((req) => this.stream.ephemeral(sessionId, "extension_ui_request", req));
+    return [...this.stream.snapshot(sessionId), ...asked];
+  }
   /** In-flight ask() per session, so messages in one chat are answered in turn. */
   private asking = new Map<string, Promise<string>>();
   /**
@@ -2487,7 +2496,11 @@ class SessionManager extends EventEmitter {
     const defaults = toolDefaultsForSession(session);
     const exceptions = sessionTools(sessionId);
     const servers = view.servers;
-    const shown: { name: string; source: string; description?: string; inline?: true; cached?: true }[] = listed.length ? listed : shownTools(workspace, view);
+    // An idle chat is shown what the portal has seen registered; the tool is not there for every kind of chat (see asksQuestions).
+    const asks = session ? asksQuestions({ sessionId, routineTools: session.kind === "agent", routineSlug: session.kind === "routine" ? session.routine_slug : undefined, heartbeatAgent: session.kind === "heartbeat" ? session.id : undefined, role: session.role }) : true;
+    const shown: { name: string; source: string; description?: string; inline?: true; cached?: true }[] = listed.length
+      ? listed
+      : shownTools(workspace, view).filter((tool) => asks || !(tool.name === ASK_QUESTION_TOOL && tool.inline));
     return {
       tools: shown.map(({ name, source, description, inline, cached }) => ({
         name,

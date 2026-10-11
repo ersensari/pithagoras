@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LuArrowDown, LuArrowUp, LuCheck, LuMessageCircleQuestion, LuX } from "react-icons/lu";
 import { api } from "../api";
 import { isEscape } from "../shortcuts";
@@ -25,18 +25,20 @@ interface Draft {
   many: string[];
   /** ranking: the options in the order the person has put them. */
   order: string[];
+  /** ranking: the person moved something or kept the order, so it is theirs and not the agent's own. */
+  ranked: boolean;
   /** The "other" choice is ticked, and what was typed for it. */
   otherOn: boolean;
   other: string;
 }
 
-const emptyDraft = (q: AgentQuestion): Draft => ({ one: "", many: [], order: q.options.map((o) => o.label), otherOn: false, other: "" });
+const emptyDraft = (q: AgentQuestion): Draft => ({ one: "", many: [], order: q.options.map((o) => o.label), ranked: false, otherOn: false, other: "" });
 
-/** The answer a draft stands for, or undefined while there is none. A ranking always has one: the order shown. */
+/** The answer a draft stands for, or undefined while there is none. A ranking is one once the person has moved or kept the order: the order it starts in is the agent's. */
 function answerOf(q: AgentQuestion, d: Draft): string | string[] | undefined {
   const typed = d.otherOn ? d.other.trim() : "";
   if (q.kind === "text") return d.one.trim() || undefined;
-  if (q.kind === "ranking") return d.order;
+  if (q.kind === "ranking") return d.ranked ? d.order : undefined;
   if (q.kind === "single") return (d.otherOn ? typed : d.one) || undefined;
   const picks = [...d.many, ...(typed ? [typed] : [])];
   return picks.length ? picks : undefined;
@@ -92,10 +94,29 @@ export function QuestionDialog({
     return () => document.removeEventListener("keydown", onKey);
   }, [requestId, busy, error]);
 
+  // A button that is moved in the page loses the focus, and one that has just become disabled cannot have it:
+  // so the row that was moved gets it back on the arrow still there to press, once the new order is drawn.
+  const arrows = useRef(new Map<string, HTMLButtonElement>());
+  const refocus = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const key = refocus.current;
+    refocus.current = null;
+    if (key) arrows.current.get(key)?.focus();
+  });
+
   const move = (q: AgentQuestion, from: number, by: number) => {
     const order = [...drafts[q.id].order];
-    [order[from], order[from + by]] = [order[from + by], order[from]];
-    change(q.id, { order });
+    const to = from + by;
+    const label = order[from];
+    [order[from], order[to]] = [order[to], order[from]];
+    const next = by < 0 ? (to === 0 ? "down" : "up") : to === order.length - 1 ? "up" : "down";
+    refocus.current = `${q.id}\n${label}\n${next}`;
+    change(q.id, { order, ranked: true });
+  };
+  const arrow = (q: AgentQuestion, label: string, dir: "up" | "down") => (el: HTMLButtonElement | null) => {
+    const key = `${q.id}\n${label}\n${dir}`;
+    if (el) arrows.current.set(key, el);
+    else arrows.current.delete(key);
   };
 
   return (
@@ -206,6 +227,7 @@ export function QuestionDialog({
                             )}
                           </span>
                           <button
+                            ref={arrow(q, label, "up")}
                             disabled={i === 0}
                             onClick={() => move(q, i, -1)}
                             aria-label={t("Move {option} up", { option: label })}
@@ -214,6 +236,7 @@ export function QuestionDialog({
                             <LuArrowUp className="h-3.5 w-3.5" />
                           </button>
                           <button
+                            ref={arrow(q, label, "down")}
                             disabled={i === d.order.length - 1}
                             onClick={() => move(q, i, 1)}
                             aria-label={t("Move {option} down", { option: label })}
@@ -224,6 +247,11 @@ export function QuestionDialog({
                         </li>
                       ))}
                     </ol>
+                    {!d.ranked && (
+                      <button type="button" onClick={() => change(q.id, { ranked: true })} className="mt-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/10">
+                        {t("Keep this order")}
+                      </button>
+                    )}
                   </>
                 )}
               </fieldset>

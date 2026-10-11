@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readQuestions, readAnswers, describeAnswers, askQuestionTool, ASK_QUESTION_TOOL, MAX_QUESTIONS } from '../server/src/pi/ask-question.ts';
+import { readQuestions, readAnswers, describeAnswers, askQuestionTool, ASK_QUESTION_TOOL, MAX_QUESTIONS, asksQuestions } from '../server/src/pi/ask-question.ts';
 import { isDialog } from '../server/src/pi/ui-requests.ts';
 
 /** The tool as pi gets it: registered on a fake pi, run with the context a test gives it. */
@@ -74,6 +74,36 @@ test('the model is told each answer, what was typed in, and what was left', () =
   assert.match(text, /Chosen: Search; Sync/);
   assert.match(text, /No answer \(it was optional\)/);
   assert.match(text, /1\) Cost {2}2\) Safety {2}3\) Speed/);
+});
+
+test('ids that are keys every object has are ids like any other, and an unanswered one has no answer', () => {
+  const qs = readQuestions([
+    { id: 'constructor', question: 'a', options: ['x', 'y'], optional: true },
+    { id: '__proto__', question: 'b', options: ['x', 'y'], optional: true },
+    { id: 'toString', question: 'c', kind: 'text', optional: true },
+  ]);
+  assert.deepEqual(Object.keys(readAnswers(qs, {})), [], 'nothing given, nothing answered');
+  assert.deepEqual(Object.keys(readAnswers(qs, JSON.parse('{"__proto__":"y","constructor":"x"}'))).sort(), ['__proto__', 'constructor'], 'given, kept under its own id');
+  const text = describeAnswers(qs, readAnswers(qs, {}));
+  assert.doesNotMatch(text, /native code|Object/);
+  assert.equal(text.match(/No answer \(it was optional\)/g)?.length, 3);
+});
+
+test('the schema takes plain strings as options, as the questions do, so pi does not turn the call away', async () => {
+  const { Value } = await import('typebox/value');
+  const params = tool().parameters;
+  assert.equal(Value.Check(params, { questions: [{ question: 'q', options: ['a', 'b'] }] }), true);
+  assert.equal(Value.Check(params, { questions: [{ question: 'q', options: [{ label: 'a' }] }] }), true);
+});
+
+test('only a chat a person is looking at can ask: not a routine, a heartbeat, a channel or a guest', () => {
+  assert.equal(asksQuestions({ sessionId: 's' }), true);
+  assert.equal(asksQuestions({ sessionId: 's', role: 'primary' }), true);
+  assert.equal(asksQuestions({}), false, 'no chat');
+  assert.equal(asksQuestions({ sessionId: 's', routineTools: true }), false);
+  assert.equal(asksQuestions({ sessionId: 's', routineSlug: 'nightly' }), false);
+  assert.equal(asksQuestions({ sessionId: 's', heartbeatAgent: 'a' }), false);
+  assert.equal(asksQuestions({ sessionId: 's', role: 'guest' }), false);
 });
 
 test('running the tool asks the context, with a wait of its own, and reports what came back', async () => {

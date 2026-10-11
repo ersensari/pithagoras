@@ -87,17 +87,22 @@ When the agent cannot go on without a decision or a fact only you have, it uses
 its `ask_question` tool: a dialog opens over the chat with its questions, and
 the agent waits for your answers. A question is one of four kinds: **choose
 one**, **choose several**, **free text**, or **put the options in order** (best
-first, moved with the arrows; they start in the order the agent listed them).
+first, moved with the arrows; they start in the order the agent listed them,
+and that order only counts as your answer once you have moved something or
+pressed **Keep this order**).
 A choice may also take an answer of your own when the agent allows it, and a
 question marked *optional* may be left empty. **Submit** is available once every
 other question is answered. **Cancel**, `Esc` or a click beside the dialog
 closes it, and the agent is told that you did not answer. It waits for 15
-minutes at most, and Stop in the message box ends the wait too.
+minutes at most, and Stop in the message box ends the wait too and closes the
+dialog in every window that has it. A question that is still waiting stays with
+its chat: if you reload the page or look at another chat meanwhile, the dialog is
+there again when you come back.
 
-The tool is only there in a chat that you are looking at: not in a routine, a
-heartbeat, or a chat reached through a channel, whose questions go out as text.
-It is in the tools list like any other, in a group named `ask-question`, and can
-be switched off there.
+The tool is there in every chat you talk to yourself, whether or not a window is
+open on it, but not in a routine, a heartbeat, or a chat reached through a
+channel, whose questions go out as text. It is in the tools list like any other,
+in a group named `ask-question`, and can be switched off there.
 
 ## Looking at a picture
 

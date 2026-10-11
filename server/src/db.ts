@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { inTurnWithSettings, piSetting, readPiSettings, readProjectPiSettings } from "./pi-settings.js";
 import { packageIndex, packageKey, packageLabel, toolAvailability } from "./extension-switch.js";
+import { ASK_QUESTION_SOURCE, ASK_QUESTION_TOOL } from "./pi/ask-question.js";
 import { EDIT_IMAGE_SOURCE, EDIT_IMAGE_TOOL, GENERATE_IMAGE_SOURCE, GENERATE_IMAGE_TOOL, SHOW_IMAGE_SOURCE, imageEditingReady, imageGenerationReady } from "./image-generation.js";
 import { PORTAL_BROWSER_TOOLS, browserTool, defaultsFor, mcpServerOf, toolEnabled } from "./tool-policy.js";
 import { projectOf } from "./workspaces.js";
@@ -2388,13 +2389,15 @@ function notYetSeen(available: KnownTool[], images: boolean, editing: boolean): 
   const wanted: [string, string, boolean][] = [
     [GENERATE_IMAGE_TOOL, GENERATE_IMAGE_SOURCE, images],
     [EDIT_IMAGE_TOOL, EDIT_IMAGE_SOURCE, editing],
+    // Always there in a chat that is talked to (see asksQuestions), so no setting to wait for: the lists know it after an update.
+    [ASK_QUESTION_TOOL, ASK_QUESTION_SOURCE, true],
   ];
   return wanted.filter(([name, , ready]) => ready && !seen.has(name)).map(([name, source]) => ({ name, source, package: null, inline: true }));
 }
 
 /** What the portal files its own picture tools under, by name. Read when asked: image-generation.ts imports this module. */
 const pictureSource = (name: string): string | undefined =>
-  ({ show_image: SHOW_IMAGE_SOURCE, [GENERATE_IMAGE_TOOL]: GENERATE_IMAGE_SOURCE, [EDIT_IMAGE_TOOL]: EDIT_IMAGE_SOURCE } as Record<string, string>)[name];
+  ({ show_image: SHOW_IMAGE_SOURCE, [GENERATE_IMAGE_TOOL]: GENERATE_IMAGE_SOURCE, [EDIT_IMAGE_TOOL]: EDIT_IMAGE_SOURCE, [ASK_QUESTION_TOOL]: ASK_QUESTION_SOURCE } as Record<string, string>)[name];
 
 /**
  * Whether the portal registered this tool itself, for the pages to group its picture tools apart from an extension's of the same name.

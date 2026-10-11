@@ -36,7 +36,8 @@ const json = async (url, method = "GET", body) => {
   assert.ok(res.ok, `${url}: ${res.status} ${await res.clone().text()}`);
   return res.json();
 };
-const states = (r) => Object.fromEntries(r.tools.map((t) => [t.name, t.enabled]));
+// The portal's own ask_question is in every list; what is asked here is about the tools the tests set up.
+const states = (r) => Object.fromEntries(r.tools.filter((t) => t.name !== "ask_question").map((t) => [t.name, t.enabled]));
 
 beforeEach(async () => {
   await json("/api/tools", "PUT", { off: ["web_fetch"] });
@@ -59,6 +60,7 @@ test("an agent's switches are exceptions to the default, for every chat in its h
   const before = await json(`/api/agents/${agent.id}/tools`);
   assert.deepEqual(states(before), { bash: true, browser_navigate: true, web_fetch: false, web_search: true });
   assert.equal(before.live, false);
+  assert.equal(before.tools.some((t) => t.name === "ask_question"), false, "an agent answers through a channel, nobody is at a dialog");
 
   // Both ways: bash off where the default has it on, web_fetch on where the default has it off.
   const saved = await json(`/api/agents/${agent.id}/tools`, "PUT", { off: ["bash"] });
@@ -90,6 +92,7 @@ test("the first agent's switches reach its chats, its heartbeat and the routines
   assert.equal(states(await json(`/api/sessions/${run}/tools`)).web_search, false);
   // The routine's page shows what its agent leaves as its default.
   const page = await json(`/api/routines/${r.id}/tools`);
+  assert.equal((await json("/api/projects/research/tools")).tools.find((t) => t.name === "ask_question")?.enabled, true, "a project's chats are the ones a person talks to");
   assert.equal(page.tools.find((t) => t.name === "web_search").defaultOn, false);
 });
 
@@ -99,6 +102,7 @@ test("a routine's switches come after its agent and its project, and a run's cha
   const page = await json(`/api/routines/${r.id}/tools`);
   // The project's, with the browser off as a routine's always was.
   assert.deepEqual(states(page), { bash: false, browser_navigate: false, web_fetch: false, web_search: true });
+  assert.equal(page.tools.some((t) => t.name === "ask_question"), false, "nobody is there to answer in a routine");
   assert.equal(page.tools.find((t) => t.name === "bash").defaultOn, false, "what the layers under it say");
   assert.equal(page.tools.find((t) => t.name === "browser_navigate").defaultOn, true);
 
