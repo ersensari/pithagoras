@@ -169,6 +169,11 @@ test('the graph draws the notes and their links, says what the colours are, and 
   await expect(graph).toBeVisible();
   await expect(page.getByRole('img', { name: /3 notes, 1 link/ })).toHaveCount(0);
   await expect(graph.locator('line')).toHaveCount(1);
+  // A small memory glows and moves: a halo behind each note, a gradient orb, links with a current.
+  await expect(graph.locator('.mg-rich')).toHaveCount(1);
+  await expect(graph.locator('circle.mg-halo')).toHaveCount(3);
+  await expect(graph.locator('circle.mg-orb').first()).toHaveAttribute('fill', /url\(#mg-orb-/);
+  expect(await graph.locator('line').evaluate((el) => getComputedStyle(el).animationName)).toBe('mg-flow');
   const legend = page.getByRole('list', { name: 'What the colours are' });
   await expect(legend).toContainText('Deployment Process');
   await expect(legend).toContainText('orphan (unlinked)');
@@ -196,6 +201,9 @@ test('a graph of a long memory opens without freezing the page, and panning it i
   await expect(graph).toBeVisible({ timeout: 30_000 });
   // The layout of 1,500 notes was several seconds in one piece; it is a fraction of one.
   expect(await page.evaluate(() => (window as any).longest)).toBeLessThan(1500);
+  // A graph this long is drawn plainly: no halos and no animation per note.
+  await expect(graph.locator('.mg-rich')).toHaveCount(0);
+  await expect(graph.locator('circle.mg-halo')).toHaveCount(0);
 
   const box = (await graph.boundingBox())!;
   const from = { x: box.x + box.width - 5, y: box.y + box.height - 5 };

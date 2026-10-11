@@ -1081,6 +1081,9 @@ function Issues({ validation, onOpen, onBack }: { validation: MemoryValidation |
 /** Tokens as the chat writes them (9.7k, 2k), or a ? where the trace kept none. */
 const tokens = (n?: number) => (n === undefined ? "?" : formatTokens(n));
 
+/** Notes up to which the graph glows and moves. */
+const RICH_UP_TO = 300;
+
 function GraphView({ onOpen, onBack }: { onOpen: (path: string) => void; onBack: () => void }) {
   const colourOf = useContext(Colours);
   const [graph, setGraph] = useState<MemoryGraph | null>(null);
@@ -1098,43 +1101,77 @@ function GraphView({ onOpen, onBack }: { onOpen: (path: string) => void; onBack:
   useEffect(() => setBox(fit), [fit]);
   const types = useMemo(() => [...new Set((graph?.nodes ?? []).map((n) => n.type).filter((t): t is string => !!t))].sort(), [graph]);
 
+  // Glow and motion are drawn per note, which a graph of thousands cannot afford: past this the notes are plain orbs without halos or animation.
+  const rich = (graph?.nodes.length ?? 0) <= RICH_UP_TO;
+  const hues = useMemo(() => [...new Set((graph?.nodes ?? []).map((n) => colourOf(n.type)))], [graph, colourOf]);
+  const typeOf = useMemo(() => new Map((graph?.nodes ?? []).map((n) => [n.path, n.type])), [graph]);
+  const gradient = (colour: string) => colour.replace(/[^0-9a-z]/gi, "");
+
   // The notes and links, kept as they are drawn while the view moves: a pan or a zoom changes the box many times a second, and a thousand notes drawn again each time stutters.
   const drawn = useMemo(
     () =>
       graph && (
         <>
-          {graph.edges.map((e, i) => {
-            const a = where.get(e.source);
-            const b = where.get(e.target);
-            return a && b ? <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="currentColor" className="text-fg/20" strokeWidth={1.2} /> : null;
-          })}
-          {graph.nodes.map((n) => {
-            const p = where.get(n.path)!;
-            const r = 6 + Math.min(n.links, 10) * 0.8;
-            const title = n.title || n.path;
-            return (
-              <g
-                key={n.path}
-                data-note
-                role="button"
-                tabIndex={0}
-                aria-label={title}
-                onClick={() => onOpen(n.path)}
-                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen(n.path))}
-                className="cursor-pointer outline-none [&:focus-visible_circle]:stroke-accent"
-              >
-                <title>{n.description ? `${title} — ${n.description}` : title}</title>
-                {n.links === 0 && <circle cx={p.x} cy={p.y} r={r + 4} fill="none" className="stroke-danger" strokeWidth={1.5} />}
-                <circle cx={p.x} cy={p.y} r={r} fill={colourOf(n.type)} stroke="transparent" strokeWidth={3} />
-                <text x={p.x} y={p.y + r + 13} textAnchor="middle" className="fill-fg text-[11px]">
-                  {title.length > 32 ? `${title.slice(0, 31)}…` : title}
-                </text>
+          <defs>
+            {hues.map((c) => (
+              <g key={c}>
+                <radialGradient id={`mg-halo-${gradient(c)}`}>
+                  <stop offset="0" stopColor={c} stopOpacity=".55" />
+                  <stop offset=".55" stopColor={c} stopOpacity=".16" />
+                  <stop offset="1" stopColor={c} stopOpacity="0" />
+                </radialGradient>
+                <radialGradient id={`mg-orb-${gradient(c)}`} cx=".35" cy=".3" r=".8">
+                  <stop offset="0" stopColor="#fff" stopOpacity=".85" />
+                  <stop offset=".35" stopColor={c} />
+                  <stop offset="1" stopColor={c} stopOpacity=".78" />
+                </radialGradient>
               </g>
-            );
-          })}
+            ))}
+          </defs>
+          <g className={rich ? "mg-rich" : undefined}>
+            {/* Behind the links and apart from the notes: a halo that breathes would otherwise never hold still under a click. */}
+            {rich &&
+              graph.nodes.map((n, i) => {
+                const p = where.get(n.path)!;
+                const r = 6 + Math.min(n.links, 10) * 0.8;
+                return <circle key={n.path} cx={p.x} cy={p.y} r={r * 3} fill={`url(#mg-halo-${gradient(colourOf(n.type))})`} className="mg-halo" style={{ animationDelay: `${(i * 370) % 3600}ms` }} />;
+              })}
+            {graph.edges.map((e, i) => {
+              const a = where.get(e.source);
+              const b = where.get(e.target);
+              if (!a || !b) return null;
+              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={colourOf(typeOf.get(e.source))} className="mg-edge" strokeWidth={1.4} strokeLinecap="round" />;
+            })}
+            {graph.nodes.map((n, i) => {
+              const p = where.get(n.path)!;
+              const r = 6 + Math.min(n.links, 10) * 0.8;
+              const title = n.title || n.path;
+              const c = colourOf(n.type);
+              return (
+                <g
+                  key={n.path}
+                  data-note
+                  role="button"
+                  tabIndex={0}
+                  aria-label={title}
+                  onClick={() => onOpen(n.path)}
+                  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen(n.path))}
+                  className="mg-note cursor-pointer outline-none [&:focus-visible_.mg-orb]:stroke-accent"
+                  style={rich ? { animationDelay: `${(i % 12) * 60}ms` } : undefined}
+                >
+                  <title>{n.description ? `${title} — ${n.description}` : title}</title>
+                  {n.links === 0 && <circle cx={p.x} cy={p.y} r={r + 4} fill="none" className="mg-orphan stroke-danger" strokeWidth={1.5} />}
+                  <circle cx={p.x} cy={p.y} r={r} fill={`url(#mg-orb-${gradient(c)})`} stroke="transparent" strokeWidth={3} className="mg-orb" />
+                  <text x={p.x} y={p.y + r + 13} textAnchor="middle" className="fill-fg text-[11px]">
+                    {title.length > 32 ? `${title.slice(0, 31)}…` : title}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
         </>
       ),
-    [graph, where, colourOf, onOpen],
+    [graph, where, colourOf, onOpen, hues, rich, typeOf],
   );
 
   const svg = useRef<SVGSVGElement>(null);
@@ -1182,7 +1219,7 @@ function GraphView({ onOpen, onBack }: { onOpen: (path: string) => void; onBack:
   return (
     <>
       <Bar title={t("Graph")} onBack={onBack} />
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div className="memory-graph relative min-h-0 flex-1 overflow-hidden">
         {failed ? (
           <p role="alert" className="p-4 text-sm text-warn">{failed}</p>
         ) : !graph ? (
@@ -1208,7 +1245,7 @@ function GraphView({ onOpen, onBack }: { onOpen: (path: string) => void; onBack:
               <ul aria-label={t("What the colours are")} className="absolute left-3 top-3 max-w-[45%] space-y-1 rounded-lg border border-line bg-surface/90 px-3 py-2 text-[11px] text-fg-muted">
                 {types.map((t) => (
                   <li key={t} className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colourOf(t) }} />
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colourOf(t), boxShadow: `0 0 8px ${colourOf(t)}` }} />
                     <span className="truncate">{t}</span>
                   </li>
                 ))}

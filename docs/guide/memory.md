@@ -17,8 +17,10 @@ and links that open other notes here.
 
 **Log.** What changed in the memory, newest first.
 
-**Graph.** Every note is a point coloured by its type, its links are lines, and
-notes nothing links to are ringed in red. **Query paths** shows the routes
+**Graph.** Every note is a glowing orb coloured by its type, its links are lines
+with a slow current along them, and notes nothing links to are ringed in red.
+The glow and the motion stop for a memory of more than 300 notes (the notes
+are then plain orbs) and for anyone who asks their system to reduce motion. **Query paths** shows the routes
 Understory's own queries took. Drag to move, scroll or the zoom buttons to zoom,
 click a note to open it. A memory of many hundreds of notes is laid out in fewer
 passes, so that the page opens at once: the picture is rougher, and still shows

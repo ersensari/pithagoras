@@ -232,3 +232,28 @@
  *   styles/chat.css      the transcript, the tray, jobs and subagents
  *   styles/motion.css    the extra animations, which only play while motion.ts allows
  */
+
+/* The memory graph: a soft glow behind the page, notes that glow and breathe, links that carry a slow current. The motion is only for graphs small enough to afford it (`mg-rich`). */
+.memory-graph {
+  background:
+    radial-gradient(ellipse at 50% 45%, rgb(var(--accent) / .09), transparent 62%),
+    radial-gradient(ellipse at 15% 90%, rgb(var(--fg) / .035), transparent 55%);
+}
+.mg-edge { opacity: .38; transition: opacity .2s; }
+.mg-note .mg-orb { transition: filter .2s, transform .25s cubic-bezier(.22,1,.36,1); transform-box: fill-box; transform-origin: center; }
+.mg-note:hover .mg-orb, .mg-note:focus-visible .mg-orb { transform: scale(1.22); filter: brightness(1.15); }
+.mg-halo { transform-box: fill-box; transform-origin: center; opacity: .85; pointer-events: none; }
+.mg-orphan { opacity: .8; }
+.mg-rich .mg-edge { stroke-dasharray: 3 7; animation: mg-flow 2.4s linear infinite; }
+.mg-rich .mg-note { animation: mg-appear .7s cubic-bezier(.22,1,.36,1) both; }
+.mg-rich .mg-halo { animation: mg-breathe 3.6s ease-in-out infinite; }
+.mg-rich .mg-orphan { animation: mg-blink 2.4s ease-in-out infinite; }
+@keyframes mg-flow { to { stroke-dashoffset: -20; } }
+@keyframes mg-appear { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mg-breathe { 0%, 100% { transform: scale(.82); opacity: .55; } 50% { transform: scale(1.1); opacity: 1; } }
+@keyframes mg-blink { 0%, 100% { opacity: .35; } 50% { opacity: .9; } }
+@media (prefers-reduced-motion: reduce) {
+  .mg-rich .mg-edge, .mg-rich .mg-note, .mg-rich .mg-halo, .mg-rich .mg-orphan { animation: none; }
+  .mg-rich .mg-edge { stroke-dasharray: none; }
+  .mg-note .mg-orb { transition: none; }
+}
