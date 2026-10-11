@@ -2,20 +2,43 @@ import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fakeModel, resultsIn } from "./fake-model.mjs";
 import { freePort, inProcessHome, serverEnv, startServer } from "./server-harness.mjs";
 
 /**
- * Lazy tool sets (#106): a large set is opt-in, so it is not in the prompt of a conversation that
- * never asked for it; the model reaches its tools through the `tools` tool instead (tools-gateway
- * .test.mjs runs that end to end). Against the whole server: what Settings → Tools reads and writes,
- * what a chat, a project and a later registration make of it, and what a running chat is told.
+ * Lazy tools (#106): opt-in, for a set or for a single tool. A lazy tool is on like any other, but is
+ * not in the model's prompt; the model reaches it through the `tools` tool instead (tools-gateway
+ * .test.mjs runs that end to end). Laziness is no switch: it never changes whether a tool is on, and a
+ * tool that is off is off for good. Against the whole server: what Settings → Tools reads and writes,
+ * what a chat, a project and a later registration make of it, and what a running chat is told. The last
+ * test runs real chats against a model that is scripted, to see what the model is sent.
  */
 const home = inProcessHome("pithagoras-tools-lazy-");
 mkdirSync(path.join(home, "ws", "research"), { recursive: true });
-mkdirSync(process.env.PI_CODING_AGENT_DIR, { recursive: true });
-writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, "settings.json"), JSON.stringify({}));
+mkdirSync(path.join(process.env.PI_CODING_AGENT_DIR, "extensions"), { recursive: true });
+// A tool of an extension, which is neither an MCP server's nor pi's own: the kind that can be lazy.
+writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, "extensions", "probe.ts"), `
+const text = (t) => ({ content: [{ type: "text", text: t }], details: {} });
+const tool = (name, description) => ({
+  name,
+  label: name,
+  description,
+  parameters: { type: "object", properties: { id: { type: "string" } } },
+  async execute(_id, p) { return text(name + " ran for " + p.id); },
+});
+export default function (pi) {
+  pi.registerTool(tool("probe_open", "Open a probe by its id."));
+  pi.registerTool(tool("probe_read", "Read a probe by its id."));
+}
+`);
+/** What the model does at each request, by how many tool results the conversation holds. */
+let script = [];
+const model = await fakeModel((request) => script[resultsIn(request)] ?? "Done.");
+writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, "models.json"), JSON.stringify(model.models()));
+writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, "settings.json"), JSON.stringify({ defaultProvider: "fake", defaultModel: "m" }));
 
 const db = await import("../dist/db.js");
+const { lazyToolEntry } = await import("../dist/tool-policy.js");
 const { sessions } = await import("../dist/session-manager.js");
 const heavy = [
   { name: "heavy_open", source: "pi-heavy", package: null },
@@ -39,56 +62,139 @@ const states = (r) => Object.fromEntries(r.tools.map((t) => [t.name, t.enabled])
 /** The tools a page marks as reached through the `tools` tool. */
 const lazyOf = (r) => r.tools.filter((t) => t.lazy).map((t) => t.name).sort();
 
+/** The MCP adapter's configuration: the servers there are. */
+const writeMcp = (servers) => writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json"), JSON.stringify({ mcpServers: servers }));
+
 beforeEach(async () => {
-  db.getDb().exec("DELETE FROM settings WHERE key IN ('tools_seen', 'tools_off_default', 'tools_lazy'); DELETE FROM project_tools;");
+  db.getDb().exec("DELETE FROM settings WHERE key IN ('tools_seen', 'tools_off_default', 'tools_lazy'); DELETE FROM project_tools; DELETE FROM agent_tools; UPDATE routines SET tools_off = '', tools_on = ''");
+  writeMcp({});
   db.rememberTools([...heavy, ...light]);
 });
 
-test("nothing is lazy until somebody says so: every tool is offered as it was", async () => {
+test("nothing is lazy until somebody says so: no tool, no set, nothing for a chat to be told", async () => {
   const page = await json("/api/tools");
   assert.deepEqual(page.lazy, []);
   assert.deepEqual(page.off, []);
+  assert.deepEqual(lazyOf(page), []);
   const chat = await json("/api/sessions", "POST", {});
-  assert.deepEqual(states(await json(`/api/sessions/${chat.id}/tools`)), { heavy_open: true, heavy_read: true, web_search: true });
+  const listed = await json(`/api/sessions/${chat.id}/tools`);
+  assert.deepEqual(states(listed), { heavy_open: true, heavy_read: true, web_search: true });
+  assert.deepEqual(lazyOf(listed), []);
+  assert.deepEqual(sessions.piLazy(sessions.piOff(chat.id)), { tools: [], sets: [] });
+  assert.deepEqual(db.lazyToolNames(), new Set());
 });
 
-test("a lazy set is off for a new chat, and the other sets are not touched", async () => {
+test("a default tool is never lazy: a tool nobody marked is offered one by one, whatever else is marked", async () => {
+  const chat = await json("/api/sessions", "POST", {});
+  assert.deepEqual(sessions.piLazy(sessions.piOff(chat.id)).tools, []);
+  await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
+  const listed = await json(`/api/sessions/${chat.id}/tools`);
+  assert.equal(lazyOf(listed).includes("web_search"), false);
+  assert.equal(states(listed).web_search, true);
+  assert.deepEqual(sessions.piLazy(sessions.piOff(chat.id)).tools, ["heavy_open", "heavy_read"]);
+  assert.deepEqual(db.toolDefaultsOff(), []);
+});
+
+test("a lazy set stays on: marking switches nothing, and the other sets are not touched", async () => {
   const done = await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
   assert.deepEqual(done.lazy, ["pi-heavy"]);
-  assert.deepEqual(done.off, ["heavy_open", "heavy_read"]);
+  assert.equal(done.off, undefined);
+  assert.deepEqual(db.toolDefaultsOff(), []);
 
   const page = await json("/api/tools");
   assert.deepEqual(page.lazy, ["pi-heavy"]);
-  assert.deepEqual(Object.fromEntries(page.tools.map((t) => [t.name, t.defaultOn])), { heavy_open: false, heavy_read: false, web_search: true });
-  // Off by default and reached through the `tools` tool: marked so on the page, for the set alone.
+  assert.deepEqual(Object.fromEntries(page.tools.map((t) => [t.name, t.defaultOn])), { heavy_open: true, heavy_read: true, web_search: true });
   assert.deepEqual(lazyOf(page), ["heavy_open", "heavy_read"]);
   const chat = await json("/api/sessions", "POST", {});
   const listed = await json(`/api/sessions/${chat.id}/tools`);
-  assert.deepEqual(states(listed), { heavy_open: false, heavy_read: false, web_search: true });
+  assert.deepEqual(states(listed), { heavy_open: true, heavy_read: true, web_search: true });
   assert.deepEqual(lazyOf(listed), ["heavy_open", "heavy_read"]);
+  assert.deepEqual(sessions.piLazy(sessions.piOff(chat.id)), { tools: ["heavy_open", "heavy_read"], sets: ["pi-heavy"] });
 });
 
-test("a chat and a project switch a lazy set on for themselves", async () => {
+test("a tool that is neither an MCP tool nor built in can be made lazy on its own", async () => {
+  // An extension's own tool, like a custom one a user installed: no MCP server, no pi built-in.
+  db.rememberTools([{ name: "custom_ping", source: "my-extension", package: null }]);
+  const done = await json("/api/tools/lazy", "PUT", { lazy: [lazyToolEntry("custom_ping")] });
+  assert.deepEqual(done.lazy, ["<tool>custom_ping"]);
+  const chat = await json("/api/sessions", "POST", {});
+  const listed = await json(`/api/sessions/${chat.id}/tools`);
+  assert.deepEqual(lazyOf(listed), ["custom_ping"]);
+  assert.equal(states(listed).custom_ping, true);
+  assert.deepEqual(sessions.piLazy([]), { tools: ["custom_ping"], sets: ["my-extension"] });
+  // Its set-mates and the rest are untouched.
+  assert.deepEqual(lazyOf(await json("/api/tools")), ["custom_ping"]);
+  // A tool is marked on its own only: a set of the same name as a tool is not taken for it.
+  assert.deepEqual([...db.lazyToolNames()], ["custom_ping"]);
+});
+
+test("a chat and a project switch a lazy tool off for themselves, and it is then off for good", async () => {
   await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
   const chat = await json("/api/sessions", "POST", {});
-  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: [] });
-  assert.deepEqual(states(await json(`/api/sessions/${chat.id}/tools`)), { heavy_open: true, heavy_read: true, web_search: true });
-  assert.deepEqual(db.sessionTools(chat.id), { off: [], on: ["heavy_open", "heavy_read"] });
-  // On, so offered one by one and not through the gateway.
-  assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), []);
+  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: ["heavy_read"] });
+  const listed = await json(`/api/sessions/${chat.id}/tools`);
+  assert.deepEqual(states(listed), { heavy_open: true, heavy_read: false, web_search: true });
+  assert.deepEqual(sessions.piLazy(sessions.piOff(chat.id)), { tools: ["heavy_open"], sets: ["pi-heavy"] });
 
-  // Another chat is still without it.
+  // Another chat still has both.
   const other = await json("/api/sessions", "POST", {});
-  assert.equal(states(await json(`/api/sessions/${other.id}/tools`)).heavy_open, false);
-  assert.deepEqual(lazyOf(await json(`/api/sessions/${other.id}/tools`)), ["heavy_open", "heavy_read"]);
+  assert.deepEqual(sessions.piLazy(sessions.piOff(other.id)).tools, ["heavy_open", "heavy_read"]);
 
-  await json("/api/projects/research/tools", "PUT", { off: [] });
+  await json("/api/projects/research/tools", "PUT", { off: ["heavy_open", "heavy_read"] });
   const inProject = await json("/api/sessions", "POST", { workspace: "research" });
-  assert.equal(states(await json(`/api/sessions/${inProject.id}/tools`)).heavy_open, true);
-  assert.deepEqual(lazyOf(await json(`/api/projects/research/tools`)), []);
+  assert.deepEqual(sessions.piOff(inProject.id), ["heavy_open", "heavy_read"]);
+  assert.deepEqual(sessions.piLazy(sessions.piOff(inProject.id)), { tools: [], sets: [] });
+  // Switched on again, and lazy again: the mark is the set's, the switch the project's.
+  await json("/api/projects/research/tools", "PUT", { off: [] });
+  const again = await json("/api/sessions", "POST", { workspace: "research" });
+  assert.deepEqual(sessions.piLazy(sessions.piOff(again.id)).tools, ["heavy_open", "heavy_read"]);
 });
 
-test("a running chat is told what is off and which of that is lazy, and a tool it switched off itself is not", async () => {
+test("a tool switched off at any layer stays off for good: the portal-wide default, an agent, a project, a routine, a chat", async () => {
+  await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
+  /** heavy_read is off and no way reaches it; heavy_open, which nobody switched off, is lazy as before. */
+  const hardOff = async (id, layer) => {
+    const off = sessions.piOff(id);
+    assert.ok(off.includes("heavy_read"), `${layer}: off`);
+    assert.deepEqual(sessions.piLazy(off), { tools: ["heavy_open"], sets: ["pi-heavy"] }, `${layer}: the gateway is told of the other one only`);
+    const listed = await json(`/api/sessions/${id}/tools`);
+    assert.equal(states(listed).heavy_read, false, `${layer}: the page shows it off`);
+    assert.equal(states(listed).heavy_open, true, `${layer}: and the other on`);
+  };
+  const chat = async (body = {}) => (await json("/api/sessions", "POST", body)).id;
+
+  await json("/api/tools", "PUT", { off: ["heavy_read"] });
+  await hardOff(await chat(), "portal-wide default");
+  await json("/api/tools", "PUT", { off: [] });
+
+  const agent = await json("/api/agents", "POST", { name: "Reader" });
+  await json(`/api/agents/${agent.id}/tools`, "PUT", { off: ["heavy_read"] });
+  await hardOff(await chat({ agent: agent.id }), "agent");
+
+  await json("/api/projects/research/tools", "PUT", { off: ["heavy_read"] });
+  await hardOff(await chat({ workspace: "research" }), "project");
+
+  const routine = await json("/api/routines", "POST", { name: "Digest", schedule: "0 9 * * *", instructions: "Do it" });
+  await json(`/api/routines/${routine.id}/tools`, "PUT", { off: ["heavy_read"] });
+  const run = `run-${routine.slug}`;
+  db.createSession({ id: run, title: routine.name, workspace: db.getSession(await chat()).workspace, executor: "host", kind: "routine", routine_slug: routine.slug });
+  await hardOff(run, "routine");
+
+  const own = await chat();
+  await json(`/api/sessions/${own}/tools`, "PUT", { off: ["heavy_read"] });
+  await hardOff(own, "chat");
+});
+
+test("a tool switched off in the default is off for good: lazy does not bring it back", async () => {
+  await json("/api/tools", "PUT", { off: ["heavy_read"] });
+  await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
+  const chat = await json("/api/sessions", "POST", {});
+  assert.deepEqual(sessions.piOff(chat.id), ["heavy_read"]);
+  assert.deepEqual(sessions.piLazy(sessions.piOff(chat.id)), { tools: ["heavy_open"], sets: ["pi-heavy"] });
+  assert.deepEqual(db.toolDefaultsOff(), ["heavy_read"]);
+});
+
+test("a running chat is told what is off and which of the rest is lazy, and a tool it switched off is not among them", async () => {
   const told = [];
   const chat = await json("/api/sessions", "POST", {});
   sessions.live.set(chat.id, {
@@ -100,133 +206,173 @@ test("a running chat is told what is off and which of that is lazy, and a tool i
   try {
     db.setLazyToolSets(["pi-heavy"]);
     await sessions.applyToolDefaults();
-    assert.deepEqual(told.at(-1), { off: ["heavy_open", "heavy_read"], lazy: ["heavy_open", "heavy_read"] });
+    assert.deepEqual(told.at(-1), { off: [], lazy: { tools: ["heavy_open", "heavy_read"], sets: ["pi-heavy"] } });
 
-    // web_search is off by the chat's own say-so: off for good, and the gateway is no way round that.
-    await sessions.setTools(chat.id, ["web_search", "heavy_open", "heavy_read"]);
-    assert.deepEqual(told.at(-1), { off: ["heavy_open", "heavy_read", "web_search"], lazy: ["heavy_open", "heavy_read"] });
+    // heavy_read is off by the chat's own say-so: off for good, and the gateway is no way round that.
+    await sessions.setTools(chat.id, ["web_search", "heavy_read"]);
+    assert.deepEqual(told.at(-1), { off: ["heavy_read", "web_search"], lazy: { tools: ["heavy_open"], sets: ["pi-heavy"] } });
 
-    // A tool switched on is not lazy; the other still is.
-    await sessions.setTools(chat.id, ["heavy_read"]);
-    assert.deepEqual(told.at(-1), { off: ["heavy_read"], lazy: ["heavy_read"] });
-
-    // A set that stops being lazy stays off, and off for good.
+    // A set that stops being lazy is offered one by one again.
     db.setLazyToolSets([]);
     await sessions.applyToolDefaults();
-    assert.deepEqual(told.at(-1), { off: ["heavy_read"], lazy: [] });
+    assert.deepEqual(told.at(-1), { off: ["heavy_read", "web_search"], lazy: { tools: [], sets: [] } });
   } finally {
     sessions.live.delete(chat.id);
   }
 });
 
-test("a tool that a conversation switched off itself is off, not lazy", async () => {
-  await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
-  db.rememberTools([{ name: "heavy_write", source: "pi-heavy", package: null }]);
-  const chat = await json("/api/sessions", "POST", {});
-  // Switched on for this chat, then off again: an exception that says "off", which the default under it does not.
-  db.setToolDefaultsOff(["heavy_open", "heavy_read"]);
-  db.setSessionTools(chat.id, { off: ["heavy_write"], on: [] });
-  const listed = await json(`/api/sessions/${chat.id}/tools`);
-  assert.equal(states(listed).heavy_write, false);
-  assert.deepEqual(lazyOf(listed), ["heavy_open", "heavy_read"]);
-});
+test("an MCP server's tools and pi's built-in tools cannot be lazy: the mark is refused, and one stored anyway does nothing", async () => {
+  writeMcp({ notes: {} });
+  db.rememberTools([
+    { name: "notes_read", source: "pi-mcp-adapter", package: null },
+    { name: "mcp", source: "pi-mcp-adapter", package: null },
+    { name: "bash", source: "built in", package: null },
+    { name: "read", source: "built in", package: null },
+  ]);
+  for (const mark of ["notes", "built in", "pi-mcp-adapter", lazyToolEntry("notes_read"), lazyToolEntry("mcp"), lazyToolEntry("bash")]) {
+    const res = await send("/api/tools/lazy", "PUT", { lazy: [mark] });
+    assert.equal(res.status, 400, `${mark} is refused`);
+    assert.equal((await res.json()).code, "lazy-refused");
+  }
+  // A server that is configured but has no tool seen yet is refused by its name too.
+  writeMcp({ notes: {}, wiki: {} });
+  assert.equal((await send("/api/tools/lazy", "PUT", { lazy: ["wiki"] })).status, 400);
+  // Mixed with a mark that is fine, the whole request is refused and nothing is stored.
+  assert.equal((await send("/api/tools/lazy", "PUT", { lazy: ["pi-heavy", "notes"] })).status, 400);
+  assert.deepEqual(db.lazyToolSets(), []);
 
-test("a tool a project switched off for good stays off when its set is marked lazy: not lazy, not reachable", async () => {
-  mkdirSync(path.join(home, "ws", "research"), { recursive: true });
-  await json("/api/projects/research/tools", "PUT", { off: ["heavy_read"] });
-  await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
-  const chat = await json("/api/sessions", "POST", { workspace: "research" });
-  const off = sessions.piOff(chat.id);
-  assert.deepEqual(off, ["heavy_open", "heavy_read"]);
-  assert.deepEqual(sessions.piLazy(chat.id, off), ["heavy_open"]);
-  assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), ["heavy_open"]);
-  assert.deepEqual(lazyOf(await json("/api/projects/research/tools")), ["heavy_open"]);
-  // Still off with the other switches flipped: the project's own say-so is kept.
-  await json("/api/projects/research/tools", "PUT", { off: ["heavy_open", "heavy_read"] });
-  assert.deepEqual(lazyOf(await json("/api/projects/research/tools")), ["heavy_open"]);
-  // The project can take it back: on, and then off again, it is the set's own off, lazy once more.
-  await json("/api/projects/research/tools", "PUT", { off: ["heavy_open"] });
-  assert.deepEqual(db.projectTools("research"), { off: [], on: ["heavy_read"] });
-  assert.deepEqual(lazyOf(await json("/api/projects/research/tools")), ["heavy_open"]);
-  await json("/api/projects/research/tools", "PUT", { off: ["heavy_open", "heavy_read"] });
-  assert.deepEqual(db.projectTools("research"), { off: [], on: [] });
-  assert.deepEqual(lazyOf(await json("/api/projects/research/tools")), ["heavy_open", "heavy_read"]);
-  const again = await json("/api/sessions", "POST", { workspace: "research" });
-  assert.deepEqual(sessions.piOff(again.id), ["heavy_open", "heavy_read"]);
-});
-
-test("a lazy tool a chat switches on and then off again is lazy once more, through the API", async () => {
-  await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
+  // A mark that got in some other way (the database, an older portal) names tools that are not lazy.
+  db.setLazyToolSets(["notes", "built in", lazyToolEntry("bash"), "pi-heavy"]);
+  assert.deepEqual([...db.lazyToolNames()].sort(), ["heavy_open", "heavy_read"]);
   const chat = await json("/api/sessions", "POST", {});
-  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: [] });
-  assert.deepEqual(db.sessionTools(chat.id), { off: [], on: ["heavy_open", "heavy_read"] });
-  assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), []);
-  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: ["heavy_read"] });
-  assert.deepEqual(db.sessionTools(chat.id), { off: [], on: ["heavy_open"] });
-  assert.deepEqual(sessions.piOff(chat.id), ["heavy_read"]);
-  assert.deepEqual(sessions.piLazy(chat.id, ["heavy_read"]), ["heavy_read"], "off in the list, reached through `tools`");
-  assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), ["heavy_read"]);
-  // And once more on and off: the exception is not a one-way street.
-  await json(`/api/sessions/${chat.id}/tools`, "PUT", { off: ["heavy_open", "heavy_read"] });
-  assert.deepEqual(db.sessionTools(chat.id), { off: [], on: [] });
+  assert.deepEqual(sessions.piLazy(sessions.piOff(chat.id)), { tools: ["heavy_open", "heavy_read"], sets: ["pi-heavy"] });
   assert.deepEqual(lazyOf(await json(`/api/sessions/${chat.id}/tools`)), ["heavy_open", "heavy_read"]);
+  // And such a mark does not stand in the way of an unrelated change to the list.
+  const kept = await json("/api/tools/lazy", "PUT", { lazy: ["notes", "built in", "pi-heavy", "pi-web-access"] });
+  assert.deepEqual(kept.lazy, ["built in", "notes", "pi-heavy", "pi-web-access"]);
 });
 
-test("a tool of a lazy set that the MCP configuration withdrew is not lazy: nothing reaches it", async () => {
-  const mcp = path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json");
-  writeFileSync(mcp, JSON.stringify({ mcpServers: { notes: {} } }));
-  db.rememberTools([{ name: "notes_read", source: "pi-mcp-adapter", package: null }]);
-  await json("/api/tools/lazy", "PUT", { lazy: ["notes"] });
-  const chat = await json("/api/sessions", "POST", {});
-  assert.deepEqual(sessions.piLazy(chat.id, sessions.piOff(chat.id, ["notes_read"])), ["notes_read"]);
-  writeFileSync(mcp, JSON.stringify({ mcpServers: { notes: { disabled: true } } }));
-  const off = sessions.piOff(chat.id, ["notes_read"]);
-  assert.ok(off.includes("notes_read"));
-  assert.deepEqual(sessions.piLazy(chat.id, off), []);
-  writeFileSync(mcp, JSON.stringify({}));
+test("the page is told which tools cannot be lazy, so it offers no mark for them", async () => {
+  writeMcp({ notes: {} });
+  db.rememberTools([
+    { name: "notes_read", source: "pi-mcp-adapter", package: null },
+    { name: "bash", source: "built in", package: null },
+    { name: "browser_navigate", source: "browser", package: null, inline: true },
+  ]);
+  const page = await json("/api/tools");
+  assert.deepEqual(page.tools.filter((t) => t.noLazy).map((t) => t.name).sort(), ["bash", "notes_read"]);
 });
 
-test("a tool that turns up later in a lazy set starts off, one seen before does not change", async () => {
+test("a tool that turns up later in a lazy set is lazy, and the callers are told; one seen before is not new", async () => {
   await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
-  // The owner switched one of them on for everyone.
-  await json("/api/tools", "PUT", { off: ["heavy_read"] });
   const arrived = db.rememberTools([...heavy, { name: "heavy_write", source: "pi-heavy", package: null }, { name: "web_fetch", source: "pi-web-access", package: null }]);
   assert.deepEqual(arrived, ["heavy_write"]);
-  assert.deepEqual(db.toolDefaultsOff(), ["heavy_read", "heavy_write"]);
-  // Reported again: seen, so it keeps whatever was decided about it.
-  await json("/api/tools", "PUT", { off: ["heavy_read"] });
+  assert.deepEqual(db.toolDefaultsOff(), []);
+  assert.deepEqual([...db.lazyToolNames()].sort(), ["heavy_open", "heavy_read", "heavy_write"]);
   assert.deepEqual(db.rememberTools([...heavy, { name: "heavy_write", source: "pi-heavy", package: null }]), []);
-  assert.deepEqual(db.toolDefaultsOff(), ["heavy_read"]);
 });
 
-test("without the mark a new tool is on, as before", async () => {
+test("without the mark a new tool is on and not lazy, as before", async () => {
   assert.deepEqual(db.rememberTools([{ name: "heavy_write", source: "pi-heavy", package: null }]), []);
   assert.deepEqual(db.toolDefaultsOff(), []);
 });
 
-test("an MCP server's set and the portal's picture tools are sets like any other", async () => {
-  writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json"), JSON.stringify({ mcpServers: { notes: {} } }));
+test("the browser's and the pictures' tools are not lazy until marked, and are sets that can be", async () => {
   db.rememberTools([
-    { name: "notes_read", source: "pi-mcp-adapter", package: null },
     { name: "show_image", source: "pictures", package: null, inline: true },
     { name: "generate_image", source: "image-generation", package: null, inline: true },
+    { name: "browser_navigate", source: "browser", package: null, inline: true },
+    { name: "browser_click", source: "browser", package: null, inline: true },
   ]);
-  const done = await json("/api/tools/lazy", "PUT", { lazy: ["notes", "<portal:images>"] });
-  assert.deepEqual(done.off, ["generate_image", "notes_read", "show_image"]);
+  // Nobody has marked them: on and offered one by one, as they always were.
+  assert.deepEqual([...db.lazyToolNames()], []);
+  assert.deepEqual(sessions.piLazy([]), { tools: [], sets: [] });
+  // Not taken for an MCP server's, though the portal also attaches its browser as an MCP server of that name.
+  writeMcp({ browser: {} });
+  await json("/api/tools/lazy", "PUT", { lazy: ["<portal:images>", "browser"] });
+  assert.deepEqual([...db.lazyToolNames()].sort(), ["browser_click", "browser_navigate", "generate_image", "show_image"]);
+  assert.deepEqual(db.lazySetLabels(db.lazyToolNames()), ["browser", "image"]);
+  assert.deepEqual(db.toolDefaultsOff(), []);
 });
 
-test("a set that stops being lazy keeps its switches, and later tools follow the default again", async () => {
+test("a set that stops being lazy is offered one by one again, with its switches as they are", async () => {
   await json("/api/tools/lazy", "PUT", { lazy: ["pi-heavy"] });
   const done = await json("/api/tools/lazy", "PUT", { lazy: [] });
   assert.deepEqual(done.lazy, []);
-  assert.deepEqual(done.off, ["heavy_open", "heavy_read"]);
-  // Off, and off for good now: nothing reaches them through the gateway.
   assert.deepEqual(lazyOf(await json("/api/tools")), []);
-  assert.deepEqual(db.rememberTools([{ name: "heavy_write", source: "pi-heavy", package: null }]), []);
-  assert.deepEqual(db.toolDefaultsOff(), ["heavy_open", "heavy_read"]);
+  assert.deepEqual(db.toolDefaultsOff(), []);
 });
 
 test("a list that is not strings is refused", async () => {
   const res = await send("/api/tools/lazy", "PUT", { lazy: "pi-heavy" });
   assert.equal(res.status, 400);
+});
+
+test("the model of a real chat is sent no lazy tool and no gateway until a tool is lazy, and the hint only then", async () => {
+  const offered = (request) => (request.tools ?? []).map((t) => t.function.name);
+  const hint = /You have probe tools; search for them with the tools tool\./;
+  const toolText = (request) => request.messages.filter((m) => m.role === "tool").map((m) => JSON.stringify(m.content)).join("\n");
+  /** One message to the chat; the last request that carried tools, which is the one the model answered. */
+  async function ask(id, calls = []) {
+    script = calls;
+    const first = model.requests.length;
+    await json(`/api/sessions/${id}/prompt`, "POST", { message: "Go on" });
+    for (let i = 0; i < 400; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      if (model.requests.length > first && db.getSession(id).status !== "running") break;
+    }
+    const withTools = model.requests.slice(first).filter((request) => request.tools?.length);
+    assert.ok(withTools.length, "the chat asked the model");
+    return { first: withTools[0], last: withTools.at(-1) };
+  }
+
+  // Nothing marked: every tool of the extension is offered one by one, there is no gateway and no hint.
+  const plain = await json("/api/sessions", "POST", {});
+  const before = (await ask(plain.id)).first;
+  assert.deepEqual(offered(before).filter((name) => name.startsWith("probe_") || name === "tools"), ["probe_open", "probe_read"]);
+  assert.doesNotMatch(JSON.stringify(before), /search for them with the tools tool|Search them with the tools tool/);
+
+  // The set is marked while that chat is running: its next request has the gateway and the hint, and not the tools.
+  assert.deepEqual((await json("/api/tools/lazy", "PUT", { lazy: ["probe"] })).lazy, ["probe"]);
+  const marked = (await ask(plain.id)).first;
+  assert.deepEqual(offered(marked).filter((name) => name.startsWith("probe_")), []);
+  assert.ok(offered(marked).includes("tools"));
+  assert.match(JSON.stringify(marked), hint);
+  assert.doesNotMatch(JSON.stringify(marked), /Open a probe by its id/, "their descriptions are not in what the model is sent");
+  // A chat that starts now is sent the same.
+  const fresh = await json("/api/sessions", "POST", {});
+  const started = (await ask(fresh.id, [{ name: "tools", args: { action: "search", query: "probe" } }, { name: "tools", args: { action: "call", name: "probe_open", args: { id: "p1" } } }]));
+  assert.deepEqual(offered(started.first).filter((name) => name.startsWith("probe_")), []);
+  assert.match(JSON.stringify(started.first), hint);
+  // And it reaches them: a search finds them, a call runs the tool.
+  assert.match(toolText(started.last), /probe_open: Open a probe by its id\./);
+  assert.match(toolText(started.last), /probe_open ran for p1/);
+
+  // A project switches probe_read off: that tool is off for good, and the gateway neither lists nor runs it.
+  await json("/api/projects/research/tools", "PUT", { off: ["probe_read"] });
+  const project = await json("/api/sessions", "POST", { workspace: "research" });
+  const inProject = await ask(project.id, [
+    { name: "tools", args: { action: "search", query: "probe" } },
+    { name: "tools", args: { action: "call", name: "probe_read", args: { id: "p2" } } },
+  ]);
+  assert.deepEqual(offered(inProject.first).filter((name) => name.startsWith("probe_")), []);
+  assert.ok(offered(inProject.first).includes("tools"), "probe_open is still lazy there");
+  const heard = toolText(inProject.last);
+  assert.match(heard, /probe_open: Open a probe by its id\./);
+  assert.doesNotMatch(heard, /probe_read: /, "search does not list it");
+  assert.match(heard, /switched off in this conversation/);
+  assert.doesNotMatch(heard, /probe_read ran/);
+
+  // Both off there: nothing is lazy in that conversation, so no gateway and no hint.
+  await json("/api/projects/research/tools", "PUT", { off: ["probe_open", "probe_read"] });
+  const none = (await ask(project.id)).first;
+  assert.ok(!offered(none).includes("tools"));
+  assert.doesNotMatch(JSON.stringify(none), /search for them with the tools tool/);
+
+  // Taking the mark away offers the tools one by one again, and the gateway goes.
+  await json("/api/projects/research/tools", "PUT", { off: [] });
+  await json("/api/tools/lazy", "PUT", { lazy: [] });
+  const back = (await ask(plain.id)).first;
+  assert.deepEqual(offered(back).filter((name) => name.startsWith("probe_") || name === "tools"), ["probe_open", "probe_read"]);
+  assert.doesNotMatch(JSON.stringify(back), /search for them with the tools tool/);
 });

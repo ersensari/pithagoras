@@ -43,7 +43,7 @@ export interface PiTool {
   enabled: boolean;
   /** Whether it is on by default, so the page can say where a chat disagrees. */
   defaultOn?: boolean;
-  /** Off in the model's list but reached through the `tools` tool: a tool of a lazy set that nothing here has switched on. */
+  /** Not offered one by one but found through the `tools` tool: a tool marked lazy. It is on, and switched like any other. */
   lazy?: true;
 }
 
@@ -143,10 +143,10 @@ export interface PiClient extends EventEmitter {
    */
   getTools?(): Promise<PiTool[]>;
   /**
-   * Switch tools off by name. Everything not named is on. `lazy`, a subset of `names`, are off in the
-   * list the model is offered and reached through the `tools` tool instead.
+   * Switch tools off by name. Everything not named is on. `lazy.tools` are on but not in the list the
+   * model is offered: it finds them through the `tools` tool, and `lazy.sets` names the sets they are in.
    */
-  setToolsOff?(names: string[], lazy?: string[]): Promise<void>;
+  setToolsOff?(names: string[], lazy?: { tools: string[]; sets: string[] }): Promise<void>;
 
   setModel(provider: string, modelId: string): Promise<void>;
   setThinkingLevel(level: string): Promise<void>;

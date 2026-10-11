@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { inTurnWithSettings, piSetting, readPiSettings, readProjectPiSettings } from "./pi-settings.js";
 import { packageIndex, packageKey, packageLabel, toolAvailability } from "./extension-switch.js";
 import { EDIT_IMAGE_SOURCE, EDIT_IMAGE_TOOL, GENERATE_IMAGE_SOURCE, GENERATE_IMAGE_TOOL, SHOW_IMAGE_SOURCE, imageEditingReady, imageGenerationReady } from "./image-generation.js";
-import { PORTAL_BROWSER_TOOLS, browserTool, defaultsFor, mcpServerOf, toolEnabled, toolSetOf } from "./tool-policy.js";
+import { BUILT_IN_SET, PICTURES_SET, PORTAL_BROWSER_TOOLS, browserTool, defaultsFor, lazyToolEntry, mcpServerOf, toolEnabled, toolSetOf } from "./tool-policy.js";
 import { projectOf } from "./workspaces.js";
 import { browserServers, dropMcpCache, mcpAdapter, mcpCachePath, mcpConfigPath, mcpServerNames, onMcpWritten, readMcpCache, readMcpFile, readableMcpConfig, serversAndBrowsers } from "./api/mcp.js";
 import { mcpCatalogue, mcpOffer, unlisted, type McpOffer } from "./mcp-offer.js";
@@ -2166,28 +2166,6 @@ export function toolDefaultsFor(
   return routine ? defaultsFor(off, routineTools(routine)) : off;
 }
 
-/**
- * The exceptions of the layers toolDefaultsFor folds in, outermost first, up to the one `upTo`
- * stops before. A tool one of them switched off is off for good, not lazy (switchedOffIn).
- */
-export function toolLayersFor(
-  workspace: string | null | undefined,
-  routine?: string | null,
-  upTo?: "agent" | "project" | "routine",
-  homes?: AgentHome[],
-): SessionTools[] {
-  const layers: SessionTools[] = [];
-  if (upTo === "agent") return layers;
-  const agent = agentIdOf(workspace, homes);
-  if (agent) layers.push(agentTools(agent));
-  if (upTo === "project") return layers;
-  const project = projectOf(workspace);
-  if (project) layers.push(projectTools(project));
-  if (upTo === "routine") return layers;
-  if (routine) layers.push(routineTools(routine));
-  return layers;
-}
-
 /** The routine a session is a run of, if it is one: its layer is in its tools. */
 export const routineOf = (session: Pick<SessionRow, "kind" | "routine_slug"> | undefined): string | null =>
   session?.kind === "routine" ? (session.routine_slug ?? null) : null;
@@ -2261,53 +2239,89 @@ export function setToolDefaultsOff(names: string[]): string[] {
 }
 
 /**
- * The tool sets that are lazy: opt-in, off for every conversation until one switches them on, and
- * reached through the `tools` tool meanwhile.
+ * What somebody marked lazy: tool sets, as the boxes of the tools list name them, and single tools
+ * (lazyToolEntry). Opt-in: the portal marks nothing on its own, so an install has no lazy tool until
+ * somebody says so.
  *
- * A lazy set is not in the model's prompt — schemas, descriptions and guidelines — in a chat
- * that never asked for it, which is what a large set such as the browser's costs otherwise
- * in every request. The model finds a tool of it with `tools` (search, describe, call) instead, so
- * nothing in the set is lost to it. Not a new switch: the tools of a lazy set are in the portal-wide
- * default as off (`tools_off_default`), so a project, an agent, a routine or a chat switches them on
- * against it like any other tool, and then has them listed one by one. What the mark adds is that
- * it holds for a tool of the set that is registered later (rememberTools), that the tools are
- * reached through the gateway while they are off (lazyToolNames), and says in the settings which
- * sets are meant that way. Nothing is lazy until someone says so, so an install behaves as it did.
+ * A lazy tool is not in the model's prompt — schema, description and guidelines — which is what a
+ * large set such as the browser's costs otherwise in every request. The model finds it with `tools`
+ * (search, describe, call) instead, so nothing is lost to it. It is a property of the tool and no
+ * switch: a lazy tool is on or off like any other, by the portal-wide default and the agent, project,
+ * routine and chat switches above it, and only a tool that is on is lazy. One that is off is off for
+ * good and no way leads to it.
  */
 export function lazyToolSets(): string[] {
   return parseToolsOff(getSetting("tools_lazy"));
 }
 
-/** The names of the tools the portal has seen in a lazy set: those `tools` can reach where they are off. */
+/**
+ * Can this tool be lazy? Any tool can, but an MCP server's and one of pi's own. The MCP adapter keeps a
+ * server's tools out of the prompt its own way, through its `mcp` tool, and pi's built-in tools (read,
+ * bash, edit and the rest) are what a conversation works with at all.
+ */
+export function lazyAllowed(
+  tool: Pick<KnownTool, "name" | "source"> & { package?: string | null; inline?: boolean; cached?: boolean },
+  servers: string[] = mcpServerNames(),
+): boolean {
+  if (tool.cached || adapterTool({ source: tool.source, package: tool.package })) return false;
+  if (!noServerOf(tool.name) && mcpServerOf(tool.name, servers) !== undefined) return false;
+  return toolSetOf(tool, servers) !== BUILT_IN_SET;
+}
+
+/** Does this mark name this tool: as a set it is filed in, or on its own? */
+const marksTool = (mark: string, tool: KnownTool, servers: string[]): boolean =>
+  mark === lazyToolEntry(tool.name) || mark === toolSetOf(tool, servers);
+
+/** The names of the tools the portal has seen that are marked lazy, as a set or on their own, and may be. */
 export function lazyToolNames(): Set<string> {
-  const sets = new Set(lazyToolSets());
-  if (!sets.size) return new Set();
+  const marks = lazyToolSets();
+  if (!marks.length) return new Set();
   const servers = mcpServerNames();
   return new Set(
     knownTools()
-      .filter((tool) => sets.has(toolSetOf(tool, servers)))
+      .filter((tool) => lazyAllowed(tool, servers) && marks.some((mark) => marksTool(mark, tool, servers)))
       .map((tool) => tool.name),
   );
 }
 
 /**
- * Make the sets in `sets` the lazy ones. A set that becomes lazy has the tools the portal has seen
- * of it put in the default as off. One that stops being lazy keeps its switches as they are: they
- * are what the settings page shows and the owner can change them, and "all on" is one click.
+ * Of these marks, the ones that cannot be lazy: a set or a tool of an MCP server or of pi's own. Judged
+ * by the tools the portal has seen of it; before it has seen one, by the name of the set. Any other mark is
+ * let through, as it holds for the tools that turn up.
  */
-export function setLazyToolSets(sets: string[]): { lazy: string[]; off: string[] } {
-  const before = new Set(lazyToolSets());
-  const lazy = clean(sets);
-  putSetting("tools_lazy", lazy.join("\n"));
-  const added = new Set(lazy.filter((set) => !before.has(set)));
-  if (added.size) {
-    const servers = mcpServerNames();
-    const names = knownTools()
-      .filter((tool) => added.has(toolSetOf(tool, servers)))
-      .map((tool) => tool.name);
-    if (names.length) setToolDefaultsOff([...toolDefaultsOff(), ...names]);
+export function lazyRefused(marks: string[]): string[] {
+  const servers = mcpServerNames();
+  const tools = knownTools();
+  return clean(marks).filter((mark) => {
+    const named = tools.filter((tool) => marksTool(mark, tool, servers));
+    if (named.length) return named.every((tool) => !lazyAllowed(tool, servers));
+    return mark === BUILT_IN_SET || servers.includes(mark);
+  });
+}
+
+/**
+ * What the lazy tools among `names` are called as sets, for the line that tells the model they exist:
+ * the name the settings page gives the box, once for each.
+ */
+export function lazySetLabels(names: Iterable<string>): string[] {
+  const wanted = new Set(names);
+  if (!wanted.size) return [];
+  const servers = mcpServerNames();
+  const given = toolGroupNames();
+  const labels = new Set<string>();
+  for (const tool of knownTools()) {
+    if (!wanted.has(tool.name)) continue;
+    const set = toolSetOf(tool, servers);
+    labels.add(given[set] ?? (set === PICTURES_SET ? "image" : set));
   }
-  return { lazy, off: toolDefaultsOff() };
+  return [...labels].sort();
+}
+
+/** Make exactly these the lazy marks: sets and single tools, as lazyToolSets lists them. */
+export function setLazyToolSets(marks: string[]): string[] {
+  const lazy = clean(marks);
+  putSetting("tools_lazy", lazy.join("\n"));
+  return lazy;
 }
 
 /**
@@ -2738,8 +2752,8 @@ export async function packageRemoved(source: string): Promise<void> {
  * session may have extensions this one does not, and an extension that is
  * merely not loaded today should not lose the default somebody set for it.
  *
- * Returns the tools that arrived in a lazy set and were put in the default as off, for a caller
- * that has conversations running which were started without knowing them.
+ * Returns the tools that arrived just now and are lazy, for a caller that has conversations running
+ * which were started without knowing them: they offer the tool one by one until they are told.
  */
 export function rememberTools(reported: KnownTool[]): string[] {
   // A session that still has a package loaded which has since been uninstalled
@@ -2793,23 +2807,8 @@ export function rememberTools(reported: KnownTool[]): string[] {
   // The first moment the browser's tools can be told apart from the rest, and
   // every moment a new one turns up.
   adoptBrowserGrants(getDb(), fresh);
-  return lazyArrivals(tools, fresh);
-}
-
-/**
- * The tools that turned up just now in a set that is lazy, put in the default as off.
- * Only the ones never seen before: one that is known has been decided about, in the
- * settings or by the mark, and a later report must not undo that. Returned so a caller
- * with conversations running can tell them.
- */
-function lazyArrivals(reported: KnownTool[], fresh: string[]): string[] {
-  const lazy = new Set(lazyToolSets());
-  if (!lazy.size || !fresh.length) return [];
-  const servers = mcpServerNames();
-  const arrived = new Set(fresh);
-  const names = reported.filter((tool) => arrived.has(tool.name) && lazy.has(toolSetOf(tool, servers))).map((tool) => tool.name);
-  if (names.length) setToolDefaultsOff([...toolDefaultsOff(), ...names]);
-  return names;
+  const lazy = lazyToolNames();
+  return fresh.filter((name) => lazy.has(name));
 }
 
 /**

@@ -260,8 +260,10 @@ export interface PortalTool {
   inline?: true;
   /** An MCP server's tool listed from the adapter's cache: the server starts when one of its tools is first used. */
   cached?: true;
-  /** Off in the list the model is given, and reached through the `tools` tool: a tool of a lazy set that nothing has switched on. */
+  /** Not in the list the model is given one by one but found through the `tools` tool: a tool marked lazy, on or off like any other. */
   lazy?: true;
+  /** Settings → Tools only: an MCP server's tool or one of pi's own, which cannot be made lazy. */
+  noLazy?: true;
 }
 
 /** A picture going with a message: a data: URL, which the box also shows it from. */
@@ -557,15 +559,15 @@ export const api = {
   /** Every tool the portal has seen, for setting a default without opening a chat. */
   toolDefaults: () =>
     json<{
-      tools: { name: string; source: string; defaultOn: boolean; inline?: true; lazy?: true }[];
+      tools: { name: string; source: string; defaultOn: boolean; inline?: true; lazy?: true; noLazy?: true }[];
       off: string[];
       names: Record<string, string>;
-      /** The tool sets that are opt-in: off in every conversation until one switches them on, and reached through the `tools` tool meanwhile. */
+      /** What is marked lazy: tool sets, and single tools as `<tool>name`. Opt-in; nothing is lazy until somebody marks it. */
       lazy?: string[];
     }>("/api/tools"),
-  /** Which tool sets are lazy, as the boxes of the tools list name them; their tools go into the default as off. */
+  /** Which tool sets and single tools (`<tool>name`) are lazy: not in the model's list one by one, found through the `tools` tool. */
   setLazyToolSets: (lazy: string[]) =>
-    json<{ lazy: string[]; off: string[]; applied: number }>("/api/tools/lazy", { method: "PUT", body: JSON.stringify({ lazy }) }),
+    json<{ lazy: string[]; applied: number }>("/api/tools/lazy", { method: "PUT", body: JSON.stringify({ lazy }) }),
   /** Which tools are off unless a conversation says otherwise. */
   setToolDefaults: (off: string[]) =>
     json<{ off: string[]; applied: number }>("/api/tools", { method: "PUT", body: JSON.stringify({ off }) }),

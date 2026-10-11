@@ -7,6 +7,9 @@ import { displayName, nextOff, sourceName, sourceOf } from "../tool-groups";
 import { isEnter, isEscape } from "../shortcuts";
 import { t } from "../i18n";
 
+/** How a single tool is marked lazy next to the sets; the server keys it the same way (lazyToolEntry). */
+const lazyEntry = (name: string): string => `<tool>${name}`;
+
 /**
  * Which tools every conversation starts with.
  *
@@ -21,7 +24,7 @@ import { t } from "../i18n";
  * wrong way round.
  */
 export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
-  const [tools, setTools] = useState<{ name: string; source: string; inline?: true }[]>([]);
+  const [tools, setTools] = useState<{ name: string; source: string; inline?: true; noLazy?: true }[]>([]);
   const [off, setOff] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   /** Why there is nothing to switch here, where the deployment cannot do it. */
@@ -31,7 +34,7 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
   const [tries, setTries] = useState(0);
   const [busy, setBusy] = useState(false);
   const [names, setNames] = useState<Record<string, string>>({});
-  /** The sets that are opt-in: off in every conversation until one switches them on. */
+  /** What is marked lazy: sets as the list keys them, and single tools as `<tool>name`. */
   const [lazy, setLazy] = useState<string[]>([]);
   /** The group being renamed, and what has been typed so far. */
   const [renaming, setRenaming] = useState<{ source: string; value: string } | null>(null);
@@ -70,18 +73,15 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
   };
 
   /**
-   * Make a set lazy, or ordinary again.
-   *
-   * Lazy puts its tools in the default as off, so what the list shows changes with the answer;
-   * ordinary leaves the switches as they were, and only the tools that turn up later follow the default.
+   * Make a set or a single tool lazy, or ordinary again. Lazy touches no switch: the tool stays on or
+   * off as it was, and only the model's list changes.
    */
-  const flipLazy = async (source: string) => {
-    const wanted = lazy.includes(source) ? lazy.filter((s) => s !== source) : [...lazy, source];
+  const flipLazy = async (entry: string) => {
+    const wanted = lazy.includes(entry) ? lazy.filter((s) => s !== entry) : [...lazy, entry];
     setBusy(true);
     try {
       const r = await api.setLazyToolSets(wanted);
       setLazy(r.lazy);
-      setOff(r.off);
     } catch (e) {
       onError((e as Error).message);
     } finally {
@@ -153,9 +153,11 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
             tools={tools.map((tool) => ({
               ...tool,
               enabled: !off.includes(tool.name),
-              // Of a lazy set and off here: reached through the `tools` tool, which the list says beside it.
-              lazy: lazy.includes(sourceOf(tool)) && off.includes(tool.name) ? (true as const) : undefined,
+              // Marked as a set or on its own: found through the `tools` tool, which the list says beside it.
+              lazy: !tool.noLazy && (lazy.includes(sourceOf(tool)) || lazy.includes(lazyEntry(tool.name))) ? (true as const) : undefined,
             }))}
+            onLazy={(tool) => flipLazy(lazyEntry(tool.name))}
+            lazyFixed={(tool) => lazy.includes(sourceOf(tool))}
             names={names}
             busy={busy}
             onFlip={flip}
@@ -202,19 +204,22 @@ export function ToolDefaults({ onError }: { onError: (e: string) => void }) {
             // Only here, not in the chat popover: naming a thing is a settings decision, and the popover is for one chat.
             beside={(group) => (
               <>
-                <button
-                  type="button"
-                  disabled={busy}
-                  aria-pressed={lazy.includes(group.source)}
-                  onClick={() => flipLazy(group.source)}
-                  title={t("Lazy: off in every chat until one switches it on. Its tools are not in the model's list one by one; the model finds and calls them through the `tools` tool, so nothing in the set is lost to it. A project, an agent, a routine or a chat can switch them on to have them listed. Tools that turn up later start lazy too; ending it leaves the switches as they are, and its tools are then off for good.")}
-                  aria-label={t("Lazy {name}", { name: displayName(group.source, names) })}
-                  className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] transition hover:bg-fg/5 disabled:opacity-50 ${
-                    lazy.includes(group.source) ? "bg-accent/15 text-accent" : "text-fg-subtle hover:text-fg"
-                  }`}
-                >
-                  {t("lazy")}
-                </button>
+                {/* Not for the tools an MCP server brings or pi has built in: those cannot be lazy. */}
+                {group.tools.some((tool) => !tool.noLazy) && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-pressed={lazy.includes(group.source)}
+                    onClick={() => flipLazy(group.source)}
+                    title={t("Lazy: its tools are not in the model's list one by one; the model finds and calls them through the `tools` tool, so nothing in the set is lost to it. They stay on or off as they are; an off tool is not reachable that way. Tools that turn up later start lazy too.")}
+                    aria-label={t("Lazy {name}", { name: displayName(group.source, names) })}
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] transition hover:bg-fg/5 disabled:opacity-50 ${
+                      lazy.includes(group.source) ? "bg-accent/15 text-accent" : "text-fg-subtle hover:text-fg"
+                    }`}
+                  >
+                    {t("lazy")}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setRenaming({ source: group.source, value: names[group.source] ?? "" })}

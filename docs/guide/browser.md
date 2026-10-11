@@ -219,12 +219,13 @@ second one to keep in step with it.
 :::
 
 ::: tip Not in the prompt until it is wanted
-The browser's tools are a large set, and while they are on they sit in the prompt of every chat.
-Mark the group **lazy** in **Settings → Tools** and no chat is offered them one by one: the agent finds
-and calls them through the `tools` tool, so a chat that never opens a page carries none of their
-schemas. A project, an agent, a routine or the chat itself can still switch them on to have them listed.
-Lazy tools are reached through the `tools` tool, and a call is held to the allowlist and the other rules
-exactly as a direct one: see [Lazy tool sets](/guide/extensions#lazy-tool-sets).
+The browser's tools are a large set, and while they are on they sit in the prompt of every chat. They
+are not lazy unless you make them so: mark the group **lazy** in **Settings → Tools** and no chat is
+offered them one by one. The agent is told it has browser tools, and finds and calls them through the
+`tools` tool, so a chat that never opens a page carries none of their schemas. A lazy tool is still on
+like any other: a call is held to the allowlist and the other rules exactly as a direct one, and a
+switch that turns the browser off for a chat turns it off here too. This is for the portal's own browser tools;
+a browser attached as an MCP server cannot be lazy. See [Lazy tools](/guide/extensions#lazy-tools).
 :::
 
 Deliberately **not** gated on who is speaking. The agent has its own accounts and

@@ -84,7 +84,7 @@ function untrustedResult(toolName: string, input: Record<string, unknown>): bool
  *
  * The `tools` tool, which reaches a conversation's lazy tools, is another such way: `tools({ action:
  * "call", name })` runs the tool of that name, so it is held to the switches the same, for any tool and
- * not only a server's. A tool that is lazy is not in `off`: that is what it is reached through it for.
+ * not only a server's. A lazy tool is on, and so not in `off`; one that is off is refused, lazy or not.
  */
 export function switchedOffVia(
   toolName: string,

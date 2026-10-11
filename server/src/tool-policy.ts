@@ -108,8 +108,8 @@ export const PICTURES_SET = "<portal:images>";
 /** Showing a picture, making one, changing one: the tools that make up PICTURES_SET. */
 const PICTURE_TOOLS = ["show_image", "generate_image", "edit_image"];
 
-/** What the web app calls the tools that say nothing about where they came from. */
-const BUILT_IN_SET = "built in";
+/** What the web app calls the tools that say nothing about where they came from: pi's own among them. */
+export const BUILT_IN_SET = "built in";
 
 /**
  * The tool set a tool belongs to: the box the tool lists show it in, which is also what
@@ -139,36 +139,10 @@ export function toolEnabled(
 }
 
 /**
- * The tools that a stack of layers switched off for good: the last layer to say anything about a
- * tool says "off". Layers go from the outermost (agent) to the conversation's own.
+ * How a single tool is marked lazy in the list of marks, which holds tool sets as well. Brackets, as
+ * no package, file or MCP server is called, so a set cannot be taken for a tool.
  */
-export function switchedOffIn(layers: Iterable<ToolExceptions>): Set<string> {
-  const off = new Set<string>();
-  for (const layer of layers) {
-    for (const name of layer.off) off.add(name);
-    for (const name of layer.on) off.delete(name);
-  }
-  return off;
-}
-
-/**
- * Is this tool lazy for a conversation: off in what the model is offered, and reached through the
- * `tools` tool?
- *
- * Only a tool of a lazy set that is off because the defaults leave it off. One that a layer
- * switched off itself (`explicitOff`, from switchedOffIn: the agent, the project, the routine or the
- * conversation) is off, not lazy: somebody said they do not want it, and a way to it through the
- * gateway would be a way round that.
- */
-export function toolLazy(
-  name: string,
-  lazyTools: ReadonlySet<string>,
-  defaultsOff: Iterable<string>,
-  exceptions: ToolExceptions,
-  explicitOff: ReadonlySet<string> = new Set(exceptions.off)
-): boolean {
-  return lazyTools.has(name) && !toolEnabled(name, defaultsOff, exceptions) && !explicitOff.has(name);
-}
+export const lazyToolEntry = (name: string): string => `<tool>${name}`;
 
 /**
  * The tools that are off by default for a project: the portal-wide default,
@@ -217,10 +191,6 @@ export function heldOffUnshown(wantedOff: Iterable<string>, shown: Iterable<stri
  * somebody switched here on purpose is theirs, even where the default has since
  * come to agree with it: dropping it on the next unrelated flip would leave a
  * chat that follows whatever the default does next, when it was told not to.
- *
- * A lazy tool is off by default, and "off" for it means "reached through the gateway". Switched on
- * here and then off again, the "on" is dropped and nothing is written: it is lazy once more. The
- * layer's own "off" is only kept where it was held (the layer said it before the set was lazy).
  */
 export function exceptionsFor(
   wantedOff: Iterable<string>,

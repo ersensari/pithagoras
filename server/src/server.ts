@@ -40,7 +40,6 @@ import {
   setRoutineBrowserSwitch,
   seenBrowserTools,
   toolDefaultsFor,
-  toolLayersFor,
   setContextLimit,
   setDefaultContextLimit,
   setProjectTools,
@@ -50,6 +49,8 @@ import {
   shownStoredSettings,
   shownTools,
   toolDefaultsOff,
+  lazyAllowed,
+  lazyRefused,
   lazyToolNames,
   lazyToolSets,
   setLazyToolSets,
@@ -69,7 +70,7 @@ import { deleteNotesOf } from "./activity.js";
 import { EXECUTOR_KIND } from "./executor-kind.js";
 import { sessions, CommandFailed, IMAGE_ROOT } from "./session-manager.js";
 import { ImageError, MAX_IMAGE_BYTES, MAX_IMAGES, imagePath, mimeOf, parseImages, saveImages } from "./prompt-images.js";
-import { defaultsFor, exceptionsFor, heldOffUnshown, switchedOffIn, toolEnabled, toolLazy, toolSource } from "./tool-policy.js";
+import { defaultsFor, exceptionsFor, heldOffUnshown, toolEnabled, toolSource } from "./tool-policy.js";
 import { mcpRouter, mcpServerNames, onMcpWritten } from "./api/mcp.js";
 import { authEnabled, checkPassword, isAuthed, issueCookie, keptShortPassword, requireAuth, signOut } from "./auth.js";
 import { packagesRouter } from "./api/packages.js";
@@ -443,7 +444,7 @@ app.get("/api/projects/:name/tools", (req, res) => {
   try {
     const project = getProject(WORKSPACE_ROOT, req.params.name);
     if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
-    res.json(layerTools(project.path, toolDefaultsFor(project.path, null, "project"), projectTools(project.name), toolLayersFor(project.path, null, "project")));
+    res.json(layerTools(project.path, toolDefaultsFor(project.path, null, "project"), projectTools(project.name)));
   } catch (e) {
     projectFailure(res, e);
   }
@@ -477,18 +478,16 @@ app.put("/api/projects/:name/tools", async (req, res) => {
  * layers under it say, which is what this one disagrees with. Shaped like a
  * project's and a chat's, so the page draws them all the same way.
  */
-function layerTools(folder: string, below: string[], exceptions: { off: string[]; on: string[] }, layersBelow: { off: string[]; on: string[] }[]) {
+function layerTools(folder: string, below: string[], exceptions: { off: string[]; on: string[] }) {
   const servers = mcpServerNames();
   const lazy = lazyToolNames();
-  // A tool that this layer or one under it switched off is off for good, not lazy.
-  const explicit = switchedOffIn([...layersBelow, exceptions]);
   return {
     tools: shownTools(folder).map((tool) => ({
       ...tool,
       source: toolSource(tool.name, tool.source, servers),
       enabled: toolEnabled(tool.name, below, exceptions),
       defaultOn: !below.includes(tool.name),
-      ...(toolLazy(tool.name, lazy, below, exceptions, explicit) ? { lazy: true as const } : {}),
+      ...(lazy.has(tool.name) ? { lazy: true as const } : {}),
     })),
     live: false,
     names: toolGroupNames(),
@@ -513,7 +512,7 @@ app.get("/api/agents/:id/tools", (req, res) => {
   const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: "No such agent" });
   if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
-  res.json(layerTools(agent.home, toolDefaultsFor(agent.home, null, "agent"), agentTools(agent.id), []));
+  res.json(layerTools(agent.home, toolDefaultsFor(agent.home, null, "agent"), agentTools(agent.id)));
 });
 
 app.put("/api/agents/:id/tools", async (req, res) => {
@@ -550,7 +549,7 @@ app.get("/api/routines/:id/tools", (req, res) => {
   if (!routine) return res.status(404).json({ error: "Not found" });
   if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
   if ("error" in routine) return res.status(409).json({ error: routine.error });
-  res.json(layerTools(routine.folder, toolDefaultsFor(routine.folder, null, "routine"), routineTools(routine.slug), toolLayersFor(routine.folder, null, "routine")));
+  res.json(layerTools(routine.folder, toolDefaultsFor(routine.folder, null, "routine"), routineTools(routine.slug)));
 });
 
 app.put("/api/routines/:id/tools", async (req, res) => {
@@ -1059,8 +1058,10 @@ app.get("/api/tools", (_req, res) => {
       ...tool,
       source: toolSource(tool.name, tool.source, servers),
       defaultOn: !off.has(tool.name),
-      // Off by default and reached through the `tools` tool, rather than off for good.
-      ...(lazy.has(tool.name) && off.has(tool.name) ? { lazy: true as const } : {}),
+      // Not offered one by one, but found through the `tools` tool.
+      ...(lazy.has(tool.name) ? { lazy: true as const } : {}),
+      // An MCP server's tool or one of pi's own: the page offers no lazy mark for it.
+      ...(lazyAllowed(tool, servers) ? {} : { noLazy: true as const }),
     })),
     off: [...off].sort(),
     names: toolGroupNames(),
@@ -1096,17 +1097,24 @@ app.put("/api/tools", async (req, res) => {
 });
 
 /**
- * Which tool sets are lazy: off for every conversation until one switches them on, and so not in
- * the model's prompt before that. The sets are the boxes of the tools list, named as it names them.
- * Marking one puts its tools in the default as off, which reaches the running conversations too.
+ * Which tools are lazy: tool sets, named as the boxes of the tools list name them, and single tools
+ * (`<tool>name`). A lazy tool is on like any other, but is not in the model's prompt: it finds it
+ * through the `tools` tool. The marks reach the running conversations too. An MCP server's tools and
+ * pi's own cannot be lazy, and a mark that names them is refused.
  */
 app.put("/api/tools/lazy", async (req, res) => {
   if (EXECUTOR_KIND === "container") return res.status(400).json(toolsUnsupported);
   const lazy = req.body?.lazy;
   if (!isToolList(lazy)) return res.status(400).json({ error: "lazy must be a list of tool set names" });
+  // Only what is new is checked: a mark kept from before must not stand in the way of an unrelated change.
+  const before = lazyToolSets();
+  const refused = lazyRefused(lazy.filter((mark) => !before.includes(mark)));
+  if (refused.length) {
+    return res.status(400).json({ error: `Cannot be lazy: ${refused.join(", ")}. An MCP server's tools and pi's built-in tools are always offered.`, code: "lazy-refused" });
+  }
   const stored = setLazyToolSets(lazy);
   const applied = await sessions.applyToolDefaults();
-  res.json({ ...stored, applied });
+  res.json({ lazy: stored, applied });
 });
 
 app.post("/api/sessions/:id/abort", async (req, res) => {

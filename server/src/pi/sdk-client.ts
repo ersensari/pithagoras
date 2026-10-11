@@ -371,8 +371,10 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     role?: string;
     /** Tools this conversation has switched off, by name. */
     toolsOff?: string[];
-    /** Of those, the ones that are lazy: not offered one by one, and reached through the `tools` tool instead. */
+    /** The tools that are on and lazy: not offered one by one, and found through the `tools` tool instead. */
     toolsLazy?: string[];
+    /** What the lazy tools are called as sets, for the one line that tells the model they exist. */
+    lazySets?: string[];
     /** The portal's session id, for tools that record against it. */
     sessionId?: string;
     /** False lets a run act on what it read — see guardExtension. */
@@ -402,9 +404,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     const settingsManager = pi.SettingsManager.create(opts.cwd, pi.getAgentDir());
     // What the conversation has switched off: the client's, once there is one.
     let switchedOff: () => ReadonlySet<string> = () => new Set(opts.toolsOff ?? []);
-    // What is off for good: the lazy tools are off in the model's list and open to the `tools` tool, so the guard is told only of the rest.
-    let hardOff: () => ReadonlySet<string> = () => new Set((opts.toolsOff ?? []).filter((name) => !opts.toolsLazy?.includes(name)));
-    const gateway = new ToolsGateway();
+    const gateway = new ToolsGateway(opts.lazySets);
     // Whether the model has the tool is settled when pi loads it and by the tool switches: the rule says
     // so only while it has — and it is the portal's, not an extension's of the same name that pi keeps.
     const imageTool = opts.sessionId ? new GenerateImageTool(opts.cwd, () => resourceLoader?.getExtensions?.().extensions ?? [], opts.sessionId) : undefined;
@@ -437,7 +437,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
             opts.browserNow ?? (() => ({ allowed: false, allowlist: [] })),
             opts.cwd,
             [path.join(pi.getAgentDir(), "skills"), ...(builtinSkills ? [builtinSkills] : [])],
-            () => hardOff(),
+            () => switchedOff(),
           ) },
         // Offered only while the conversation has a lazy tool: see applyToolsOff.
         { name: "tools-gateway", factory: gateway.extension },
@@ -560,8 +560,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
 
     const client = new SdkPiClient(session, modelRuntime, () => {});
     switchedOff = () => client.switchedOff;
-    hardOff = () => client.hardOff;
-    gateway.attach({ session: () => session, lazy: () => client.lazy, off: () => client.hardOff });
+    gateway.attach({ session: () => session, lazy: () => client.lazy, off: () => client.switchedOff });
     client.portalSessionId = opts.sessionId;
     client.canvases = canvases;
     if (eventBus && resourceLoader) {
@@ -605,7 +604,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     // command that asks the user something silently does nothing.
 
     client.switchedOff = new Set(opts.toolsOff ?? []);
-    client.lazy = new Set(opts.toolsLazy ?? []);
+    client.lazy = new Set((opts.toolsLazy ?? []).filter((name) => !client.switchedOff.has(name)));
+    client.gateway = gateway;
     try {
       await session.bindExtensions({
         uiContext: client.buildUiContext(),
@@ -662,7 +662,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     client.applyLimitQuietly();
     // After binding, not before: a tool an extension registers does not exist
     // until then, and switching it off ahead of time switches off nothing.
-    // Also with nothing switched off: the gateway is registered active, and is for the lazy tools to bring in.
+    // Also with nothing switched off: the gateway is registered active, and is only wanted while a tool is lazy.
     client.applyToolsOff();
     return client;
   }
@@ -1139,16 +1139,13 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   switchedOff = new Set<string>();
 
   /**
-   * Of those, the ones that are lazy: out of the model's list like the rest, and reached through the
-   * `tools` tool. A subset of `switchedOff`, so every path that keeps a switched-off tool inactive keeps
-   * these inactive too.
+   * The tools that are on and lazy: out of the model's list, and found and called through the `tools`
+   * tool. Never in `switchedOff`: a lazy tool that is switched off is off for good, and no way leads to it.
    */
   lazy = new Set<string>();
 
-  /** Off for good: what the guard holds a call to, and the `tools` tool refuses. */
-  get hardOff(): ReadonlySet<string> {
-    return new Set([...this.switchedOff].filter((name) => !this.lazy.has(name)));
-  }
+  /** The `tools` tool of this session, which is told what the lazy tools are called. */
+  gateway?: ToolsGateway;
 
   /** Whether the session has a lazy tool for the gateway to reach. */
   private hasLazy(): boolean {
@@ -1163,11 +1160,12 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   /**
    * Whether pi keeps this tool out of what the model is offered.
    *
-   * The switched-off tools, and the gateway while there is no lazy tool to reach through it: a tool
-   * that lists nothing is noise in the prompt of every conversation, which is what lazy tools avoid.
+   * The switched-off tools, the lazy ones (the gateway offers those instead), and the gateway while
+   * there is no lazy tool to reach through it: a tool that lists nothing is noise in the prompt of
+   * every conversation, which is what lazy tools avoid.
    */
   private keptOut(name: string): boolean {
-    return this.switchedOff.has(name) || (name === GATEWAY_TOOL && !this.hasLazy());
+    return this.switchedOff.has(name) || this.lazy.has(name) || (name === GATEWAY_TOOL && !this.hasLazy());
   }
 
   /**
@@ -1308,17 +1306,20 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   }
 
   /**
-   * Switch tools off by name; `lazy`, a subset of them, are the ones the model reaches through the `tools`
-   * tool instead of being offered them.
+   * Switch tools off by name. `lazy` are tools that stay on but are not offered one by one: the model
+   * finds them through the `tools` tool, and `sets` says what they are called, for the hint to the model.
    *
    * Named rather than listing what stays: pi wants the active set, but that is
    * a snapshot, and a tool registered later would silently never be on. The
    * active set is computed from what pi wants right now, every time.
    */
-  async setToolsOff(names: string[], lazy: string[] = []): Promise<void> {
+  async setToolsOff(names: string[], lazy: { tools: string[]; sets: string[] } = { tools: [], sets: [] }): Promise<void> {
     this.switchedOff = new Set(names);
-    this.lazy = new Set(lazy.filter((name) => this.switchedOff.has(name)));
+    this.lazy = new Set(lazy.tools.filter((name) => !this.switchedOff.has(name)));
     this.applyToolsOff();
+    // After the switches: registering the tool again has pi set its active tools, and by then the
+    // tools that are wanted again must be active already, or they are dropped from what is wanted.
+    this.gateway?.hint(lazy.sets);
     // What the rule says of a tool that is switched off or on is for the next message, as for a reload.
     this.sayAudioRuleAgain();
   }
@@ -1446,7 +1447,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     this.applyLimitQuietly();
     // And has pi switch every extension tool back on — which is every MCP tool,
     // the browser's among them. The switches are the portal's to keep.
-    if (this.switchedOff.size) this.applyToolsOff();
+    this.applyToolsOff();
     this.sayAudioRuleAgain();
   }
 

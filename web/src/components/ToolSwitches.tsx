@@ -115,14 +115,6 @@ export function ToolSwitches(
     try {
       const r = await (layer ? layer.set(wanted) : api.setTools(sessionId, wanted));
       setOff(r.off);
-      // Whether a tool is lazy follows from what the server stored (on and then off is lazy again,
-      // an off of its own is not), so the list is read once more rather than guessed at here.
-      // Kept busy meanwhile, so no further switch is overwritten by this answer. The switch itself is saved; a failed read leaves the list as it is.
-      try {
-        setTools((await (layer ? layer.get() : api.tools(sessionId))).tools);
-      } catch {
-        /* the save took */
-      }
     } catch (e) {
       // Put it back rather than showing a switch that did not take, and say why.
       setOff(before.off);

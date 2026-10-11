@@ -10,7 +10,8 @@ import { GATEWAY_TOOL } from "./tools-gateway-names.js";
  * conversation that never needs it. This is how the model reaches it when it does: it searches by what
  * the tool does, asks for the parameters of the one it found, and calls it. The portal offers the tool
  * only while the conversation has a lazy tool, and the tools are the conversation's own, not a second
- * list: what is switched off stays off here.
+ * list: what is switched off stays off here. A lazy tool is a tool that is on in every other respect; it
+ * is only not in the list.
  *
  * A call is the same call as a direct one. pi puts every call through the extensions' hooks, the guard's
  * among them, and a call made from inside a tool would skip them, so the hooks are run here for the tool
@@ -22,9 +23,9 @@ import { GATEWAY_TOOL } from "./tools-gateway-names.js";
 export interface GatewayHost {
   /** pi's session: the tool definitions, and the extensions' hooks that a call is put through. */
   session: () => any;
-  /** The tools that are reached only through the gateway. */
+  /** The tools that are on and reached only through the gateway. */
   lazy: () => ReadonlySet<string>;
-  /** The tools switched off for good, which no way leads to. */
+  /** The tools switched off, which no way leads to. */
   off: () => ReadonlySet<string>;
 }
 
@@ -75,8 +76,37 @@ const textOf = (content: unknown): string =>
     .map((part: any) => part.text)
     .join("\n");
 
+/**
+ * The one line that tells the model which lazy tools exist, by the names of their sets: the tools are not
+ * in its list, and a model that does not know of them says it cannot do what they do.
+ */
+export function lazyHint(sets: readonly string[]): string {
+  if (!sets.length) return `Some tools are not in your list one by one. Search them with the ${GATEWAY_TOOL} tool before you say you cannot do something.`;
+  const list = sets.length > 1 ? `${sets.slice(0, -1).join(", ")} and ${sets[sets.length - 1]}` : sets[0];
+  return `You have ${list} tools; search for them with the ${GATEWAY_TOOL} tool.`;
+}
+
 export class ToolsGateway {
   private host?: GatewayHost;
+  /** The extension API of the runner that has the tool registered, to register it again when the hint changes. */
+  private api?: any;
+
+  constructor(private sets: string[] = []) {}
+
+  /**
+   * Say which sets the lazy tools are in. The hint is part of the tool's registration, so a change
+   * registers the tool again, which has pi read its description and guidelines afresh.
+   */
+  hint(sets: string[]): void {
+    const same = sets.length === this.sets.length && sets.every((set, i) => set === this.sets[i]);
+    this.sets = sets;
+    if (same || !this.api) return;
+    try {
+      this.register(this.api);
+    } catch (e) {
+      console.error(`[portal] could not update the hint of the ${GATEWAY_TOOL} tool: ${(e as Error).message}`);
+    }
+  }
 
   /** Once the session exists: the extension is registered before it does. */
   attach(host: GatewayHost): void {
@@ -189,6 +219,11 @@ export class ToolsGateway {
 
   /** An ExtensionFactory — see pi's InlineExtension. */
   extension = (pi: any): void => {
+    this.api = pi;
+    this.register(pi);
+  };
+
+  private register(pi: any): void {
     pi.registerTool({
       name: GATEWAY_TOOL,
       label: "Tools",
@@ -199,8 +234,7 @@ export class ToolsGateway {
         "\"call\" runs one (name, and args: an object of its arguments). Describe a tool before the first call of it.",
       promptSnippet: `${GATEWAY_TOOL} — search, describe and call the tools that are kept out of this list`,
       promptGuidelines: [
-        `Some tools are not in your list one by one. Before you tell anybody you cannot do something, search them with ${GATEWAY_TOOL}; ` +
-          "a tool it finds is described for its parameters and then called through it.",
+        `${lazyHint(this.sets)} A tool it finds is described for its parameters and then called through it.`,
       ],
       parameters: Type.Object({
         action: Type.Union([Type.Literal("search"), Type.Literal("describe"), Type.Literal("call")], {
@@ -228,5 +262,5 @@ export class ToolsGateway {
         }
       },
     });
-  };
+  }
 }

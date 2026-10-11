@@ -6,8 +6,9 @@ import { fakeModel, resultsIn } from "./fake-model.mjs";
 import { inProcessHome } from "./server-harness.mjs";
 
 /**
- * The `tools` tool as pi runs it: lazy tools kept out of what the model is offered, found, described
- * and called through the one tool, with the guard holding the calls to the same rules as direct ones.
+ * The `tools` tool as pi runs it: lazy tools (on, but kept out of what the model is offered) found,
+ * described and called through the one tool, with the guard holding the calls to the same rules as
+ * direct ones. A tool that is off is off for good and is not reachable that way.
  * Real pi and the portal's own client, a model that asks for what the script says.
  */
 const home = inProcessHome("pithagoras-tools-gateway-");
@@ -99,7 +100,7 @@ async function run(calls, options = {}) {
   }
 }
 const textOf = (result) => JSON.stringify(result.result);
-const lazy = { toolsOff: ["docs_open", "docs_export"], toolsLazy: ["docs_open", "docs_export"] };
+const lazy = { toolsLazy: ["docs_open", "docs_export"], lazySets: ["docs"] };
 const via = (action, rest = {}) => ({ name: "tools", args: { action, ...rest } });
 
 test("a lazy tool is not offered one by one, and the tools tool is, in its place", async () => {
@@ -158,8 +159,7 @@ test("a call without what the tool requires says what is missing, and does not r
 });
 
 test("a call is validated and coerced as pi does a direct one", async () => {
-  const toolsOff = ["num_scroll"];
-  const options = { toolsOff, toolsLazy: toolsOff };
+  const options = { toolsLazy: ["num_scroll"] };
   const bad = await run([via("call", { name: "num_scroll", args: { amount: "300", mode: "sideways" } })], options);
   assert.equal(bad.results[0].isError, true);
   assert.match(textOf(bad.results[0]), /Validation failed.*mode/);
@@ -175,7 +175,7 @@ test("the arguments of a call may be the JSON text of an object", async () => {
 });
 
 test("a tool that is switched off is refused by the guard, however the call is made", async () => {
-  const off = { toolsOff: ["docs_open", "docs_export", "secret_delete"], toolsLazy: ["docs_open", "docs_export"] };
+  const off = { toolsOff: ["secret_delete"], toolsLazy: ["docs_open", "docs_export"] };
   const { results } = await run([via("call", { name: "secret_delete", args: { id: "doc-1" } }), via("describe", { name: "secret_delete" })], off);
   assert.equal(results.length, 2);
   for (const result of results) {
@@ -195,7 +195,7 @@ test("a tool that is on is not called through the tools tool: it has its own nam
 test("a lazy tool's result is wrapped as somebody else's words, and the next push is refused", async () => {
   const { results } = await run(
     [via("call", { name: "mcp_page", args: { url: "https://example.test" } }), { name: "bash", args: { command: "git push origin main" } }],
-    { toolsOff: ["mcp_page"], toolsLazy: ["mcp_page"] },
+    { toolsLazy: ["mcp_page"] },
   );
   assert.equal(results.length, 2);
   assert.match(textOf(results[0]), /<<<untrusted:[0-9a-f]{16}>>>/, "the guard saw the result of the tool it was called through");
@@ -229,13 +229,17 @@ test("switching the lazy tools on later offers them one by one, and the tools to
     };
     const before = await ask();
     assert.ok(before.includes("tools") && !before.includes("docs_open"));
-    await client.setToolsOff([], []);
+    await client.setToolsOff([], { tools: [], sets: [] });
     const after = await ask();
     assert.ok(after.includes("docs_open") && after.includes("docs_export"));
     assert.ok(!after.includes("tools"), "nothing is lazy any more");
-    await client.setToolsOff(["docs_open"], ["docs_open"]);
+    await client.setToolsOff([], { tools: ["docs_open"], sets: ["docs"] });
     const again = await ask();
     assert.ok(again.includes("tools") && !again.includes("docs_open") && again.includes("docs_export"));
+    // Off is off for good: the tool is in neither list, and with nothing lazy left the gateway goes.
+    await client.setToolsOff(["docs_open"], { tools: ["docs_open"], sets: ["docs"] });
+    const gone = await ask();
+    assert.ok(!gone.includes("tools") && !gone.includes("docs_open") && gone.includes("docs_export"));
     // The gateway is no tool of the user's to switch.
     assert.ok(!(await client.getTools()).some((t) => t.name === "tools"));
   } finally {
@@ -253,4 +257,47 @@ test("the guard holds the tools tool to the switches for a call and a descriptio
   assert.equal(switchedOffVia("tools", { action: "call", name: "notes_add" }, off), undefined);
   assert.equal(switchedOffVia("tools", { action: "call" }, off), undefined);
   assert.equal(switchedOffVia("tools", { action: "call", name: "docs_open" }, new Set()), undefined);
+});
+
+test("a tool made lazy that is not an MCP tool nor built in is not offered, but a search finds it and a call runs it", async () => {
+  const { requests, results } = await run(
+    [via("search", { query: "scroll" }), via("call", { name: "num_scroll", args: { amount: 5 } })],
+    { toolsLazy: ["num_scroll"], lazySets: ["scrolling"] },
+  );
+  assert.ok(!names(requests[0]).includes("num_scroll"));
+  assert.ok(names(requests[0]).includes("tools"));
+  assert.match(textOf(results[0]), /num_scroll: Scroll by an amount\./);
+  assert.match(textOf(results[1]), /amount is number 5/);
+});
+
+test("a lazy tool that is also switched off stays out of reach: not found, not described, not called", async () => {
+  const { results, requests } = await run(
+    [via("search", { query: "pdf" }), via("describe", { name: "docs_export" }), via("call", { name: "docs_export", args: { id: "1" } })],
+    { toolsOff: ["docs_export"], toolsLazy: ["docs_open", "docs_export"], lazySets: ["docs"] },
+  );
+  assert.ok(!names(requests[0]).includes("docs_export"));
+  assert.match(textOf(results[0]), /No lazy tool matches/);
+  for (const result of results.slice(1)) {
+    assert.equal(result.isError, true);
+    assert.match(textOf(result), /switched off in this conversation, and the tools tool does not reach it/);
+  }
+});
+
+test("the model is told which lazy sets it has, and only while something is lazy", async () => {
+  const hinted = await run([], { ...lazy, lazySets: ["browser", "docs"] });
+  assert.match(JSON.stringify(hinted.requests[0]), /You have browser and docs tools; search for them with the tools tool\./);
+  const plain = await run([], {});
+  assert.doesNotMatch(JSON.stringify(plain.requests[0]), /search for them with the tools tool|Search them with the tools tool/);
+  assert.ok(!names(plain.requests[0]).includes("tools"));
+  // Nothing lazy, whatever the sets say.
+  const none = await run([], { lazySets: ["browser"] });
+  assert.ok(!names(none.requests[0]).includes("tools"));
+  assert.doesNotMatch(JSON.stringify(none.requests[0]), /search for them with the tools tool/);
+});
+
+test("a tool that is lazy answers a call exactly as it does when called directly", async () => {
+  const direct = await run([{ name: "docs_open", args: { id: "d-1" } }], {});
+  const through = await run([via("call", { name: "docs_open", args: { id: "d-1" } })], lazy);
+  assert.equal(direct.results[0].isError, through.results[0].isError);
+  assert.equal(textOf(direct.results[0]), textOf(through.results[0]));
 });

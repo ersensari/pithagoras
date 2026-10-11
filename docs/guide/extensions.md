@@ -251,19 +251,34 @@ way round. It fills in as soon as any conversation has run.
 A switch for a tool that is not loaded right now is kept, so reinstalling an
 extension does not quietly bring back something you turned off.
 
-### Lazy tool sets
+### Lazy tools
 
-A tool set that is switched on costs the model its schemas, descriptions and rules in
-**every** request, whether or not the conversation ever uses it. For a large set such as the
-[browser](/guide/browser)'s eleven tools that is a few thousand tokens in each chat. A set that is
-**lazy** costs none of that until it is needed: its tools are not offered one by one, and the model
-reaches them through a single tool, `tools`.
+A tool that is switched on costs the model its schema, description and rules in **every** request,
+whether or not the conversation ever uses it. For a large set such as the [browser](/guide/browser)'s
+eleven tools that is a few thousand tokens in each chat. A tool that is **lazy** costs none of that until
+it is needed: it is not in the model's list, and the model finds it through a single tool, `tools`.
 
-**Settings → Tools** has a **lazy** button on the header of each group (a package, an MCP server,
-the browser, the **Images** group). Marking a group puts its tools in the default as off, so
-no chat is offered them one by one, and each of them shows a **lazy** label in the list. Lazy tools
-are reached through the `tools` tool, which the conversation is offered only while it has a lazy
-tool, so a portal with nothing lazy has no extra tool in any prompt. It has three actions:
+**Nothing is lazy by default.** The portal marks no tool and no set on its own, so a portal behaves
+as it always did until you choose.
+
+**Settings → Tools** has a **lazy** button on the header of each group (a package, the browser, the
+**Images** group) and one beside each tool. Marking a group makes every tool of it lazy, including tools
+that turn up in it later; marking a tool makes that one lazy. Taking the mark away offers the tool one by
+one again.
+
+Any tool can be made lazy except an MCP server's and pi's own built-in ones (`read`, `bash`, `edit`,
+`write` and the rest of the **built in** group). They have no lazy button, and the portal refuses a mark
+that names them. An MCP server has a way of its own to keep its tools out of the prompt, through the
+[MCP adapter](/guide/mcp), and the built-in tools are what every conversation works with.
+
+Lazy is not a switch. A lazy tool is **on** like any other, and behaves exactly like one: it is run by
+the same code, held to the same [guard](/guide/security) (the [browser](/guide/browser)'s allowlist, the
+rules after untrusted content, what a colleague may run), its arguments are checked and converted as for
+a direct call, and its result is wrapped as somebody else's words where it would be. The one difference
+is that the model is not shown it up front. The model is shown one short line instead, naming the lazy
+sets, for example "You have browser tools; search for them with the tools tool."
+
+The `tools` tool has three actions:
 
 | Action | What it does |
 | --- | --- |
@@ -271,32 +286,19 @@ tool, so a portal with nothing lazy has no extra tool in any prompt. It has thre
 | `describe` | `name`: the tool's full description and its parameters as a JSON schema |
 | `call` | `name` and `args` (an object, or its JSON text): runs the tool and returns its result |
 
-The model describes a tool before it first calls it, so a schema is in the conversation only for a
-tool that is used. A call through `tools` is held to the same rules as a direct one: the
-[guard](/guide/security) runs on the tool that is called, with its own name and arguments, so the
-[browser](/guide/browser)'s allowlist, the rules after untrusted content and what a colleague may run
-apply unchanged, and the result is wrapped as somebody else's words where it would be. The arguments are checked against the tool's parameters, and numbers or booleans sent as text are converted, as for a direct call. A tool that is
-switched off is refused, `call` and `describe` alike.
+The model describes a tool before it first calls it, so a schema is in the conversation only for a tool
+that is used. `tools` is offered only to a conversation that has at least one lazy tool that is on, so
+with nothing lazy there is no extra tool, and no hint, in any prompt. A tool the portal sees for the very
+first time is offered one by one in the chat that registers it only until that chat has listed its tools,
+a moment after it starts.
 
-A [project](/guide/projects#tools), an [agent](/guide/agents#tools), a [routine](/guide/routines#tools)
-or a single chat can switch the set **on** for itself with the switches it already has. The tools are then
-listed one by one in that conversation, as before, and are not lazy there. Switch a tool **off** there again
-and it is lazy once more: the "on" is withdrawn, nothing else is written. A tool that an agent, project or
-routine switched off itself, before the set was marked lazy, stays off whatever the portal-wide mark says, and
-is not reachable through `tools` either. The three states are therefore: on (offered one by one), lazy
-(reached through `tools`) and off (not reachable). Switching an off tool on and then off again makes it lazy.
-
-What the mark adds to switching a group off: a tool of the group that the portal sees for the
-first time later, after an update or a new MCP tool, starts lazy too, instead of arriving
-switched on. Ending it leaves the switches as they are, and the tools are then off for good, not lazy
-(**all on** puts them back at once). Nothing is lazy until you say so, so a portal behaves as before.
-A tool seen for the very first time is on in the chat that registers it only until that chat has listed
-its tools, a moment after it starts.
-
-Essential tools are not made lazy for you: the portal does not mark any set on its own, and a model that
-cannot find a tool it needs is better served by a set left on. The tools it reaches through `tools` are
-the ones that are lazy in that conversation; the MCP adapter's own `mcp` tool can still reach an MCP
-server's lazy tools, as it reaches any tool of a server that is not switched off for good.
+All the switches above a tool still apply, and a tool that is switched **off** is off for good, lazy or
+not. The portal-wide default, an [agent](/guide/agents#tools), a [project](/guide/projects#tools), a
+[routine](/guide/routines#tools) and a single chat each switch tools as they do for any tool, and the
+[guard](/guide/security) refuses `call` and `describe` for a switched-off tool; `search` does not list
+it. A tool switched off at any of them is therefore unreachable there, and switched on again it is lazy
+again, because the mark is the tool's and the switch is the conversation's. There is no per-chat way to
+offer a lazy tool one by one: for that, take the mark away in **Settings → Tools**.
 
 ::: tip Not the same as uninstalling
 The extension is still loaded, its commands still work, and other chats are

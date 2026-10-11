@@ -19,6 +19,8 @@ export function ToolGroupList({
   roomy,
   naming,
   beside,
+  onLazy,
+  lazyFixed,
 }: {
   tools: PortalTool[];
   /** The names given to groups, which stand in for what installed them. */
@@ -31,6 +33,10 @@ export function ToolGroupList({
   naming?: (group: ToolGroup) => ReactNode;
   /** What goes after the name of a group, before the switch for all of it. */
   beside?: (group: ToolGroup) => ReactNode;
+  /** Settings only: mark one tool lazy, or take the mark away. Without it the label is only shown. */
+  onLazy?: (tool: PortalTool) => void;
+  /** A tool that is lazy because its whole set is, which its own mark cannot undo. */
+  lazyFixed?: (tool: PortalTool) => boolean;
 }) {
   const groups = useOpenGroups();
   return (
@@ -92,14 +98,36 @@ export function ToolGroupList({
                         {t("cached")}
                       </span>
                     )}
-                    {/* Off in the model's list and reached through the `tools` tool: off, but not gone. */}
-                    {tool.lazy && !tool.enabled && (
-                      <span
-                        title={t("Not in the model's list one by one: it finds and calls this tool through the `tools` tool.")}
-                        className="shrink-0 rounded border border-line px-1 text-[10px] text-fg-faint"
-                      >
-                        {t("lazy")}
-                      </span>
+                    {/* Not in the model's list one by one, but on: it finds the tool through the `tools` tool. */}
+                    {onLazy ? (
+                      !tool.noLazy && (
+                        <button
+                          type="button"
+                          disabled={busy || (tool.lazy && lazyFixed?.(tool))}
+                          aria-pressed={Boolean(tool.lazy)}
+                          aria-label={t("Lazy {name}", { name: tool.name })}
+                          onClick={(e) => {
+                            // The tool sits in a label whose click flips its switch.
+                            e.preventDefault();
+                            onLazy(tool);
+                          }}
+                          title={t("Not in the model's list one by one: it finds and calls this tool through the `tools` tool.")}
+                          className={`shrink-0 rounded border px-1 text-[10px] disabled:opacity-60 ${
+                            tool.lazy ? "border-accent/40 bg-accent/15 text-accent" : "border-transparent text-fg-faint hover:text-fg"
+                          }`}
+                        >
+                          {t("lazy")}
+                        </button>
+                      )
+                    ) : (
+                      tool.lazy && (
+                        <span
+                          title={t("Not in the model's list one by one: it finds and calls this tool through the `tools` tool.")}
+                          className="shrink-0 rounded border border-line px-1 text-[10px] text-fg-faint"
+                        >
+                          {t("lazy")}
+                        </span>
+                      )
                     )}
                     {/* Only where this chat disagrees with the default, so the
                         setting is findable from the place it is being overruled. */}
