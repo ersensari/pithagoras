@@ -2304,10 +2304,14 @@ class SessionManager extends EventEmitter {
     // Attached before prompting: a fast reply would otherwise finish before
     // anyone was listening.
     this.on(`session:${sessionId}`, onEvent);
-    const timer = setTimeout(
-      () => fail?.(new Error(`The agent did not finish within ${Math.round(timeoutMs / 1000)}s`)),
-      timeoutMs
-    );
+    const timer = setTimeout(() => {
+      // Nobody answers a dialog from a page here (a channel, a routine and a heartbeat have no one in front of
+      // a screen), and the run goes on after this gives up: left open, the dialog would keep the chat running
+      // and fail every later ask on it. The agent gets the value of no answer, and the dialog leaves the
+      // replay list. A browser chat is never asked through here, so it waits as long as the person takes.
+      this.live.get(sessionId)?.client.giveUpDialogs?.();
+      fail?.(new Error(`The agent did not finish within ${Math.round(timeoutMs / 1000)}s`));
+    }, timeoutMs);
 
     try {
       const finished = new Promise<void>((resolve, reject) => {

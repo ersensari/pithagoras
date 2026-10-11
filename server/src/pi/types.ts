@@ -160,6 +160,8 @@ export interface PiClient extends EventEmitter {
   respondUi(id: string, response: { cancelled?: boolean; value?: unknown }): boolean;
   /** The dialogs (confirm, select, input, editor, questions) still waiting, as sent, for a page that opens meanwhile. Only where the portal draws them. */
   openDialogRequests?(): Record<string, unknown>[];
+  /** Closes every open dialog as a timeout, and the ones the run opens next: for a caller that waits for the run and gave up. Returns how many it closed. */
+  giveUpDialogs?(): number;
 }
 
 /** What is in a chat's box, and what is selected in it: where a paste goes. */

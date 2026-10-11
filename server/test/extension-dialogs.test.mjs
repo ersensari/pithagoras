@@ -157,3 +157,13 @@ test("a confirm waiting while no page is attached is replayed to a page that ope
     sessions.live.delete("confirming");
   }
 });
+
+test("a dialog in a chat someone is watching arms no timer at all, whatever the run's own limits are", async (t) => {
+  const { client, ui, events } = bridge();
+  const timers = t.mock.method(globalThis, "setTimeout");
+  const asked = [ui.confirm("Sure?", "Really"), ui.select("Pick", ["a"]), ui.input("Name", ""), ui.editor("Edit", "x")];
+  assert.equal(timers.mock.callCount(), 0, "nothing counts the wait down");
+  assert.equal(client.dialogsOpen(), 4);
+  for (const e of events.filter((e) => e.type === "extension_ui_request")) client.respondUi(e.id, { cancelled: true });
+  await Promise.all(asked);
+});

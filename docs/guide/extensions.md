@@ -130,6 +130,12 @@ no time limit of its own, and it stays open on every page that shows the chat. A
 extension that passes its own `timeout` to the call gets a dialog that closes
 when that time is up.
 
+Where nobody is in front of a page, in a conversation reached through a channel,
+a routine or a heartbeat look, the dialog waits no longer than that run does: it
+is closed when the run's own time limit is up (15 minutes for a channel's
+message, 60 for a routine, 20 for a look), the extension gets its value of no
+answer, and the chat is free again for the next message or run.
+
 A status line or a widget an extension keeps refreshing does not count as use of
 the chat, and does not cut what the agent is writing into pieces: only a dialog
 does either.
