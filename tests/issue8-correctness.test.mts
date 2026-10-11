@@ -12,12 +12,14 @@ test.after(()=>getDb().close());
 test('answered dialog clears its timer and cannot cancel a later dialog',async(t)=>{
  t.mock.timers.enable({apis:['setTimeout']});
  const client=new (SdkPiClient as any)({}, {},()=>{});const events:any[]=[];client.on('event',(e:any)=>events.push(e));
+ // An answered dialog is closed on the other pages with the reason "answered"; a timeout is what must not come.
+ const closed=()=>events.filter(e=>e.type==='extension_ui_cancel').map(e=>[e.id,e.reason]);
  const ui=client.buildUiContext();const first=ui.confirm('first','?',{timeout:100});
  client.respondUi(events[0].id,{value:true});assert.equal(await first,true);
  const second=ui.confirm('second','?',{timeout:1000});t.mock.timers.tick(100);
- assert.equal(events.filter(e=>e.type==='extension_ui_cancel').length,0);
- client.respondUi(events[1].id,{value:true});assert.equal(await second,true);t.mock.timers.tick(2000);
- assert.equal(events.filter(e=>e.type==='extension_ui_cancel').length,0);
+ assert.deepEqual(closed(),[[events[0].id,'answered']]);
+ client.respondUi(events[2].id,{value:true});assert.equal(await second,true);t.mock.timers.tick(2000);
+ assert.deepEqual(closed(),[[events[0].id,'answered'],[events[2].id,'answered']]);
 });
 
 test('parallel same-name tools settle by call id, not completion order',()=>{

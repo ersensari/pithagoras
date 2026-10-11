@@ -125,8 +125,10 @@ all render as a modal in the browser, standing in for the menu the TUI would
 draw. `notify`, `setStatus` and `setWidget` are one-way and do not open
 anything.
 
-An unanswered dialog times out after five minutes rather than wedging the
-session forever.
+A dialog waits until someone answers it, cancels it or stops the agent; it has
+no time limit of its own, and it stays open on every page that shows the chat. An
+extension that passes its own `timeout` to the call gets a dialog that closes
+when that time is up.
 
 A status line or a widget an extension keeps refreshing does not count as use of
 the chat, and does not cut what the agent is writing into pieces: only a dialog

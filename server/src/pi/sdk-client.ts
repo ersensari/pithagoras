@@ -694,9 +694,9 @@ export class SdkPiClient extends EventEmitter implements PiClient {
         };
         this.pendingUi.set(id, (r) => (r.cancelled ? finish(fallback, "cancelled") : finish(r.value, "answered")));
 
-        // An extension's dialog never parks forever: an unanswered one would wedge the session. The caller may
-        // choose its own wait, and 0 is no wait at all (the agent's Stop still ends it).
-        const ms = typeof opts?.timeout === "number" ? opts.timeout : 300_000;
+        // A dialog waits until it is answered, cancelled or the run is stopped, as a question does by default.
+        // Only a caller that names a wait (pi's `timeout` option, the question tool's setting) gets one.
+        const ms = typeof opts?.timeout === "number" ? opts.timeout : 0;
         if (ms > 0) {
           timer = setTimeout(() => {
             finish(fallback, "timeout");
