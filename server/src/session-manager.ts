@@ -660,7 +660,8 @@ class SessionManager extends EventEmitter {
    *
    * pi can only empty its queue as a whole, so that is what is done, and the
    * messages that stay are sent again, as they were: the same words, pictures
-   * and lane, under new numbers, in the order they were sent.
+   * and lane, under new numbers, in the order they were sent. Sent now, the
+   * others go in as follow-ups, since the run they steered is gone.
    */
   async takeBackWaiting(sessionId: string, seq: number, direct: boolean): Promise<void> {
     const live = this.live.get(sessionId);
@@ -682,32 +683,19 @@ class SessionManager extends EventEmitter {
     }
     // The pictures of the messages sent again stay on disk; a dropped one's go.
     if (!direct) dropImages(IMAGE_ROOT, sessionId, storedIn(chosen.prompt));
-    if (direct && live.client.running) {
-      await this.abort(sessionId);
-      // Sent while pi still winds the run down, the message would be queued
-      // into it and read after it, which is not what sending it now means.
-      await this.whenIdle(live.client);
-    }
+    if (direct && live.client.running) await this.abort(sessionId);
     for (const m of again) {
       const images = loadImages(IMAGE_ROOT, sessionId, storedIn(m.prompt));
+      // Sent now, the others wait for the run the chosen one starts: as
+      // steers, pi would read them in its first model request, together with
+      // it. Behind it, as follow-ups, they are answered after it.
+      const steer = !direct && m.prompt.steer === true;
       await this.prompt(sessionId, m.message, {
         ...(m.prompt.voice === true ? { voice: true } : {}),
         ...(images.length ? { images } : {}),
-        ...(m.prompt.steer === true ? { steer: true } : {}),
+        ...(steer ? { steer: true } : {}),
       });
     }
-  }
-
-  /**
-   * Until pi reads as idle after a Stop: a client's abort can return before
-   * the run is over, and a prompt sent in that gap is queued into it. Bounded
-   * like the restart's wait for a run to wind down: a pi that will not settle
-   * gets the message queued, as before, instead of holding the request.
-   */
-  private async whenIdle(client: PiClient): Promise<void> {
-    if (!client.isIdle) return;
-    const deadline = Date.now() + this.abortGraceMs;
-    while (!client.isIdle() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
   }
 
   /** Takes one message off the waiting list; false if it was no longer on it. */

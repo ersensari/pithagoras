@@ -14,10 +14,14 @@ const home = inProcessHome("pithagoras-queued-");
 /** The first request waits for this, so that the run is going while the test queues messages. */
 let release;
 let held = false;
+/** Whether the held request was still waiting when each request came in. */
+const heldWhenAsked = [];
+let freed = false;
 const model = await fakeModel(async () => {
+  heldWhenAsked.push(held && !freed);
   if (!held) {
     held = true;
-    await new Promise((resolve) => (release = resolve));
+    await new Promise((resolve) => (release = () => ((freed = true), resolve())));
   }
   return "Done.";
 });
@@ -56,12 +60,14 @@ const userWords = (request) =>
 /** A chat whose first message is being worked on, with two more behind it. */
 async function busyChat() {
   held = false;
+  freed = false;
   const before = model.requests.length;
   const chat = (await json("/api/sessions", { method: "POST", body: "{}" })).id;
   await say(chat, "first");
   await until(() => model.requests.length > before, "the model to be asked");
+  // Both as steers, as a message typed mid-run is in the app.
   await say(chat, "second", true);
-  await say(chat, "third");
+  await say(chat, "third", true);
   assert.deepEqual(waiting(chat).map(([, words]) => words), ["second", "third"]);
   return { chat, before };
 }
@@ -89,12 +95,19 @@ test("send directly stops the run and sends that message first, the others behin
   const [, [third]] = waiting(chat);
   await json(`/api/sessions/${chat}/queued/${third}/send`, { method: "POST" });
 
-  // The first thing the model is asked after the stop has them in that order: the chosen one, then the other.
+  // The chosen one starts a new turn while the stopped run's request is still held, and the model
+  // is asked about it alone: the other is not steered into that request.
   await until(() => model.requests.length >= before + 2, "the message to reach the model");
-  assert.deepEqual(userWords(model.requests[before + 1]).slice(-3), ["first", "third", "second"]);
-  // The chosen one started a run of its own; only the other waits in it.
-  const sent = db.eventsSince(chat, 0).filter((e) => e.type === "portal_prompt").map((e) => [JSON.parse(e.payload).message, JSON.parse(e.payload).queued]);
-  assert.deepEqual(sent, [["first", undefined], ["third", undefined], ["second", true]]);
+  assert.equal(heldWhenAsked[before + 1], true, "the new turn began before the stopped request was let go");
+  const first = userWords(model.requests[before + 1]);
+  assert.deepEqual(first.slice(-2), ["first", "third"]);
+  assert.ok(!first.includes("second"));
+  // Only then is the other answered, behind it.
+  await until(() => model.requests.length >= before + 3, "the other message to reach the model");
+  assert.deepEqual(userWords(model.requests[before + 2]).slice(-3), ["first", "third", "second"]);
+  // The chosen one started a run of its own; only the other waits in it, as a follow-up.
+  const sent = db.eventsSince(chat, 0).filter((e) => e.type === "portal_prompt").map((e) => [JSON.parse(e.payload).message, JSON.parse(e.payload).queued, JSON.parse(e.payload).steer]);
+  assert.deepEqual(sent, [["first", undefined, undefined], ["third", undefined, undefined], ["second", true, undefined]]);
   // Neither was dropped as not sent by the stop.
   assert.deepEqual(db.eventsSince(chat, 0).filter((e) => e.type === "portal_unsent"), []);
   release();
