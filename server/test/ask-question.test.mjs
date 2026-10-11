@@ -82,10 +82,10 @@ test("a question waits for a page that opens later, and is answered through the 
     assert.equal(request.method, "questions");
     assert.deepEqual(request.questions[0].options, [{ label: "A" }, { label: "B" }]);
     // What a page attaching now is shown: the same request, under the same id.
-    assert.deepEqual(client.openQuestionRequests(), [request]);
+    assert.deepEqual(client.openDialogRequests(), [request]);
 
     assert.equal(client.respondUi(request.id, { value: JSON.parse('{"constructor":"B","__proto__":["y"]}') }), true);
-    assert.deepEqual(client.openQuestionRequests(), [], "answered: nothing left to show");
+    assert.deepEqual(client.openDialogRequests(), [], "answered: nothing left to show");
     await until(() => events.some((e) => e.type === "agent_settled"));
     const result = events.find((e) => e.type === "tool_execution_end");
     assert.equal(result.isError, false);
@@ -122,7 +122,7 @@ test("Stop, and an answer given on another page, close the dialog on every page 
     const { id } = events.find((e) => e.type === "extension_ui_request");
     await client.abort();
     await until(() => events.some((e) => e.type === "extension_ui_cancel" && e.id === id));
-    assert.deepEqual(client.openQuestionRequests(), []);
+    assert.deepEqual(client.openDialogRequests(), []);
   } finally {
     client.dispose();
   }
@@ -146,7 +146,7 @@ test("a page that opens a chat with a question waiting is sent it before the str
   const { eventsRouter } = await import("../dist/api/events.js");
   createSession({ id: "waiting", title: "waiting", workspace: process.env.WORKSPACE_ROOT, executor: "host" });
   const request = { type: "extension_ui_request", id: "q-1", method: "questions", questions: [{ id: "q1", question: "Pick", kind: "single", options: [{ label: "A" }], other: false, optional: false }] };
-  sessions.live.set("waiting", { client: { openQuestionRequests: () => [request] } });
+  sessions.live.set("waiting", { client: { openDialogRequests: () => [request] } });
   const app = express().use("/api", eventsRouter());
   const server = app.listen(0);
   const abort = new AbortController();

@@ -320,11 +320,11 @@ class SessionManager extends EventEmitter {
 
   /**
    * What a page that attaches is shown beyond the stored events: the message being written, and the
-   * questions the agent is waiting on. Dialogs are live events and never stored, so without this a
-   * reload or a visit to another chat lost the question and left the agent waiting out its time.
+   * dialogs (questions, confirm, select, input, editor) the agent is waiting on. Dialogs are live events and never stored, so without this a
+   * reload or a visit to another chat lost the dialog and left the agent waiting out its time.
    */
   liveSnapshot(sessionId: string) {
-    const asked = (this.live.get(sessionId)?.client.openQuestionRequests?.() ?? []).map((req) => this.stream.ephemeral(sessionId, "extension_ui_request", req));
+    const asked = (this.live.get(sessionId)?.client.openDialogRequests?.() ?? []).map((req) => this.stream.ephemeral(sessionId, "extension_ui_request", req));
     return [...this.stream.snapshot(sessionId), ...asked];
   }
   /** In-flight ask() per session, so messages in one chat are answered in turn. */

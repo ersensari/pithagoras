@@ -85,3 +85,75 @@ test("a caller that names a wait gets it: the dialog closes as a timeout when it
   client.respondUi(events[1].id, { value: true });
   assert.equal(await forever, true);
 });
+
+test("a dialog of every kind opened with no page attached is handed to a page that opens later, until it is settled", async () => {
+  const { client, ui, events } = bridge();
+  const stop = new AbortController();
+  const asked = [
+    ui.confirm("Sure?", "Really"),
+    ui.select("Pick", ["a", "b"]),
+    ui.input("Name", "type here"),
+    ui.editor("Edit", "text"),
+    ui.questions({ questions: [{ id: "q1", question: "Pick", options: ["A"] }] }),
+    ui.confirm("Stopped?", "Later", { signal: stop.signal }),
+  ];
+  const sent = events.filter((e) => e.type === "extension_ui_request");
+  assert.deepEqual(sent.map((e) => e.method), ["confirm", "select", "input", "editor", "questions", "confirm"]);
+  // What a page attaching now is shown: every request as it was sent, under the same id.
+  assert.deepEqual(client.openDialogRequests(), sent);
+
+  // Answered and cancelled dialogs are gone from it, and so is one the run stopped.
+  client.respondUi(sent[0].id, { value: true });
+  client.respondUi(sent[1].id, { cancelled: true });
+  stop.abort();
+  await Promise.all([asked[0], asked[1], asked[5]]);
+  assert.deepEqual(client.openDialogRequests(), sent.slice(2, 5));
+  client.respondUi(sent[2].id, { value: "Ada" });
+  client.respondUi(sent[3].id, { value: "x" });
+  client.respondUi(sent[4].id, { value: {} });
+  await Promise.all(asked);
+  assert.deepEqual(client.openDialogRequests(), []);
+});
+
+test("a confirm waiting while no page is attached is replayed to a page that opens, and not once it is answered", async () => {
+  const { default: express } = await import("express");
+  const { eventsRouter } = await import("../dist/api/events.js");
+  const { sessions } = await import("../dist/session-manager.js");
+  const { createSession } = await import("../dist/db.js");
+  createSession({ id: "confirming", title: "confirming", workspace: process.env.WORKSPACE_ROOT, executor: "host" });
+  const { client, ui, events } = bridge();
+  sessions.live.set("confirming", { client });
+  const app = express().use("/api", eventsRouter());
+  const server = app.listen(0);
+  // What a fresh page is sent before the stream is caught up.
+  const page = async () => {
+    const abort = new AbortController();
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/confirming/events`, { signal: abort.signal });
+      let text = "";
+      const reader = res.body.getReader();
+      while (!text.includes("event: caught-up")) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += new TextDecoder().decode(value);
+      }
+      return text;
+    } finally {
+      abort.abort();
+    }
+  };
+  try {
+    const answer = ui.confirm("Sure?", "Really");
+    const { id } = events.find((e) => e.type === "extension_ui_request");
+    const seen = await page();
+    assert.match(seen, /"method":"confirm"/);
+    assert.ok(seen.includes(id), "under the id the answer comes back by");
+
+    client.respondUi(id, { value: true });
+    assert.equal(await answer, true);
+    assert.doesNotMatch(await page(), /extension_ui_request/);
+  } finally {
+    server.close();
+    sessions.live.delete("confirming");
+  }
+});

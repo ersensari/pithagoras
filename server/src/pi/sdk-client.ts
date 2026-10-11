@@ -294,8 +294,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   private loader?: { appendedByPi(): string };
   /** Dialogs an extension is waiting on, keyed by request id. */
   private pendingUi = new Map<string, (r: { cancelled?: boolean; value?: unknown }) => void>();
-  /** The questions dialogs among them, as they were sent: a page that opens later is shown them again. */
-  private openQuestions = new Map<string, Record<string, unknown>>();
+  /** The dialogs among them that a page draws, as they were sent: a page that opens later is shown them again. */
+  private openDialogs = new Map<string, Record<string, unknown>>();
   /** The chat box's text, kept by the portal: see useDrafts. */
   private drafts?: DraftStore;
 
@@ -689,7 +689,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
           clearTimeout(timer);
           opts?.signal?.removeEventListener?.("abort", abort);
           this.pendingUi.delete(id);
-          this.openQuestions.delete(id);
+          this.openDialogs.delete(id);
           resolve(value);
         };
         this.pendingUi.set(id, (r) => (r.cancelled ? finish(fallback, "cancelled") : finish(r.value, "answered")));
@@ -707,7 +707,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
         if (opts?.signal?.aborted) { abort(); return; }
 
         const request = { type: "extension_ui_request", id, ...payload };
-        if (payload.method === "questions") this.openQuestions.set(id, request);
+        this.openDialogs.set(id, request);
         shown = true;
         this.emit("event", request);
       });
@@ -786,11 +786,12 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   }
 
   /**
-   * The questions dialogs still waiting for an answer, as they were sent. Live events are not
-   * stored, so a page that opens or switches to this chat while one waits asks for them here.
+   * The dialogs (confirm, select, input, editor, questions) still waiting for an answer, as they were
+   * sent. Live events are not stored, so a page that opens or switches to this chat while one waits
+   * asks for them here.
    */
-  openQuestionRequests(): Record<string, unknown>[] {
-    return [...this.openQuestions.values()];
+  openDialogRequests(): Record<string, unknown>[] {
+    return [...this.openDialogs.values()];
   }
 
   /** Answer a dialog the UI just resolved. */
