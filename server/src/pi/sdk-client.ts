@@ -28,7 +28,7 @@ import { findSessionFile } from "./session-file.js";
 import { CONTEXT_FILES, SHARED_FILES } from "./context-files.js";
 import { heartbeatTool } from "./heartbeat-tool.js";
 import { askPrimaryTool } from "./ask-primary.js";
-import { ASK_QUESTION_SOURCE, askQuestionTool, asksQuestions } from "./ask-question.js";
+import { ASK_QUESTION_SOURCE, askQuestionTool } from "./ask-question.js";
 import { proxyBaseUrl } from "../llama-progress.js";
 import { bridgeSubagents, SUBAGENT_INPUT, SUBAGENT_STOP, type Bridge } from "../subagent-protocol.js";
 import { contextWindowFor, getSkipThinkingProviders, questionWaitMs, getVoiceInstructions, portalBrowserOn, voiceSpeaks } from "../db.js";
@@ -296,10 +296,6 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   private pendingUi = new Map<string, (r: { cancelled?: boolean; value?: unknown }) => void>();
   /** The dialogs among them that a page draws, as they were sent: a page that opens later is shown them again. */
   private openDialogs = new Map<string, Record<string, unknown>>();
-  /** Set when a caller waiting for the run gave up on its dialogs: the rest of that run's dialogs get no wait either. See giveUpDialogs. */
-  private dialogsGivenUp = false;
-  /** Closes a waiting dialog with its own value of no answer, by request id. */
-  private closeDialog = new Map<string, (reason: "timeout") => void>();
   /** The chat box's text, kept by the portal: see useDrafts. */
   private drafts?: DraftStore;
 
@@ -365,6 +361,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
      * through a channel should be able to touch the schedule.
      */
     routineTools?: boolean;
+    /** Register ask_question: only for a chat a person talks to in the portal's pages (see asksQuestions). */
+    questions?: boolean;
     /**
      * The routine this session runs, when it is one. Gives the agent the report
      * tool, so a run with nobody watching can still reach someone.
@@ -456,7 +454,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       if (opts.sessionId && opts.role && opts.role !== "primary") {
         factories.push({ name: "ask-primary", factory: askPrimaryTool(opts.sessionId) });
       }
-      if (asksQuestions(opts)) factories.push({ name: ASK_QUESTION_SOURCE, factory: askQuestionTool(questionWaitMs) });
+      if (opts.questions) factories.push({ name: ASK_QUESTION_SOURCE, factory: askQuestionTool(questionWaitMs) });
       // Only when there is somewhere for it to go — a tool that always fails is
       // worse than no tool, and the model will keep trying it.
       if (opts.routineSlug !== undefined && reportToFor(opts.routineSlug)) {
@@ -693,12 +691,10 @@ export class SdkPiClient extends EventEmitter implements PiClient {
           clearTimeout(timer);
           opts?.signal?.removeEventListener?.("abort", abort);
           this.pendingUi.delete(id);
-          this.closeDialog.delete(id);
           this.openDialogs.delete(id);
           resolve(value);
         };
         this.pendingUi.set(id, (r) => (r.cancelled ? finish(fallback, "cancelled") : finish(r.value, "answered")));
-        this.closeDialog.set(id, (reason) => finish(fallback, reason));
 
         // A dialog waits until it is answered, cancelled or the run is stopped, as a question does by default.
         // Only a caller that names a wait (pi's `timeout` option, the question tool's setting) gets one.
@@ -711,8 +707,6 @@ export class SdkPiClient extends EventEmitter implements PiClient {
         }
         opts?.signal?.addEventListener?.("abort", abort, { once: true });
         if (opts?.signal?.aborted) { abort(); return; }
-        // Nobody is waiting for this run any more: it gets the answer of no answer at once, and no dialog nobody can see.
-        if (this.dialogsGivenUp) { finish(fallback, "timeout"); return; }
 
         const request = { type: "extension_ui_request", id, ...payload };
         this.openDialogs.set(id, request);
@@ -802,20 +796,6 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     return [...this.openDialogs.values()];
   }
 
-  /**
-   * For a caller that waits for the run and gives up at its own limit (a channel's ask, a routine, a heartbeat
-   * look): nobody answers these dialogs from a page, so a dialog waiting forever would keep the chat
-   * "running" and the next ask would fail on it. Every open dialog is closed as a timeout, with its value
-   * of no answer (the agent reads it as one), and so is any the same run opens afterwards; the next prompt
-   * starts afresh. Returns how many it closed.
-   */
-  giveUpDialogs(): number {
-    this.dialogsGivenUp = true;
-    const open = [...this.closeDialog.values()];
-    for (const close of open) close("timeout");
-    return open.length;
-  }
-
   /** Answer a dialog the UI just resolved. */
   respondUi(id: string, response: { cancelled?: boolean; value?: unknown }): boolean {
     const pending = this.pendingUi.get(id);
@@ -828,7 +808,6 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     message: string,
     options?: { voice?: boolean; images?: ImageContent[]; steer?: boolean },
   ): Promise<PromptTaken> {
-    this.dialogsGivenUp = false;
     if (options?.voice) {
       this.voiceFirst?.arm(this.isIdle());
     } else {

@@ -1035,6 +1035,7 @@ class SessionManager extends EventEmitter {
       // has no business rescheduling anything; a routine run is excluded too,
       // since a routine that can create routines can build a chain unwatched.
       routineTools: session.kind === "agent",
+      questions: asksQuestions(session),
       // A routine run gets the report tool instead: it is the one kind of
       // session with nobody on the other end to read what it found.
       routineSlug: session.kind === "routine" ? session.routine_slug : undefined,
@@ -2144,12 +2145,12 @@ class SessionManager extends EventEmitter {
     const next = previous
       .catch(() => "")
       .then(async () => {
-        await this.waitForIdle(sessionId, opts.timeoutMs ?? 15 * 60_000);
+        await this.waitForIdle(sessionId, opts.timeoutMs);
         await opts.beforeTurn?.();
         return this.askNow(
           sessionId,
           message,
-          opts.timeoutMs ?? 15 * 60_000,
+          opts.timeoutMs,
           opts.onReply,
           opts.streamText,
           opts.onUi,
@@ -2164,13 +2165,13 @@ class SessionManager extends EventEmitter {
     return next;
   }
 
-  private async waitForIdle(sessionId: string, timeoutMs: number): Promise<void> {
+  private async waitForIdle(sessionId: string, timeoutMs?: number): Promise<void> {
     if (getSession(sessionId)?.status !== "running") return;
     await new Promise<void>((resolve, reject) => {
       const key = `session:${sessionId}`;
       const finish = (error?: Error) => { clearTimeout(timer); this.off(key, check); error ? reject(error) : resolve(); };
       const check = () => { if (getSession(sessionId)?.status !== "running") finish(); };
-      const timer = setTimeout(() => finish(new Error("Previous turn is still running")), timeoutMs);
+      const timer = timeoutMs === undefined ? undefined : setTimeout(() => finish(new Error("Previous turn is still running")), timeoutMs);
       this.on(key, check);
       check();
     });
@@ -2179,7 +2180,7 @@ class SessionManager extends EventEmitter {
   private async askNow(
     sessionId: string,
     message: AskMessage,
-    timeoutMs: number,
+    timeoutMs: number | undefined,
     onReply?: (text: string) => void | Promise<void>,
     streamText = true,
     onUi?: (request: any) => void,
@@ -2304,14 +2305,12 @@ class SessionManager extends EventEmitter {
     // Attached before prompting: a fast reply would otherwise finish before
     // anyone was listening.
     this.on(`session:${sessionId}`, onEvent);
-    const timer = setTimeout(() => {
-      // Nobody answers a dialog from a page here (a channel, a routine and a heartbeat have no one in front of
-      // a screen), and the run goes on after this gives up: left open, the dialog would keep the chat running
-      // and fail every later ask on it. The agent gets the value of no answer, and the dialog leaves the
-      // replay list. A browser chat is never asked through here, so it waits as long as the person takes.
-      this.live.get(sessionId)?.client.giveUpDialogs?.();
-      fail?.(new Error(`The agent did not finish within ${Math.round(timeoutMs / 1000)}s`));
-    }, timeoutMs);
+    // No limit of its own: the caller that wants one (a routine run, a heartbeat look) names it. A dialog the agent
+    // waits on is a question in a chat someone watches, and waits as long as that person takes.
+    const timer = timeoutMs === undefined ? undefined : setTimeout(
+      () => fail?.(new Error(`The agent did not finish within ${Math.round(timeoutMs / 1000)}s`)),
+      timeoutMs
+    );
 
     try {
       const finished = new Promise<void>((resolve, reject) => {
@@ -2501,7 +2500,7 @@ class SessionManager extends EventEmitter {
     const exceptions = sessionTools(sessionId);
     const servers = view.servers;
     // An idle chat is shown what the portal has seen registered; the tool is not there for every kind of chat (see asksQuestions).
-    const asks = session ? asksQuestions({ sessionId, routineTools: session.kind === "agent", routineSlug: session.kind === "routine" ? session.routine_slug : undefined, heartbeatAgent: session.kind === "heartbeat" ? session.id : undefined, role: session.role }) : true;
+    const asks = session ? asksQuestions(session) : true;
     const shown: { name: string; source: string; description?: string; inline?: true; cached?: true }[] = listed.length
       ? listed
       : shownTools(workspace, view).filter((tool) => asks || !(tool.name === ASK_QUESTION_TOOL && tool.inline));

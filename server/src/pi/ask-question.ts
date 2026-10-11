@@ -17,12 +17,12 @@ export const ASK_QUESTION_TOOL = "ask_question";
 export const ASK_QUESTION_SOURCE = "ask-question";
 
 /**
- * Whether a conversation gets the tool: only where a person is looking at the portal. Not a routine or a
- * heartbeat, which nobody watches, not a chat reached through a channel, whose questions go out as text
- * (see the channel supervisor), and not a conversation for a lower role than the owner's.
+ * Whether a conversation gets the tool: only a chat someone talks to in the portal's own pages, where the
+ * dialog is drawn. Not a routine or a heartbeat, which nobody watches, not a chat reached through a channel
+ * (or the Agent page's own), and not a conversation for a lower role than the owner's.
  */
-export function asksQuestions(who: { sessionId?: string; routineTools?: boolean; routineSlug?: string | null; heartbeatAgent?: string; role?: string }): boolean {
-  return Boolean(who.sessionId) && !who.routineTools && who.routineSlug === undefined && !who.heartbeatAgent && (!who.role || who.role === "primary");
+export function asksQuestions(session: { kind: string; role?: string | null }): boolean {
+  return session.kind === "task" && (!session.role || session.role === "primary");
 }
 
 export type QuestionKind = "single" | "multiple" | "text" | "ranking";

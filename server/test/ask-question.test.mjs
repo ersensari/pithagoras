@@ -27,7 +27,7 @@ async function open(opts = {}) {
   const sessionId = `ask-${++n}`;
   const client = await SdkPiClient.create({
     cwd: mkdtempSync(path.join(process.env.WORKSPACE_ROOT, "chat-")), sessionDir: mkdtempSync(path.join(home, "chat-")),
-    provider: "fake", modelId: "m", sessionId, ...opts,
+    provider: "fake", modelId: "m", sessionId, questions: true, ...opts,
   });
   const events = [];
   client.on("event", (e) => events.push(e));
@@ -36,18 +36,32 @@ async function open(opts = {}) {
 const named = async (client) => (await client.getTools()).map((t) => t.name);
 const until = async (check) => { for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 25)); assert.ok(check(), "it came"); };
 
-test("the tool is registered where a person is looking at the chat, and not in a routine, heartbeat, channel or guest chat", async () => {
+test("the tool is registered only for a client that is told to, and a chat started by the portal is told by its kind", async () => {
   for (const [what, opts, has] of [
     ["a chat", {}, true],
-    ["a chat of the owner", { role: "primary" }, true],
-    ["a channel's", { routineTools: true }, false],
-    ["a routine run", { routineSlug: "nightly" }, false],
-    ["a heartbeat", { heartbeatAgent: "helper" }, false],
-    ["a guest's", { role: "guest" }, false],
+    ["a client not told to", { questions: false }, false],
   ]) {
     const { client } = await open(opts);
     try {
       assert.equal((await named(client)).includes("ask_question"), has, what);
+    } finally {
+      client.dispose();
+    }
+  }
+});
+
+test("a routine run, a heartbeat look and a channel's chat are launched without the tool", async () => {
+  const { getSettings, setSettings } = await import("../dist/db.js");
+  setSettings({ ...getSettings(), provider: "fake", model: "m" });
+  const make = (id, kind, extra = {}) => createSession({ id, title: id, workspace: process.env.WORKSPACE_ROOT, executor: "host", kind, ...extra });
+  make("kind-chat", "task");
+  make("kind-routine", "routine", { routine_slug: "nightly" });
+  make("kind-heartbeat", "heartbeat");
+  make("kind-channel", "agent", { channel_slug: "telegram", channel_key: "telegram:1" });
+  for (const [id, has] of [["kind-chat", true], ["kind-routine", false], ["kind-heartbeat", false], ["kind-channel", false]]) {
+    const client = await sessions.ensureClient(id);
+    try {
+      assert.equal((await named(client)).includes("ask_question"), has, id);
     } finally {
       client.dispose();
     }

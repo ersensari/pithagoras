@@ -100,10 +100,12 @@ and closes the dialog in every window that has it. A question that is still wait
 its chat: if you reload the page or look at another chat meanwhile, the dialog is
 there again when you come back.
 
-The tool is there in every chat you talk to yourself, whether or not a window is
-open on it, but not in a routine, a heartbeat, or a chat reached through a
-channel, whose questions go out as text. It is in the tools list like any other,
-in a group named `ask-question`, and can be switched off there.
+The tool is there in the chats you talk to in the portal, whether or not a
+window is open on it. It does not exist in a routine, a heartbeat, a chat reached
+through a channel or an agent's conversations: nobody is there to answer, so the
+agent has no tool to ask with, and there is no timer or fallback standing in for
+it. It is in the tools list like any other, in a group named `ask-question`, and
+can be switched off there.
 
 ## Looking at a picture
 

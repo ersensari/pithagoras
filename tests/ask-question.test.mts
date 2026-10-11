@@ -96,14 +96,13 @@ test('the schema takes plain strings as options, as the questions do, so pi does
   assert.equal(Value.Check(params, { questions: [{ question: 'q', options: [{ label: 'a' }] }] }), true);
 });
 
-test('only a chat a person is looking at can ask: not a routine, a heartbeat, a channel or a guest', () => {
-  assert.equal(asksQuestions({ sessionId: 's' }), true);
-  assert.equal(asksQuestions({ sessionId: 's', role: 'primary' }), true);
-  assert.equal(asksQuestions({}), false, 'no chat');
-  assert.equal(asksQuestions({ sessionId: 's', routineTools: true }), false);
-  assert.equal(asksQuestions({ sessionId: 's', routineSlug: 'nightly' }), false);
-  assert.equal(asksQuestions({ sessionId: 's', heartbeatAgent: 'a' }), false);
-  assert.equal(asksQuestions({ sessionId: 's', role: 'guest' }), false);
+test('only a chat someone talks to in the portal can ask: not a routine, a heartbeat, a channel, the agent page or a guest', () => {
+  assert.equal(asksQuestions({ kind: 'task' }), true);
+  assert.equal(asksQuestions({ kind: 'task', role: 'primary' }), true);
+  assert.equal(asksQuestions({ kind: 'routine' }), false, 'routine');
+  assert.equal(asksQuestions({ kind: 'heartbeat' }), false, 'heartbeat');
+  assert.equal(asksQuestions({ kind: 'agent' }), false, 'channel');
+  assert.equal(asksQuestions({ kind: 'task', role: 'guest' }), false);
 });
 
 test('running the tool asks the context, with a wait of its own, and reports what came back', async () => {

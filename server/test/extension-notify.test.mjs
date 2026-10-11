@@ -110,3 +110,24 @@ test("a question an extension asks still ends the text before it", async () => {
   assert.equal(reply, "Before the question\n\nAfter it");
   assert.deepEqual(asked, ["confirm"]);
 });
+
+test("an ask names its own limit or has none: a run that takes longer than fifteen minutes is not given up on", async (t) => {
+  createSession({ id: "slow", title: "slow", workspace: home, executor: "host" });
+  let finish;
+  sessions.submit = async () => { finish = () => pi.emit("event", { type: "agent_settled" }); };
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const asked = sessions.ask("slow", "Take your time", { streamText: false });
+  for (let i = 0; i < 50 && !finish; i++) await new Promise((r) => setImmediate(r));
+  assert.ok(finish, "the run began");
+  t.mock.timers.tick(24 * 60 * 60_000);
+  finish();
+  assert.equal(await asked, "", "it was still being waited for a day later");
+
+  createSession({ id: "limited", title: "limited", workspace: home, executor: "host" });
+  finish = undefined;
+  const limited = sessions.ask("limited", "Hurry", { streamText: false, timeoutMs: 1000 });
+  const failed = assert.rejects(limited, /did not finish within 1s/);
+  for (let i = 0; i < 50 && !finish; i++) await new Promise((r) => setImmediate(r));
+  t.mock.timers.tick(1001);
+  await failed;
+});
