@@ -137,6 +137,50 @@ test('answering sends the answers, and their record stays in the transcript, als
   await expect(page.getByRole('region', { name: 'A few questions' })).toHaveCount(0);
 });
 
+test('a question asked while the chat is open, and answered there, leaves its record in the open tab, as a running chat sends it', async ({ page }) => {
+  const { answered } = await portal(page);
+  const qs = questions.slice(0, 2);
+  const args = { title: 'A few questions', questions: qs };
+  const assistant = (content: unknown[], stopReason: string) => ({ role: 'assistant', content, stopReason, provider: 'p', model: 'm' });
+  await page.goto('/s/a');
+  // The tab is open before the agent asks: the chat is running, and everything after the prompt comes live.
+  await replay(page, [ev(1, 'portal_status', { status: 'running' }), ev(2, 'portal_prompt', { message: 'Set it up' })]);
+  for (const e of [
+    ev(3, 'agent_start', { type: 'agent_start' }),
+    ev(4, 'message_start', { type: 'message_start', message: assistant([], 'stop') }),
+    { seq: -10, type: 'message_update', at: Date.now(), payload: { type: 'message_update', streamId: 's1', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'I will ask.' } } },
+    ev(5, 'message_end', { type: 'message_end', streamId: 's1', message: assistant([{ type: 'thinking', thinking: 'I will ask.' }, { type: 'toolCall', id: 'c1', name: 'ask_question', arguments: args }], 'toolUse') }),
+    ev(6, 'tool_execution_start', { type: 'tool_execution_start', toolCallId: 'c1', toolName: 'ask_question', args }),
+    ev(7, 'portal_question', { id: 'q1', ...args }),
+  ]) await live(page, e);
+  const card = page.getByRole('region', { name: 'A few questions' });
+  await expect(card).toBeVisible();
+  await card.getByRole('radio', { name: /Postgres/ }).check();
+  await card.getByRole('checkbox', { name: 'Export' }).check();
+  await card.getByRole('button', { name: 'Submit' }).click();
+  await expect(card).toBeHidden();
+  expect(answered).toEqual([{ id: 'q1', value: { db: 'Postgres', features: ['Export'] } }]);
+
+  // What the server then sends, in the order it stores it: the record, the tool's end, and the agent's reply.
+  for (const e of [
+    ev(8, 'portal_question_end', { of: 'q1', outcome: 'answered', answers: { db: 'Postgres', features: ['Export'] } }),
+    ev(9, 'tool_execution_end', { type: 'tool_execution_end', toolCallId: 'c1', toolName: 'ask_question', result: { content: [{ type: 'text', text: 'The person answered: …' }] }, isError: false }),
+    ev(10, 'message_start', { type: 'message_start', message: { role: 'toolResult' } }),
+    ev(11, 'message_end', { type: 'message_end', message: { role: 'toolResult' } }),
+    ev(12, 'message_start', { type: 'message_start', message: assistant([], 'stop') }),
+    { seq: -11, type: 'message_update', at: Date.now(), payload: { type: 'message_update', streamId: 's2', assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'Postgres it is.' } } },
+    ev(13, 'message_end', { type: 'message_end', streamId: 's2', message: assistant([{ type: 'text', text: 'Postgres it is.' }], 'stop') }),
+    ev(14, 'agent_end', { type: 'agent_end' }),
+    ev(15, 'portal_status', { status: 'idle' }),
+  ]) await live(page, e);
+  await expect(page.getByText('Postgres it is.')).toBeVisible();
+  const record = page.getByRole('group', { name: 'A few questions' });
+  await expect(record).toBeVisible();
+  await expect(record).toContainText('Which database?');
+  await expect(record).toContainText('Postgres');
+  await expect(record).toContainText('Export');
+});
+
 test('a question still waiting is back after the page is reloaded', async ({ page }) => {
   const { answered } = await portal(page);
   const card = await open(page);

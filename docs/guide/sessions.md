@@ -91,7 +91,8 @@ agent waits for your answers. A question is one of four kinds: **choose
 one**, **choose several**, **free text**, or **put the options in order** (best
 first, moved with the arrows; they start in the order the agent listed them,
 and that order only counts as your answer once you have moved something or
-pressed **Keep this order**).
+pressed **Keep this order**). A question the agent asks without options is
+answered in free text.
 A choice may also take an answer of your own when the agent allows it, and a
 question marked *optional* may be left empty. **Submit** is available once every
 other question is answered. **Cancel** puts the questions away, and the agent

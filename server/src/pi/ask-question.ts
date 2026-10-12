@@ -53,7 +53,6 @@ export const MAX_OPTIONS = 20;
 const MAX_ANSWER = 4000;
 
 const KINDS: readonly QuestionKind[] = ["single", "multiple", "text", "ranking"];
-const NEEDS_OPTIONS: readonly QuestionKind[] = ["single", "multiple", "ranking"];
 
 const clip = (text: unknown, max: number) => String(text ?? "").trim().slice(0, max);
 
@@ -72,8 +71,8 @@ export function readQuestions(raw: unknown): Question[] {
     const at = `Question ${i + 1}`;
     const question = clip(entry?.question, 1000);
     if (!question) fail(`${at} has no text.`);
-    const kind = (entry?.kind ?? "single") as QuestionKind;
-    if (!KINDS.includes(kind)) fail(`${at}: kind must be one of ${KINDS.join(", ")}.`);
+    const asked = entry?.kind ?? undefined;
+    if (asked !== undefined && !KINDS.includes(asked)) fail(`${at}: kind must be one of ${KINDS.join(", ")}.`);
 
     const options: QuestionOption[] = [];
     for (const item of Array.isArray(entry?.options) ? entry.options : []) {
@@ -85,10 +84,13 @@ export function readQuestions(raw: unknown): Question[] {
       const description = typeof item === "string" ? "" : clip(item?.description, 400);
       options.push(description ? { label, description } : { label });
     }
-    if (kind === "text" && options.length) fail(`${at}: a text question has no options.`);
-    if (NEEDS_OPTIONS.includes(kind) && options.length < (kind === "ranking" ? 2 : 1)) {
-      fail(`${at}: a ${kind} question needs ${kind === "ranking" ? "at least two options" : "options"}.`);
-    }
+    // Models leave the kind out, or write "single", on a question they mean to be answered in words. Turned away
+    // for having no options, one sent the same call again and again. A choice with nothing to choose from is
+    // answered by typing, so that is what it becomes; only a ranking cannot do without its options.
+    const choice = asked === undefined || asked === "single" || asked === "multiple";
+    const kind: QuestionKind = choice && !options.length ? "text" : (asked ?? "single");
+    if (kind === "text" && options.length) fail(`${at}: a "text" question is answered in words and takes no options. Leave "kind" out for a choice between them.`);
+    if (kind === "ranking" && options.length < 2) fail(`${at}: a ranking needs at least two options to put in order, as in "options": ["First", "Second"].`);
     if (options.length > MAX_OPTIONS) fail(`${at}: at most ${MAX_OPTIONS} options.`);
 
     const id = clip(entry?.id, 40) || `q${i + 1}`;
@@ -160,11 +162,16 @@ const questionSchema = Type.Object({
   kind: Type.Optional(
     Type.Union(KINDS.map((k) => Type.Literal(k)), {
       description:
-        '"single" picks one option (the default), "multiple" any number, "text" is typed in freely, ' +
-        '"ranking" puts all the options in order, best first (they start in the order you give them).',
+        '"single" picks one option (the default when there are options), "multiple" any number, "text" is typed in ' +
+        'freely (the default without options), "ranking" puts all the options in order, best first (they start in the ' +
+        "order you give them).",
     }),
   ),
-  options: Type.Optional(Type.Array(Type.Union([Type.String(), optionSchema]), { description: "For single, multiple and ranking; none for text." })),
+  options: Type.Optional(
+    Type.Array(Type.Union([Type.String(), optionSchema]), {
+      description: 'The choices, as plain strings ("SQLite") or {label, description}. Leave them out for a question answered in words.',
+    }),
+  ),
   allowOther: Type.Optional(Type.Boolean({ description: "Single and multiple: also let the person type their own choice." })),
   optional: Type.Optional(Type.Boolean({ description: "The person may leave this one unanswered." })),
   id: Type.Optional(Type.String({ description: "A short name for the question. Defaults to q1, q2, …" })),
@@ -184,7 +191,11 @@ export function askQuestionTool(waitMs: () => number = () => 0) {
         "wait for the answers. Use it when you cannot go on without a decision or a fact that only they have " +
         "and guessing would cost them more than asking: a choice between approaches, which of several files " +
         "to change, how they rank things. Put every question you have into one call. Do not use it for " +
-        "what you can find out yourself, or for confirming what they already told you.",
+        "what you can find out yourself, or for confirming what they already told you. A question with options is " +
+        "a choice, one without is answered in words. For example: " +
+        '{"questions": [{"question": "Which database?", "options": ["SQLite", "Postgres"]}, ' +
+        '{"question": "Which features?", "kind": "multiple", "options": ["Search", "Export"]}, ' +
+        '{"question": "Anything else?", "optional": true}]}',
       promptSnippet: `${ASK_QUESTION_TOOL} — ask the person questions (choose one, choose several, free text, rank) and wait for the answers`,
       parameters: Type.Object({
         title: Type.Optional(Type.String({ description: "A heading for the questions, when they belong together." })),

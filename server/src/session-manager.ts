@@ -21,6 +21,7 @@ import { isDialog, showsDialogs } from "./pi/ui-requests.js";
 import { ASK_QUESTION_TOOL, asksQuestions, describeAnswers, readAnswers, type Answers } from "./pi/ask-question.js";
 import { CHAT_QUESTION, CHAT_QUESTION_END, openChatQuestion, openChatQuestions, type ChatQuestion, type QuestionOutcome } from "./questions.js";
 import { forgetTaint } from "./pi/guard.js";
+import { neutralise } from "./channels/framing.js";
 import { textOf } from "./pi/entries.js";
 import { removeSessionFiles } from "./session-files.js";
 import { dropImages, forLog, forPi, loadImages, removeImages, storedIn, type Attached } from "./prompt-images.js";
@@ -1172,7 +1173,10 @@ class SessionManager extends EventEmitter {
           ...(typeof msg.until === "number" ? { until: msg.until } : {}),
         });
       } else if (msg.type === "extension_ui_cancel" && typeof msg.id === "string" && openChatQuestion(sessionId, msg.id)) {
-        this.endQuestion(sessionId, msg.id, msg.reason === "expired" ? "expired" : "stopped");
+        // A restart stops the run that waits, so that its tool returns, but the question stays open: the portal
+        // that starts next draws it again, and its answers go to the agent as a message (see respondUi).
+        const outcome = msg.reason === "expired" ? "expired" : "stopped";
+        if (!(this.closing && outcome === "stopped")) this.endQuestion(sessionId, msg.id, outcome);
       } else this.record(sessionId, msg.type, forTranscript(msg));
       // Anything a command in hand shows for itself: see endCommand. Only what
       // a person sees in the chat — a line, a dialog, a run, a message — and
@@ -2488,7 +2492,8 @@ class SessionManager extends EventEmitter {
         "<answer-from-primary>",
         "These are the answers to the questions you asked with ask_question. Your run ended before they came (the portal restarted while you waited, for one), so they come as this message: go on from there.",
         "",
-        describeAnswers(asked.questions, answers),
+        // What was typed in is the person's, as a channel's sender's words are: it cannot close the frame or open one.
+        neutralise(describeAnswers(asked.questions, answers)),
         "</answer-from-primary>",
       ].join("\n");
       this.prompt(sessionId, message).catch((e) => console.error(`[portal] could not pass on the answers in ${sessionId}: ${(e as Error).message}`));

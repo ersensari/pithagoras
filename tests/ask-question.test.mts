@@ -42,11 +42,33 @@ test('questions the dialog could not draw are refused with a reason the model ca
   bad(Array.from({ length: MAX_QUESTIONS + 1 }, () => ({ question: 'q', options: ['a'] })), /at most 8/);
   bad([{ question: '  ' }], /no text/);
   bad([{ question: 'q', kind: 'slider' }], /kind must be/);
-  bad([{ question: 'q', kind: 'single' }], /needs options/);
-  bad([{ question: 'q', kind: 'ranking', options: ['a'] }], /at least two/);
-  bad([{ question: 'q', kind: 'text', options: ['a'] }], /no options/);
+  bad([{ question: 'q', kind: 'ranking', options: ['a'] }], /at least two options to put in order, as in "options": \["First", "Second"\]/);
+  bad([{ question: 'q', kind: 'ranking' }], /at least two/);
+  bad([{ question: 'q', kind: 'text', options: ['a'] }], /takes no options\. Leave "kind" out for a choice/);
   bad([{ question: 'q', options: ['a', 'a'] }], /twice/);
   bad([{ id: 'x', question: 'q', options: ['a'] }, { id: 'x', question: 'r', options: ['a'] }], /used twice/);
+});
+
+test('a question without options is answered in words, as the model meant it, whatever kind of choice it named', () => {
+  // As a model sent them, again and again while each was turned away for having no options: no kind, or "single".
+  const qs = readQuestions([
+    { question: 'Which language do you prefer?', id: 'q1-fav-lang' },
+    { question: 'Which tools do you use? (several)', kind: 'multiple', id: 'q2-tools' },
+    { question: 'What else to test?', kind: 'single' },
+    { question: 'Which framework?', options: ['React', 'Vue'] },
+  ]);
+  assert.deepEqual(qs.map((q) => [q.id, q.kind, q.options, q.other]), [
+    ['q1-fav-lang', 'text', [], false],
+    ['q2-tools', 'text', [], false],
+    ['q3', 'text', [], false],
+    ['q4', 'single', [{ label: 'React' }, { label: 'Vue' }], false],
+  ]);
+  assert.deepEqual(readAnswers(qs, { 'q1-fav-lang': 'Rust', q2_tools: 'x', q3: ['no'] }), { 'q1-fav-lang': 'Rust' });
+  // The tool says so, with a call to copy.
+  const { description, parameters } = tool();
+  assert.match(description, /one without is answered in words/);
+  assert.match(description, /"options": \["SQLite", "Postgres"\]/);
+  assert.match(parameters.properties.questions.items.properties.kind.description, /"text" is typed in freely \(the default without options\)/);
 });
 
 test('answers are held to what was asked: strangers, wrong shapes and half rankings are dropped', () => {
