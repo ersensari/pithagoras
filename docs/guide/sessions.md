@@ -85,24 +85,28 @@ Two keys work from anywhere on the page:
 ## Questions from the agent
 
 When the agent cannot go on without a decision or a fact only you have, it uses
-its `ask_question` tool: a dialog opens over the chat with its questions, and
-the agent waits for your answers. A question is one of four kinds: **choose
+its `ask_question` tool: its questions appear in the chat, just above the
+message box (not over the page, so the rest of the chat stays usable), and the
+agent waits for your answers. A question is one of four kinds: **choose
 one**, **choose several**, **free text**, or **put the options in order** (best
 first, moved with the arrows; they start in the order the agent listed them,
 and that order only counts as your answer once you have moved something or
 pressed **Keep this order**).
 A choice may also take an answer of your own when the agent allows it, and a
 question marked *optional* may be left empty. **Submit** is available once every
-other question is answered. **Cancel**, `Esc` or a click beside the dialog
-closes it, and the agent is told that you did not answer.
+other question is answered. **Cancel** puts the questions away, and the agent
+is told that you did not answer.
 
 The agent waits for as long as it takes: there is no time limit by default. It
 ends when you answer, when you cancel, or when you press Stop in the message
-box, which also closes the dialog in every window that has it. If you would
-rather the agent carries on by itself after a while, **Settings → Tools →
-Questions from the agent** sets a limit of 5, 15, 30 or 60 minutes. A question
-that is still waiting stays with its chat: if you reload the page or look at
-another chat meanwhile, the dialog is there again when you come back.
+box, which also takes the questions away in every window that has them. If you
+would rather the agent carries on by itself after a while, **Settings → Tools →
+Questions from the agent** sets a limit of 5, 15, 30 or 60 minutes. The portal
+keeps a question with its chat until it ends: after a reload, a visit to
+another chat or a restart of the portal it is there again. Answered after a
+restart, your answers reach the agent as a new message. Once it ends, the chat
+keeps a short record of it where it was asked: each question and your answer,
+or that it was cancelled or not answered in time.
 
 The tool exists wherever you answer in the portal's own pages: in your chats,
 and in the conversations you start on the Agent page. It does not exist in a

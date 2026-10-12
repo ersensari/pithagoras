@@ -692,31 +692,33 @@ export class SdkPiClient extends EventEmitter implements PiClient {
           if (settled) return;
           settled = true;
           clearTimeout(timer);
-          opts?.signal?.removeEventListener?.("abort", close);
+          opts?.signal?.removeEventListener?.("abort", stop);
           this.pendingUi.delete(id);
           this.openDialogs.delete(id);
           resolve(value);
         };
         // Ended from the run's side (its wait is up, or it is stopped): the pages still showing it close it.
-        // One answered or cancelled on a page is dropped by that page.
-        const close = () => {
+        // One answered or cancelled on a page is dropped by that page. The reason is for the record a question
+        // of ask_question keeps in the chat (see questions.ts).
+        const close = (reason: "expired" | "stopped") => {
           if (settled) return;
-          this.emit("event", { type: "extension_ui_cancel", id });
+          this.emit("event", { type: "extension_ui_cancel", id, reason });
           finish(fallback);
         };
+        const stop = () => close("stopped");
         this.pendingUi.set(id, (r) => finish(r.cancelled ? fallback : r.value));
 
         // A dialog waits until it is answered, cancelled or the run is stopped. Only a caller that names
         // a wait (pi's `timeout` option, the question tool's setting) gets one.
         const ms = typeof opts?.timeout === "number" ? opts.timeout : 0;
         if (ms > 0) {
-          timer = setTimeout(close, ms);
+          timer = setTimeout(() => close("expired"), ms);
           if (typeof timer.unref === "function") timer.unref();
         }
-        opts?.signal?.addEventListener?.("abort", close, { once: true });
+        opts?.signal?.addEventListener?.("abort", stop, { once: true });
 
         const request = { type: "extension_ui_request", id, ...payload };
-        this.openDialogs.set(id, { request, close });
+        this.openDialogs.set(id, { request, close: stop });
         this.emit("event", request);
       });
 
@@ -732,9 +734,10 @@ export class SdkPiClient extends EventEmitter implements PiClient {
         ask({ method: "input", title, placeholder }, opts, undefined),
       editor: (title: string, content: string, opts?: any) =>
         ask({ method: "editor", title, defaultValue: content }, opts, undefined),
-      // The portal's own, beside pi's: one dialog for several questions. See ask-question.ts.
+      // The portal's own, beside pi's: several questions at once, drawn in the chat. See ask-question.ts. When its
+      // wait ends goes with it, so that a question kept over a restart of the portal still ends then.
       questions: (payload: { title?: string; questions: unknown[] }, opts?: any) =>
-        ask({ method: "questions", ...payload }, opts, undefined),
+        ask({ method: "questions", ...payload, ...(opts?.timeout > 0 ? { until: Date.now() + opts.timeout } : {}) }, opts, undefined),
       notify: (message: string, type?: string) =>
         fireAndForget({ method: "notify", message, notifyType: type }),
       setStatus: (key: string, text: string) =>

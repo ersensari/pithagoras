@@ -18,7 +18,8 @@ import { findServerBuiltin, picturesRefused, runBuiltin } from "./pi/builtins.js
 import { dropMessage, SessionEditError, userTexts, type Scope } from "./pi/session-edit.js";
 import { AUDIO_MESSAGE_PREFIX } from "./pi/voice-first.js";
 import { isDialog, showsDialogs } from "./pi/ui-requests.js";
-import { ASK_QUESTION_TOOL, asksQuestions } from "./pi/ask-question.js";
+import { ASK_QUESTION_TOOL, asksQuestions, describeAnswers, readAnswers, type Answers } from "./pi/ask-question.js";
+import { CHAT_QUESTION, CHAT_QUESTION_END, openChatQuestion, openChatQuestions, type ChatQuestion, type QuestionOutcome } from "./questions.js";
 import { forgetTaint } from "./pi/guard.js";
 import { textOf } from "./pi/entries.js";
 import { removeSessionFiles } from "./session-files.js";
@@ -324,13 +325,41 @@ class SessionManager extends EventEmitter {
   private modelErrors = new ModelErrors();
 
   /**
-   * What a page that attaches is shown beyond the stored events: the message being written, and the
-   * dialogs (confirm, select, input, editor, questions) the agent is waiting on. Dialogs are live events
-   * and never stored, so without this a reload or a visit to another chat lost the dialog.
+   * What a page that attaches is shown beyond the stored events: the message being written, the dialogs
+   * (confirm, select, input, editor) an extension is waiting on, and the agent's questions still open.
+   * Dialogs are live events and never stored, so without this a reload or a visit to another chat lost the
+   * dialog. A question is stored, and sent again here for a page that loads only the end of a long chat,
+   * which may not reach back to where it was asked: the page draws each question once.
    */
   liveSnapshot(sessionId: string) {
-    const asked = (this.live.get(sessionId)?.client.openDialogRequests?.() ?? []).map((req) => this.stream.ephemeral(sessionId, "extension_ui_request", req));
-    return [...this.stream.snapshot(sessionId), ...asked];
+    const dialogs = (this.live.get(sessionId)?.client.openDialogRequests?.() ?? [])
+      .filter((req) => req.method !== "questions")
+      .map((req) => this.stream.ephemeral(sessionId, "extension_ui_request", req));
+    const questions = this.openQuestions(sessionId).map((q) => this.stream.ephemeral(sessionId, CHAT_QUESTION, q));
+    return [...this.stream.snapshot(sessionId), ...dialogs, ...questions];
+  }
+
+  /**
+   * The agent's questions in a chat that are still open. One nobody waits on any more, whose wait is up, ends
+   * here: its timer went with the portal that asked it.
+   */
+  openQuestions(sessionId: string): ChatQuestion[] {
+    const now = Date.now();
+    return openChatQuestions(sessionId).filter((q) => {
+      if (q.until === undefined || q.until > now || this.waitedOn(sessionId, q.id)) return true;
+      this.endQuestion(sessionId, q.id, "expired");
+      return false;
+    });
+  }
+
+  /** Whether the run that asked a question is still waiting for its answer. */
+  private waitedOn(sessionId: string, id: string): boolean {
+    return (this.live.get(sessionId)?.client.openDialogRequests?.() ?? []).some((req) => req.id === id);
+  }
+
+  /** A question's record: how it ended, and the answers when it was answered. See questions.ts. */
+  private endQuestion(sessionId: string, id: string, outcome: QuestionOutcome, answers?: Answers): void {
+    this.record(sessionId, CHAT_QUESTION_END, { of: id, outcome, ...(answers ? { answers } : {}) });
   }
   /** In-flight ask() per session, so messages in one chat are answered in turn. */
   private asking = new Map<string, Promise<string>>();
@@ -1134,7 +1163,17 @@ class SessionManager extends EventEmitter {
       const modelFailure = this.modelErrors.take(sessionId, msg);
       if (modelFailure) this.record(sessionId, "portal_notice", { text: modelFailure, error: true });
       if (msg.type === "extension_ui_request") this.noteExtensionUi(sessionId, msg);
-      this.record(sessionId, msg.type, forTranscript(msg));
+      // The agent's questions are kept with the chat until they end, rather than live as the dialogs are.
+      if (msg.type === "extension_ui_request" && msg.method === "questions") {
+        this.record(sessionId, CHAT_QUESTION, {
+          id: msg.id,
+          ...(msg.title ? { title: msg.title } : {}),
+          questions: msg.questions,
+          ...(typeof msg.until === "number" ? { until: msg.until } : {}),
+        });
+      } else if (msg.type === "extension_ui_cancel" && typeof msg.id === "string" && openChatQuestion(sessionId, msg.id)) {
+        this.endQuestion(sessionId, msg.id, msg.reason === "expired" ? "expired" : "stopped");
+      } else this.record(sessionId, msg.type, forTranscript(msg));
       // Anything a command in hand shows for itself: see endCommand. Only what
       // a person sees in the chat — a line, a dialog, a run, a message — and
       // not a status or widget, which any extension updates on its own clock.
@@ -2429,9 +2468,32 @@ class SessionManager extends EventEmitter {
     else this.drafts.delete(sessionId);
   }
 
-  /** Answer an extension dialog for a live session. */
+  /**
+   * Answer an extension dialog for a live session, or one of the agent's questions. A question's answer, or
+   * that it was cancelled, is written down as its record. When nothing waits for it any more (the portal
+   * restarted, or the chat's pi was let go, while it was open) the answers go to the agent as a message.
+   */
   respondUi(sessionId: string, id: string, response: { cancelled?: boolean; value?: unknown }): boolean {
-    return this.live.get(sessionId)?.client.respondUi(id, response) ?? false;
+    const asked = openChatQuestion(sessionId, id);
+    const waiting = this.live.get(sessionId)?.client.respondUi(id, response) ?? false;
+    if (!asked) return waiting;
+    if (!waiting && asked.until !== undefined && asked.until <= Date.now()) {
+      this.endQuestion(sessionId, id, "expired");
+      return false;
+    }
+    const answers = response.cancelled ? undefined : readAnswers(asked.questions, response.value);
+    this.endQuestion(sessionId, id, answers ? "answered" : "cancelled", answers);
+    if (!waiting && answers) {
+      const message = [
+        "<answer-from-primary>",
+        "These are the answers to the questions you asked with ask_question. Your run ended before they came (the portal restarted while you waited, for one), so they come as this message: go on from there.",
+        "",
+        describeAnswers(asked.questions, answers),
+        "</answer-from-primary>",
+      ].join("\n");
+      this.prompt(sessionId, message).catch((e) => console.error(`[portal] could not pass on the answers in ${sessionId}: ${(e as Error).message}`));
+    }
+    return true;
   }
 
   /**

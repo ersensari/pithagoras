@@ -132,9 +132,9 @@ test('the wait is read each time a question is asked', async () => {
   assert.deepEqual(seen, [0, 30 * 60_000]);
 });
 
-test('a dialog closed without answers is a result, not an error; a context with no screen is an error', async () => {
+test('questions cancelled without answers are a result, not an error; a context with no screen is an error', async () => {
   const closed = await tool().execute('id', { questions: ask }, undefined, undefined, { ui: { questions: async () => undefined } });
-  assert.match(closed.content[0].text, /closed the dialog without answering/);
+  assert.match(closed.content[0].text, /cancelled the questions without answering/);
   await assert.rejects(tool().execute('id', { questions: ask }, undefined, undefined, { ui: {} }), /no screen/);
   await assert.rejects(tool().execute('id', { questions: [] }, undefined, undefined, { ui: { questions: async () => ({}) } }), /at least one/);
 });

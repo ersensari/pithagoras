@@ -164,8 +164,12 @@ test("Stop closes the dialog on every page that has it, and nothing is left to s
 test("a page that opens a chat with a question waiting is sent it before the stream is caught up", async () => {
   const { default: express } = await import("express");
   const { eventsRouter } = await import("../dist/api/events.js");
+  const { appendEvent } = await import("../dist/db.js");
   createSession({ id: "waiting", title: "waiting", workspace: process.env.WORKSPACE_ROOT, executor: "host" });
-  const request = { type: "extension_ui_request", id: "q-1", method: "questions", questions: [{ id: "q1", question: "Pick", kind: "single", options: [{ label: "A" }], other: false, optional: false }] };
+  const asked = { id: "q-1", questions: [{ id: "q1", question: "Pick", kind: "single", options: [{ label: "A" }], other: false, optional: false }] };
+  const request = { type: "extension_ui_request", method: "questions", ...asked };
+  // Kept with the chat, and waited on by its run, which still has the request as a dialog of its own.
+  appendEvent("waiting", "portal_question", asked);
   sessions.live.set("waiting", { client: { openDialogRequests: () => [request] } });
   const app = express().use("/api", eventsRouter());
   const server = app.listen(0);
@@ -179,12 +183,14 @@ test("a page that opens a chat with a question waiting is sent it before the str
       if (done) break;
       text += new TextDecoder().decode(value);
     }
-    const frames = text.split("\n\n").filter((f) => f.startsWith("data: ")).map((f) => JSON.parse(f.slice(6)));
-    const sent = frames.find((f) => f.type === "extension_ui_request");
-    assert.ok(sent, "the question came");
-    assert.ok(sent.seq < 0, "live only: it never moves the page's cursor");
-    assert.deepEqual(sent.payload, request);
-    assert.ok(text.indexOf("extension_ui_request") < text.indexOf("event: caught-up"));
+    // A stored event comes with its id first.
+    const frames = text.split("\n\n").map((f) => f.split("\n").find((l) => l.startsWith("data: "))).filter(Boolean).map((l) => JSON.parse(l.slice(6)));
+    const sent = frames.filter((f) => f.type === "portal_question");
+    assert.equal(sent.length, 2, "the question came: as it is stored, and again for a page whose loaded end does not reach it");
+    assert.ok(sent[0].seq > 0 && sent[1].seq < 0, "the copy is live only: it never moves the page's cursor");
+    for (const f of sent) assert.deepEqual(f.payload, asked);
+    assert.equal(frames.filter((f) => f.type === "extension_ui_request").length, 0, "not as a dialog over the page");
+    assert.ok(text.lastIndexOf("portal_question") < text.indexOf("event: caught-up"));
   } finally {
     abort.abort();
     sessions.live.delete("waiting");

@@ -161,19 +161,25 @@ test("a dialog waiting while no page is attached is replayed to a page that open
   };
   try {
     const answer = ui.confirm("Sure?", "Really");
+    const picked = ui.select("Pick", ["a", "b"]);
+    // The agent's questions are no dialog over the page: they are kept with the chat (see chat-questions.test.mjs).
     const asked = ui.questions({ title: "Setup", questions: [{ id: "q1", question: "Pick", kind: "single", options: [{ label: "A" }], other: false, optional: false }] });
     const sent = events.filter((e) => e.type === "extension_ui_request");
+    const dialogs = sent.filter((e) => e.method !== "questions");
+    assert.equal(dialogs.length, 2);
     const seen = await page();
-    assert.deepEqual(seen.map((f) => f.payload), sent, "each as it was sent, under the id the answer comes back by");
+    assert.deepEqual(seen.map((f) => f.payload), dialogs, "each as it was sent, under the id the answer comes back by");
     assert.ok(seen.every((f) => f.seq < 0), "live only: it never moves the page's cursor");
 
-    client.respondUi(sent[0].id, { value: true });
+    client.respondUi(dialogs[0].id, { value: true });
     assert.equal(await answer, true);
-    assert.deepEqual((await page()).map((f) => f.payload.id), [sent[1].id], "only the one still waiting");
+    assert.deepEqual((await page()).map((f) => f.payload.id), [dialogs[1].id], "only the one still waiting");
 
-    client.respondUi(sent[1].id, { cancelled: true });
-    await asked;
+    client.respondUi(dialogs[1].id, { cancelled: true });
+    await picked;
     assert.deepEqual(await page(), []);
+    client.respondUi(sent.find((e) => e.method === "questions").id, { cancelled: true });
+    await asked;
   } finally {
     server.close();
     sessions.live.delete("confirming");

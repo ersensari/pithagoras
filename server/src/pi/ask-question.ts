@@ -3,14 +3,15 @@ import { fail, say } from "./tool-result.js";
 import { showsDialogs } from "./ui-requests.js";
 
 /**
- * Asking the person in front of the screen something, with a dialog of the portal's own.
+ * Asking the person in front of the screen something, in the chat.
  *
  * pi's `ctx.ui.select()` and `input()` draw one plain menu or one text line, so a
  * question with several parts, or an answer that is a ranking, took a string of
- * dialogs or a guess. This tool puts all of them in one dialog: single choice,
- * several choices, free text and putting options in order. The dialog is the
- * `questions` request of the portal's UI context (see buildUiContext), answered by
- * the browser through the same route as every other dialog.
+ * dialogs or a guess. This tool puts all of them in one place: single choice,
+ * several choices, free text and putting options in order. It is the `questions`
+ * request of the portal's UI context (see buildUiContext). The chat keeps it until
+ * it ends and draws it above the message box (see questions.ts), and the browser
+ * answers it through the same route as every dialog.
  */
 
 export const ASK_QUESTION_TOOL = "ask_question";
@@ -179,14 +180,14 @@ export function askQuestionTool(waitMs: () => number = () => 0) {
       name: ASK_QUESTION_TOOL,
       label: "Ask a question",
       description:
-        "Ask the person you are working with one or more questions in a dialog over their message box, and " +
+        "Ask the person you are working with one or more questions, shown in the chat above their message box, and " +
         "wait for the answers. Use it when you cannot go on without a decision or a fact that only they have " +
         "and guessing would cost them more than asking: a choice between approaches, which of several files " +
         "to change, how they rank things. Put every question you have into one call. Do not use it for " +
         "what you can find out yourself, or for confirming what they already told you.",
       promptSnippet: `${ASK_QUESTION_TOOL} — ask the person questions (choose one, choose several, free text, rank) and wait for the answers`,
       parameters: Type.Object({
-        title: Type.Optional(Type.String({ description: "A heading for the dialog, when the questions belong together." })),
+        title: Type.Optional(Type.String({ description: "A heading for the questions, when they belong together." })),
         questions: Type.Array(questionSchema, { description: `1 to ${MAX_QUESTIONS} questions, shown together.` }),
       }),
       async execute(_id: string, p: any, signal: AbortSignal | undefined, _update: unknown, ctx: any) {
@@ -196,7 +197,7 @@ export function askQuestionTool(waitMs: () => number = () => 0) {
         const title = clip(p.title, 200);
         const value = await ctx.ui.questions({ ...(title ? { title } : {}), questions }, { signal, timeout: waitMs() });
         if (value === undefined) {
-          return say("The person closed the dialog without answering, or the time allowed for answering ran out. Carry on with your best judgement, or ask in your reply.");
+          return say("The person cancelled the questions without answering, or the time allowed for answering ran out. Carry on with your best judgement, or ask in your reply.");
         }
         return say(describeAnswers(questions, readAnswers(questions, value)));
       },

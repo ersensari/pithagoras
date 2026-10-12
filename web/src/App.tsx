@@ -12,7 +12,6 @@ import { isTab, type Tab } from "./settings-tabs";
 import { setupDismissed } from "./setup-state";
 import { load as loadCached, prefetchSettings } from "./settings-cache";
 import { ExtensionDialog, type UiRequest } from "./components/ExtensionDialog";
-import { QuestionDialog } from "./components/QuestionDialog";
 import { lazyComponent } from "./lazy";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { ConfirmHost } from "./components/ConfirmDialog";
@@ -403,7 +402,7 @@ function Shell({
       const applyDialog = (ev: PortalEvent) => {
         if (ev.type === "extension_ui_request") {
           const req = ev.payload as UiRequest;
-          if (["select", "confirm", "input", "editor", "questions"].includes(req.method)) {
+          if (["select", "confirm", "input", "editor"].includes(req.method)) {
             setUiQueue((q) => (q.some((x) => x.id === req.id) ? q : [...q, req]));
           }
         }
@@ -827,17 +826,7 @@ function Shell({
         </ErrorBoundary>
       </main>
 
-      {active && uiQueue[0]?.method === "questions" && (
-        <QuestionDialog
-          key={uiQueue[0].id}
-          sessionId={active.id}
-          requestId={uiQueue[0].id}
-          title={uiQueue[0].title}
-          questions={uiQueue[0].questions ?? []}
-          onDone={() => setUiQueue((q) => q.slice(1))}
-        />
-      )}
-      {active && uiQueue[0] && uiQueue[0].method !== "questions" && (
+      {active && uiQueue[0] && (
         <ExtensionDialog
           // One dialog per question: what the last was answered, or failed with, is not this one's.
           key={uiQueue[0].id}

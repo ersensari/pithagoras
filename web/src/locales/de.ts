@@ -774,8 +774,12 @@ const de: Locale = {
     "Submit": "Absenden",
     "No": "Nein",
     "Yes": "Ja",
-    // components/QuestionDialog.tsx
+    // components/QuestionCard.tsx
     "Questions from the agent": "Fragen des Agenten",
+    "No answer": "Keine Antwort",
+    "Cancelled, not answered": "Abgebrochen, nicht beantwortet",
+    "Not answered: the time for answering ran out": "Nicht beantwortet: Die Zeit für die Antwort ist abgelaufen",
+    "Not answered: the run was stopped": "Nicht beantwortet: Der Lauf wurde gestoppt",
     "optional": "optional",
     "Another answer": "Andere Antwort",
     "Type your own answer": "Eigene Antwort eingeben",
