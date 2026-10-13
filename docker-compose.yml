@@ -96,6 +96,13 @@ services:
       VOICE_RTC_ADDRESSES: ${VOICE_RTC_ADDRESSES:-}
       # The languages you speak, such as en,tr: Whisper's guesses in any other language on noise are dropped.
       VOICE_STT_LANGUAGES: ${VOICE_STT_LANGUAGES:-}
+      # forgeloop-ai-speech: speaker-diarized transcripts (/api/sessions/:id/speech/diarize). Empty = routes answer 503.
+      SPEECH_URL: ${SPEECH_URL:-}
+      # Telegram voice: messages are transcribed, the final answer is also spoken back. Empty = text only.
+      TELEGRAM_STT_URL: ${TELEGRAM_STT_URL:-}
+      TELEGRAM_TTS_URL: ${TELEGRAM_TTS_URL:-}
+      TELEGRAM_TTS_VOICE: ${TELEGRAM_TTS_VOICE:-}
+      TELEGRAM_OGG_URL: ${TELEGRAM_OGG_URL:-}
       # rnnoise (default), gtcrn or off: what cleans the microphone before the VAD hears it.
       VOICE_NOISE_MODEL: ${VOICE_NOISE_MODEL:-}
 
