@@ -28,7 +28,75 @@ export const manifest = {
   ],
 };
 
-const API = "https://api.telegram.org/bot";
+const API_HOST = process.env.TELEGRAM_API_BASE || "https://api.telegram.org";
+const API = `${API_HOST}/bot`;
+
+/**
+ * Voice, optional and off unless these are set in the portal's environment:
+ *   TELEGRAM_STT_URL  OpenAI-style transcription endpoint (a voice message is transcribed and answered as if typed).
+ *   TELEGRAM_TTS_URL  OpenAI-style speech endpoint that returns audio (WAV/MP3) -- with TELEGRAM_OGG_URL below, the
+ *                     final answer to a voice message is also sent back as a voice message.
+ *   TELEGRAM_TTS_VOICE, TELEGRAM_TTS_MODEL   voice / model names for that endpoint.
+ *   TELEGRAM_OGG_URL  endpoint taking multipart `file` and returning OGG/Opus (Telegram's voice format).
+ */
+const STT_URL = process.env.TELEGRAM_STT_URL || "";
+const STT_MODEL = process.env.TELEGRAM_STT_MODEL || "whisper-1";
+const TTS_URL = process.env.TELEGRAM_TTS_URL || "";
+const TTS_VOICE = process.env.TELEGRAM_TTS_VOICE || "";
+const TTS_MODEL = process.env.TELEGRAM_TTS_MODEL || "tts";
+const OGG_URL = process.env.TELEGRAM_OGG_URL || "";
+const MAX_VOICE_CHARS = 1500;
+
+/** The bytes of a file Telegram holds (a voice message the user sent). */
+async function download(token, fileId, signal) {
+  const info = await call(token, "getFile", { file_id: fileId }, signal);
+  const res = await fetch(`${API_HOST}/file/bot${token}/${info.file_path}`, { signal });
+  if (!res.ok) throw new Error(`could not download the voice message (HTTP ${res.status})`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/** Speech to text through the configured endpoint. Empty string when nothing was said. */
+async function transcribe(audio, signal) {
+  const form = new FormData();
+  form.set("file", new Blob([audio], { type: "audio/ogg" }), "voice.ogg");
+  form.set("model", STT_MODEL);
+  form.set("response_format", "json");
+  const res = await fetch(STT_URL, { method: "POST", body: form, signal: signal ?? AbortSignal.timeout(120_000) });
+  if (!res.ok) throw new Error(`speech recognition returned HTTP ${res.status}`);
+  const body = await res.json();
+  return typeof body.text === "string" ? body.text.trim() : "";
+}
+
+/** Text to an OGG/Opus voice message; null when voice replies are not configured or anything fails. */
+async function synthesize(text, signal) {
+  if (!TTS_URL || !OGG_URL) return null;
+  try {
+    const spoken = await fetch(TTS_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: TTS_MODEL, input: text, ...(TTS_VOICE ? { voice: TTS_VOICE } : {}) }),
+      signal: signal ?? AbortSignal.timeout(180_000),
+    });
+    if (!spoken.ok) return null;
+    const form = new FormData();
+    form.set("file", new Blob([await spoken.arrayBuffer()]), "speech");
+    const ogg = await fetch(OGG_URL, { method: "POST", body: form, signal: signal ?? AbortSignal.timeout(60_000) });
+    if (!ogg.ok) return null;
+    return Buffer.from(await ogg.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+/** sendVoice is a multipart upload, not JSON. */
+async function sendVoice(token, chatId, ogg, signal) {
+  const form = new FormData();
+  form.set("chat_id", String(chatId));
+  form.set("voice", new Blob([ogg], { type: "audio/ogg" }), "reply.ogg");
+  const res = await fetch(`${API}${token}/sendVoice`, { method: "POST", body: form, signal });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.description || "sendVoice failed");
+}
 
 /** A connection that failed to open is worth another go; a rejected one is not. */
 const transient = (e) =>
@@ -180,12 +248,37 @@ export async function start(ctx) {
         }
 
         const message = update.message;
-        const text = message?.text?.trim();
-        if (!text) continue;
+        const media = message?.voice ?? message?.audio ?? message?.video_note;
+        let text = message?.text?.trim();
+        if (!text && !media) continue;
 
         const chatId = String(message.chat.id);
         if (allowed.length && !allowed.includes(chatId)) {
           ctx.log(`ignored a message from ${chatId}`);
+          continue;
+        }
+
+        // A voice message: heard first, then answered exactly like typed text. The answer is also spoken back.
+        if (!text && media) {
+          if (!STT_URL) {
+            await call(token, "sendMessage", { chat_id: chatId, text: "Voice messages are not enabled on this bot." }, ctx.signal).catch(() => {});
+            continue;
+          }
+          void (async () => {
+            try {
+              await call(token, "sendChatAction", { chat_id: chatId, action: "typing" }, ctx.signal);
+              const heard = await transcribe(await download(token, media.file_id, ctx.signal), ctx.signal);
+              if (!heard) {
+                await call(token, "sendMessage", { chat_id: chatId, text: "I could not make out any words in that voice message." }, ctx.signal);
+                return;
+              }
+              await call(token, "sendMessage", { chat_id: chatId, text: `🎤 ${heard}` }, ctx.signal).catch(() => {});
+              await handle(message, heard, chatId, { spoken: true });
+            } catch (e) {
+              ctx.log(`failed to handle a voice message from ${chatId}: ${e.message}`);
+              await call(token, "sendMessage", { chat_id: chatId, text: `I could not process that voice message: ${e.message}` }, ctx.signal).catch(() => {});
+            }
+          })();
           continue;
         }
 
@@ -296,8 +389,10 @@ export async function start(ctx) {
     },
   };
 
-  async function handle(message, text, chatId) {
+  async function handle(message, text, chatId, { spoken = false } = {}) {
+    let lastBody = "";
     const say = async (body) => {
+      lastBody = body;
       // Telegram rejects anything over 4096 characters outright.
       for (const chunk of split(body, 4000)) {
         await call(token, "sendMessage", { chat_id: chatId, text: chunk }, ctx.signal);
@@ -324,6 +419,12 @@ export async function start(ctx) {
       });
       // Non-empty only when the portal was not relaying as it went.
       if (reply) await say(reply);
+      // The answer to a voice message is also read out: only the final text, never the progress lines.
+      if (spoken && lastBody.trim() && lastBody.length <= MAX_VOICE_CHARS) {
+        await call(token, "sendChatAction", { chat_id: chatId, action: "record_voice" }, ctx.signal).catch(() => {});
+        const ogg = await synthesize(lastBody, ctx.signal);
+        if (ogg) await sendVoice(token, chatId, ogg, ctx.signal).catch((e) => ctx.log(`could not send the voice reply: ${e.message}`));
+      }
       return true;
     } catch (e) {
       ctx.log(`failed to answer ${chatId}: ${e.message}`);
