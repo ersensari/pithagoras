@@ -15,7 +15,7 @@ import { micError } from "../mic-error";
 import type { Item } from "../transcript";
 import { LiveTranscription } from "../live-transcription";
 import { StreamedTranscription } from "../live-rtc";
-import { RtcStt } from "../rtc-stt";
+import { RtcStt, type RtcSpeaker } from "../rtc-stt";
 import { suppressNoise, type NoiseModel, type Suppressed } from "../noise";
 import { preparePcmSpeech, readPcmStream, playAudioBuffer, bufferOf } from "../pcm-stream";
 import { stretch, stretchInSteps } from "../time-stretch";
@@ -114,6 +114,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const [error, setError] = useState("");
   const [muted, setMuted] = useState(false);
   const [transcript, setTranscript] = useState("");
+  /** Who spoke the last utterance (portal-side voice identification, off unless VOICE_SPEAKER_ID); cleared when the next one starts. */
+  const [speaker, setSpeaker] = useState<RtcSpeaker | undefined>(undefined);
   const transcription = useRef<StreamedTranscription | null>(null);
   const rtcStt = useRef<RtcStt | undefined>(undefined);
   const rtcEnabled = useRef(false);
@@ -554,11 +556,11 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       }
       const detectorModule = await import("@ricky0123/vad-web");
       if (!current()) return;
-      const showPreview = (text: string) => { if (current()) { setTranscript(text); voice.current?.heard(text); } };
+      const showPreview = (text: string) => { if (current()) { setTranscript(text); voice.current?.heard(text); if (!text) setSpeaker(undefined); } };
       const plain = new LiveTranscription(async (samples, signal) => {
         const trace=profiling.current?profiler.current!.current:undefined;
         const started=performance.now();if(trace)profiler.current!.mark('stt_request',{audioMs:samples.length/16},trace);
-        let result: { text: string; serverTiming: string };
+        let result: { text: string; serverTiming: string; speaker?: RtcSpeaker };
         try {
           result = await api.transcribe(sessionId, samples, signal);
         } catch (e) {
@@ -566,9 +568,10 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
           throw e;
         }
         if(trace)profiler.current!.mark('stt_result',{requestMs:performance.now()-started,serverTiming:result.serverTiming,ok:true},trace);
+        if (current() && result.speaker) setSpeaker(result.speaker);
         return result.text;
       }, showPreview, !sequential.current);
-      const live = new StreamedTranscription(plain, () => rtcStt.current, showPreview);
+      const live = new StreamedTranscription(plain, () => rtcStt.current, showPreview, speaker => { if (current()) setSpeaker(speaker); });
       transcription.current = live;
       const controller = new HandsFreeVoice({
         statusSpeech: statusSpeech.current,
@@ -738,7 +741,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     {(starting || enabled) && stageTarget && createPortal(
       <VoiceStage sessionId={sessionId} folder={folder} workPhase={work} canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={sequentialMode ? `${title} · ${sentenceMode ? (prefetchMode ? t("Sentence pipeline · buffered audio") : t("Sentence chunks · buffered audio")) : t("Sequential baseline")}` : comparison ? `${title} · ${t("Streaming pipeline")}` : title} phase={phase} starting={starting} muted={muted} speaking={speaking}
         browserAvailable={browserAvailable} browserActivity={browserActivity} terminalActivity={terminalActivity} toolEvents={toolEvents} sounds={sounds} onSounds={toggleSounds} onCue={cue}
-        levels={levels} transcript={transcript} error={error} onMute={toggleMute} onEnd={endMode} waitingForTap={waitingForTap}
+        levels={levels} transcript={transcript} speaker={speaker} error={error} onMute={toggleMute} onEnd={endMode} waitingForTap={waitingForTap}
         items={items} running={running} onStop={() => { void latest.current.onAbort().catch(e => setError((e as Error).message)); }}
         attachments={attachments} onAddPictures={files => { void addPictures(files); }} onRemovePicture={id => pending.set(sessionId, pending.get(sessionId).filter(a => a.id !== id))}
         canRepeat={canRepeat} onRepeat={() => { repeatReply(); }}

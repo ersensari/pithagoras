@@ -1,5 +1,6 @@
 import { t } from "./i18n";
 import { samplesWav } from "./voice";
+import type { RtcSpeaker } from "./rtc-stt";
 import type { Host, VoiceChoice } from "../../server/src/voice-engines";
 import type { OrbStyle } from "../../server/src/orb-style";
 import type { OutputFormat } from "../../server/src/image-settings";
@@ -443,11 +444,11 @@ export const api = {
   uninstallVoice: (removeData: boolean) => json<{ok:boolean}>('/api/voice/uninstall', {method:'POST', body: JSON.stringify({removeData})}),
   connectVoice: () => json<VoiceConfig>('/api/voice/connect', {method:'POST'}),
   /** What was said in `samples` (16 kHz mono), in words, and how long the speech server says it took. */
-  transcribe: async (sessionId: string, samples: Float32Array, signal?: AbortSignal): Promise<{ text: string; serverTiming: string }> => {
+  transcribe: async (sessionId: string, samples: Float32Array, signal?: AbortSignal): Promise<{ text: string; serverTiming: string; speaker?: RtcSpeaker }> => {
     const res = await send(`/api/sessions/${sessionId}/voice/transcribe`, { method: "POST", headers: { "Content-Type": "audio/wav" }, body: samplesWav(samples), signal });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(body.error || t("Transcription failed"), res.status, body);
-    return { text: String(body.text ?? ""), serverTiming: res.headers.get("server-timing") ?? "" };
+    return { text: String(body.text ?? ""), serverTiming: res.headers.get("server-timing") ?? "", ...(body.speaker ? { speaker: body.speaker as RtcSpeaker } : {}) };
   },
   /** Trades a WebRTC offer for the portal's answer: the signalling of streaming recognition. */
   rtcOffer: async (sessionId: string, offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> => {

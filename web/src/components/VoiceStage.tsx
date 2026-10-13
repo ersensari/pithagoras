@@ -1,5 +1,6 @@
 import { ActivityProgress } from './ActivityProgress';
 import type { Activity } from '../transcript';
+import type { RtcSpeaker } from "../rtc-stt";
 import { useWorkPanels } from "../use-work-panels";
 import { FilesPanel } from "./FilesPanel";
 import { keepFileActivity, latestFileActivity, type FileActivity } from "../file-activity";
@@ -47,13 +48,13 @@ const watchWide = (changed: () => void) => {
 /** Where focus is typing, so Space and a paste belong to that and not to voice mode. */
 const editing = (target: EventTarget | null) => !!(target as Element | null)?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
 
-export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasMinimize, onCanvasToggle, title, phase, starting, muted, speaking, levels, error, transcript, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue,
+export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasMinimize, onCanvasToggle, title, phase, starting, muted, speaking, levels, error, transcript, speaker, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue,
   waitingForTap, items, running, onStop, attachments, onAddPictures, onRemovePicture, canRepeat, onRepeat, rate, onRate, steer, onSteer, ptt, onPtt, holding, onHold }: {
   sessionId: string; folder: string;
   workPhase?: Activity | null;
   canvasOpen: boolean; onCanvasMinimize: () => void; onCanvasToggle: () => void;
   title: string; phase: VoicePhase; starting: boolean; muted: boolean; speaking: boolean;
-  levels: MutableRefObject<VoiceLevels>; transcript: string; error: string; onMute: () => void; onEnd: () => void;
+  levels: MutableRefObject<VoiceLevels>; transcript: string; /** Who spoke it, when the portal could tell (reliable verdicts only are shown). */ speaker?: RtcSpeaker; error: string; onMute: () => void; onEnd: () => void;
   browserAvailable: boolean; browserActivity: number; terminalActivity: number; toolEvents: PortalEvent[]; sounds: boolean; onSounds: () => void; onCue: (kind: VoiceCue) => void;
   /** Back after a reload, and waiting for a tap before audio may start. */
   waitingForTap?: boolean;
@@ -450,6 +451,7 @@ export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasM
         </>}
       </div>
       {!anyPanel && transcript && (input || holding || phase === "Transcribing") && <p className="voice-live-transcript" role="group" aria-label={t("Live transcription")}>{transcript}</p>}
+      {speaker?.reliable && <p className={`voice-speaker${speaker.matched && speaker.name ? "" : " is-unknown"}`} role="status" aria-label={t("Speaker")}>{speaker.matched && speaker.name ? speaker.name.charAt(0).toUpperCase() + speaker.name.slice(1) : t("Unknown voice")}</p>}
 
       <div className="voice-stage-controls">
         {ptt

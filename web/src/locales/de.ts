@@ -2017,6 +2017,7 @@ const de: Locale = {
     "Compacting context": "Kontext wird komprimiert",
     "Live model thinking": "Live-Denken des Modells",
     "Live transcription": "Live-Transkription",
+    "Unknown voice": "Unbekannte Stimme",
     "Hold to talk": "Zum Sprechen halten",
     "Unmute microphone": "Mikrofon einschalten",
     "Mute microphone": "Mikrofon stummschalten",

@@ -1,5 +1,5 @@
 import { LiveTranscription } from "./live-transcription";
-import type { RtcStt } from "./rtc-stt";
+import type { RtcSpeaker, RtcStt } from "./rtc-stt";
 
 /**
  * LiveTranscription's interface with the portal's streaming recognition behind
@@ -17,6 +17,8 @@ export class StreamedTranscription {
     private readonly inner: LiveTranscription,
     private readonly rtc: () => RtcStt | undefined,
     private readonly preview: (text: string) => void,
+    /** Who spoke the utterance just finished, where the portal identifies voices; undefined when it has no verdict. */
+    private readonly onSpeaker?: (speaker: RtcSpeaker | undefined) => void,
   ) {}
 
   /** Wired to the RtcStt's interim hook. */
@@ -44,7 +46,7 @@ export class StreamedTranscription {
     this.ended.delete(samples);
     const rtc = this.rtc();
     if (rtc) {
-      try { return (await rtc.final(id, signal)).text; }
+      try { const result = await rtc.final(id, signal); this.onSpeaker?.(result.speaker); return result.text; }
       catch (e) { if (signal.aborted) throw e; /* anything else: the recording itself goes up instead */ }
     }
     return this.inner.finish(samples, signal);
