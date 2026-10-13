@@ -98,6 +98,8 @@ services:
       VOICE_STT_LANGUAGES: ${VOICE_STT_LANGUAGES:-}
       # forgeloop-ai-speech: speaker-diarized transcripts (/api/sessions/:id/speech/diarize). Empty = routes answer 503.
       SPEECH_URL: ${SPEECH_URL:-}
+      # 1/true/on: tell which enrolled voice spoke each utterance (needs SPEECH_URL); empty = off
+      VOICE_SPEAKER_ID: ${VOICE_SPEAKER_ID:-}
       # Telegram voice: messages are transcribed, the final answer is also spoken back. Empty = text only.
       TELEGRAM_STT_URL: ${TELEGRAM_STT_URL:-}
       TELEGRAM_TTS_URL: ${TELEGRAM_TTS_URL:-}

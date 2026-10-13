@@ -4,11 +4,13 @@
  * start/end markers one way and interim and final transcripts the other.
  * Nothing here decides anything about speech: the portal does the recognizing.
  */
-export type RtcResult = { text: string; language?: string };
+/** Who spoke, where the portal identifies voices (VOICE_SPEAKER_ID): `matched` is the service's own verdict, `reliable` says the clip was long enough. */
+export type RtcSpeaker = { name: string | null; score: number | null; matched: boolean; reliable: boolean };
+export type RtcResult = { text: string; language?: string; speaker?: RtcSpeaker };
 type Message =
   | { t: "ready" }
   | { t: "interim"; id: string; text: string; language?: string }
-  | { t: "final"; id: string; text: string; language?: string }
+  | { t: "final"; id: string; text: string; language?: string; speaker?: RtcSpeaker }
   | { t: "error"; id: string; error: string };
 
 export interface RtcSttHooks {
@@ -101,7 +103,7 @@ export class RtcStt {
     try { m = JSON.parse(raw); } catch { return; }
     if (m.t === "ready") { this.up = true; this.hooks.state?.(true); }
     else if (m.t === "interim") this.hooks.interim?.(m.id, m.text, m.language);
-    else if (m.t === "final") this.finish(m.id, { text: m.text, language: m.language });
+    else if (m.t === "final") this.finish(m.id, { text: m.text, language: m.language, ...(m.speaker ? { speaker: m.speaker } : {}) });
     else if (m.t === "error") this.finish(m.id, new Error(m.error));
   }
 

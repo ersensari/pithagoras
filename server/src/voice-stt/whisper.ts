@@ -1,8 +1,11 @@
+import type { Identify } from "./speaker.js";
 import type { Transcribe, Transcript } from "./session.js";
 
 /** An OpenAI-compatible transcription endpoint (speaches, faster-whisper-server, audio.cpp) asked for verbose JSON. */
-export function whisperTranscribe(url: string, model?: string, timeoutMs = 120000): Transcribe {
-  return async (wav, { language, signal }) => {
+export function whisperTranscribe(url: string, model?: string, timeoutMs = 120000, identify?: Identify): Transcribe {
+  return async (wav, { language, signal, final }) => {
+    // Who is talking is asked while Whisper works, for whole utterances only (identify never rejects).
+    const speaker = final && identify ? identify(wav, signal) : undefined;
     const form = new FormData();
     form.set("file", new Blob([new Uint8Array(wav)], { type: "audio/wav" }), "recording.wav");
     // Segments carry the confidences cleanTranscript filters on, and the language that was detected.
@@ -13,6 +16,7 @@ export function whisperTranscribe(url: string, model?: string, timeoutMs = 12000
     if (!upstream.ok) throw new Error(`Whisper returned HTTP ${upstream.status}`);
     const body = await upstream.json() as Partial<Transcript>;
     if (typeof body.text !== "string") throw new Error("Whisper returned no transcript");
-    return { text: body.text, language: typeof body.language === "string" ? body.language : undefined, segments: Array.isArray(body.segments) ? body.segments : undefined };
+    const who = await speaker;
+    return { text: body.text, language: typeof body.language === "string" ? body.language : undefined, segments: Array.isArray(body.segments) ? body.segments : undefined, ...(who ? { speaker: who } : {}) };
   };
 }

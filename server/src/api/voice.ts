@@ -10,6 +10,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { once } from "node:events";
 import express, { type Router } from "express";
 import { answerOffer, type RtcStt } from "../voice-stt/rtc.js";
+import { speakerIdUrl, speakerIdentify } from "../voice-stt/speaker.js";
 import { whisperTranscribe } from "../voice-stt/whisper.js";
 import { getSession, getSetting, putSetting } from "../db.js";
 import { agentOf, defaultAgent } from "../agents.js";
@@ -443,12 +444,16 @@ export function voiceRouter(): Router {
     res.on("close", () => controller.abort());
     try {
       const sttStarted=performance.now();
+      // Who is talking is asked while Whisper works (opt-in VOICE_SPEAKER_ID + SPEECH_URL); it never fails the request.
+      const idUrl = speakerIdUrl();
+      const speakerP = idUrl ? speakerIdentify(idUrl)(req.body, controller.signal) : undefined;
       const upstream = await fetch(settings.whisperUrl, { method: "POST", body: form, redirect: "error", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]) });
       if (!upstream.ok) throw new Error(`Whisper returned HTTP ${upstream.status}`);
       const result = await upstream.json() as { text?: unknown };
       if (typeof result.text !== "string") throw new Error("Whisper returned no transcript");
       res.set("Server-Timing", `whisper_upstream;dur=${(performance.now()-sttStarted).toFixed(1)}`);
-      res.json({ text: result.text.trim() });
+      const speaker = await speakerP;
+      res.json({ text: result.text.trim(), ...(speaker ? { speaker } : {}) });
     } catch (e) { if (!res.destroyed) res.status(502).json({ error: (e as Error).message }); }
   });
   // Streaming recognition over WebRTC: the browser sends its microphone as Opus and the VAD's start/end markers on a
@@ -467,7 +472,7 @@ export function voiceRouter(): Router {
       rtc.get(id)?.close();
       let peer: RtcStt | undefined;
       peer = await answerOffer(offer, {
-        transcribe: whisperTranscribe(settings.whisperUrl, settings.sttModel || undefined),
+        transcribe: whisperTranscribe(settings.whisperUrl, settings.sttModel || undefined, 120000, speakerIdUrl() ? speakerIdentify(speakerIdUrl()!) : undefined),
         // The chat's own language setting, where it is one; and the languages that count as speech where VOICE_STT_LANGUAGES lists them (en,tr).
         ...(settings.language && settings.language !== "auto" ? { language: settings.language } : {}),
         languages: (process.env.VOICE_STT_LANGUAGES ?? "").split(",").map(l => l.trim().toLowerCase()).filter(Boolean),

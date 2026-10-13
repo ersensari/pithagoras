@@ -2,18 +2,32 @@ import { wav16 } from "./pcm.js";
 
 export const RATE = 16000;
 
+/** Who the voice in one utterance belongs to, as forgeloop-ai-speech's /v1/speakers/identify says it (opt-in, see speaker.ts). */
+export interface Speaker {
+  /** The best-scoring enrolled voice, whether or not it cleared the threshold. */
+  name: string | null;
+  score: number | null;
+  /** The score reached the service's threshold: a verdict a caller may act on. */
+  matched: boolean;
+  /** The clip was long enough (>= ~2 s) for the verdict to carry weight. */
+  reliable: boolean;
+}
+
 export interface Transcript {
   text: string;
   /** The language Whisper decided on, as it names it ("tr", "en"). */
   language?: string;
   segments?: { text?: string; avg_logprob?: number; no_speech_prob?: number }[];
+  /** Set only on a final transcript, and only where speaker identification is switched on. */
+  speaker?: Speaker;
 }
-export type Transcribe = (wav: Buffer, opts: { language?: string; signal: AbortSignal }) => Promise<Transcript>;
+/** `final` marks the transcript of a whole utterance; interims are previews of a growing one and never identify a voice. */
+export type Transcribe = (wav: Buffer, opts: { language?: string; signal: AbortSignal; final?: boolean }) => Promise<Transcript>;
 
 /** What goes to the browser over the data channel. */
 export type SttMessage =
   | { t: "interim"; id: string; text: string; language?: string }
-  | { t: "final"; id: string; text: string; language?: string }
+  | { t: "final"; id: string; text: string; language?: string; speaker?: Speaker }
   | { t: "error"; id: string; error: string };
 
 export interface SttOptions {
@@ -124,9 +138,9 @@ export class SttSession {
     if (audio.length < RATE * 0.25) { this.send({ t: "final", id, text: "" }); return; }
     const ctl = new AbortController(); this.pending = ctl;
     try {
-      const result = await this.transcribe(wav16(audio), { language, signal: ctl.signal });
+      const result = await this.transcribe(wav16(audio), { language, signal: ctl.signal, final: true });
       if (gen !== this.gen) return;
-      this.send({ t: "final", id, text: cleanTranscript(result, this.o.languages), language: result.language ?? language });
+      this.send({ t: "final", id, text: cleanTranscript(result, this.o.languages), language: result.language ?? language, ...(result.speaker ? { speaker: result.speaker } : {}) });
     } catch (e) {
       if (gen !== this.gen) return;
       this.send({ t: "error", id, error: (e as Error).message });
