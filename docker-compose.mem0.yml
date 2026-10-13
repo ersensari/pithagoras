@@ -1,0 +1,28 @@
+# Standalone add-on, separate compose file on purpose (same reasoning as
+# docker-compose.chatterbox.yml): rebuilding/recreating the portal must not
+# touch this, and vice versa.
+#
+# Local replacement for Pithagoras's Understory memory add-on - see
+# mem0-server/server.py's docstring for why.
+services:
+  mem0:
+    build: ./mem0-server
+    image: pithagoras-mem0:latest
+    container_name: pithagoras-mem0
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - mem0-data:/data
+    environment:
+      PORT: "3900"
+      # "tamamen localde olsun" - mem0 phones home usage telemetry (PostHog)
+      # by default; this is the only thing that would leave the machine.
+      MEM0_TELEMETRY: "False"
+      MEM0_BEARER_TOKEN: ${MEM0_BEARER_TOKEN:?set this in .env}
+      MEM0_EMBEDDER_BASE_URL: http://127.0.0.1:8089/v1
+      MEM0_LLM_BASE_URL: http://127.0.0.1:10084/v1
+      MEM0_LLM_MODEL: swift-1.5-iq3_xxs
+      MEM0_LLM_API_KEY: ${STRATA_API_KEY:?set this in .env}
+
+volumes:
+  mem0-data:
