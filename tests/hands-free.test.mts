@@ -406,3 +406,41 @@ test('a stop that failed while speaking is tried again before what was said is s
   firstAbort.resolve(); await tick(); await tick(); await tick();
   assert.deepEqual(calls, ['abort', 'abort', 'send']); assert.deepEqual(sent, ['hello']); voice.stop();
 });
+
+test('a merged reply is read while the agent is still writing it, in requests of at most 600 characters', async () => {
+ const generated: string[] = []; const release: Array<() => void> = [];
+ const {voice} = setup({mergeReplies: true, agentRunning: () => true, synthesize: async text => { generated.push(text); return async () => { await new Promise<void>(resolve => release.push(resolve)); }; }});
+ const sentence = (n: number) => `Sentence number ${n} of the long story goes on for a while with some more words in it.`;
+ const story = (count: number, done = false) => ({...reply('a20', done), text: Array.from({length: count}, (_, i) => sentence(i + 1)).join(' ') + ' Next'});
+ voice.observe([story(1)]); await tick();
+ assert.deepEqual(generated, [sentence(1)], 'the first sentence goes at once, not after the story');
+ voice.observe([story(30)]); await tick();
+ release.splice(0).forEach(fn => fn()); await tick(); await tick();
+ assert.ok(generated.length >= 2, 'the rest follows');
+ for (const text of generated) assert.ok(text.length <= 600, `a request of ${text.length} characters`);
+ assert.ok(generated.slice(1).every(text => text.endsWith('in it.')), 'requests end at a sentence, not in the middle of one');
+ voice.stop();
+});
+
+test('the tail of its own reply coming back into the microphone is not heard as a request', async () => {
+  const { echoOf } = await import('../web/src/hands-free.js');
+  const said = 'The weather in Istanbul is sunny today, with a high of twenty degrees and a light wind from the north.';
+  assert.equal(echoOf('light wind from the north', said), true, 'the last words, in a row');
+  assert.equal(echoOf('with a high of twenty degrees and light wind from the north', said), true, 'a word lost or changed by the recognizer');
+  assert.equal(echoOf('Thank you', said), false, 'two words that are not in it');
+  assert.equal(echoOf('north', said), false, 'one word can be a person answering');
+  assert.equal(echoOf('what about tomorrow in Ankara', said), false);
+});
+
+test('speech made of what was just said is dropped while a reply plays and just after, not later', async () => {
+  const sent: string[] = [];
+  let heard = 'light wind from the north';
+  const { voice } = setup({ transcribe: async () => heard, send: async text => { sent.push(text); }, agentRunning: () => false });
+  voice.observe([{ ...reply('a20'), text: 'The weather is sunny today, with a light wind from the north.' }]); await tick();
+  voice.speechStart(); voice.speechEnd(new Float32Array(16000)); await tick(); await tick();
+  assert.deepEqual(sent, [], 'its own tail was not sent');
+  heard = 'what about tomorrow';
+  voice.speechStart(); voice.speechEnd(new Float32Array(16000)); await tick(); await tick();
+  assert.deepEqual(sent, ['what about tomorrow']);
+  voice.stop();
+});

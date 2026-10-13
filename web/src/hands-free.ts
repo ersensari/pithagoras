@@ -17,10 +17,25 @@ export const COMPACTION_PHRASES = [
   msg("I need a little room in my context. Let me summarize our conversation, then I'll carry on."),
   msg("Let me do a quick context compaction so I can keep going."),
 ];
+/** How long after a reply the speaker's buffers and the room can still give it back, ms. */
+const ECHO_TAIL_MS = 4000;
+const words = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+/** Whether `heard` is made of words `said` has: in a row, or all but a few of them. At least two words. */
+export function echoOf(heard: string, said: string): boolean {
+  const h = words(heard), s = words(said);
+  if (h.length < 2) return false;
+  if (` ${s.join(' ')} `.includes(` ${h.join(' ')} `)) return true;
+  if (h.length < 4) return false;
+  const known = new Set(s);
+  return h.filter(word => known.has(word)).length / h.length >= 0.8;
+}
+
 export type VoicePhase = "Listening" | "Hearing you" | "Transcribing" | "Thinking" | "Compacting context" | "Speaking";
 export interface VoiceIO {
   sequential?: boolean;
   sentenceChunks?: boolean;
+  /** Speak a whole reply in one synthesis request: the engine crossfades its own chunks. */
+  mergeReplies?: boolean;
   ttsPrefetch?: boolean;
   statusSpeech?: boolean;
   transcribe: (samples: Float32Array, signal: AbortSignal) => Promise<string>;
@@ -59,6 +74,9 @@ export class HandsFreeVoice {
   private text: string[] = [];
   private processing = false;
   private output: string[] = [];
+  /** What was last given to the speaker, and when the speaker was last busy: for hearing one's own voice back. */
+  private spoken: string[] = [];
+  private lastBusyAt = -Infinity;
   private pipeline: SpeechPipeline;
   private thinkingPipeline: SpeechPipeline;
   private compacting = false;
@@ -78,7 +96,7 @@ export class HandsFreeVoice {
 
   constructor(private io: VoiceIO, initial: Item[]) {
     const afterSeq = initial.reduce((n, item) => Math.max(n, Number(item.id.slice(1)) || 0), 0);
-    this.pipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error), io.sequential, io.sentenceChunks, io.ttsPrefetch);
+    this.pipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error), io.sequential, io.sentenceChunks, io.ttsPrefetch, io.mergeReplies);
     this.thinkingPipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error));
     this.speech = new StreamingSpeech(afterSeq);
     this.items = initial;
@@ -88,12 +106,22 @@ export class HandsFreeVoice {
   private ignoreCurrent() {
     this.speech.ignore(this.items);
   }
+  /**
+   * The sequential baseline keeps replies until the agent has finished, so they go as
+   * one request. A merged reply does not: it is spoken as it is written, in requests of
+   * at most MERGE_MAX_CHARS made of whole sentences (see SpeechPipeline), so a long
+   * story starts being read at its first sentence and never becomes one huge request.
+   */
+  private holdsReplies() {
+    return this.io.sequential && !this.io.sentenceChunks && this.io.agentRunning();
+  }
   private report(error: unknown) {
     if (this.alive) this.io.error(error instanceof Error ? error.message : String(error));
   }
   private state() {
     if (!this.alive) return;
     const phase = this.hearing ? "Hearing you" : this.compacting ? "Compacting context" : this.processing && !this.sending ? "Transcribing" : this.pipeline.busy || this.thinkingPipeline.busy ? "Speaking" : this.io.agentRunning() || this.sending ? "Thinking" : "Listening";
+    if (this.pipeline.busy) this.lastBusyAt = Date.now();
     this.io.phase(phase);
     if (this.io.statusSpeech === false || this.io.sequential || phase !== "Thinking" || !this.acceptingReplies || this.output.length) this.clearThinkingTimer();
     else if (!this.thinkingAnnounced && !this.thinkingTimer && Date.now() - this.lastThinkingAt >= 20000) {
@@ -123,7 +151,7 @@ export class HandsFreeVoice {
     this.items = items;
     if (!this.alive) return;
     if (!this.acceptingReplies) { if (this.held) this.held.push(...this.speech.observe(items)); else this.ignoreCurrent(); }
-    else if (!this.io.sequential || this.io.sentenceChunks || !this.io.agentRunning()) this.output.push(...this.speech.observe(items));
+    else if (!this.holdsReplies()) this.output.push(...this.speech.observe(items));
     this.state();
     void this.play();
   }
@@ -187,6 +215,16 @@ export class HandsFreeVoice {
     this.recordings.push(samples);
     void this.process();
   }
+  /**
+   * Whether what was heard is the assistant's own voice coming back: the tail of a reply is still in
+   * the room, and in the speaker's buffers, after the reply has ended, and the VAD takes it for a
+   * person. Only while a reply plays and for a few seconds after, and only when the words are ones
+   * it has just said, so a person answering in the same words is the one thing it can get wrong.
+   */
+  private ownVoice(heard: string): boolean {
+    if (!this.spoken.length || (!this.pipeline.busy && Date.now() - this.lastBusyAt > ECHO_TAIL_MS)) return false;
+    return echoOf(heard, this.spoken.join(' '));
+  }
   private async process() {
     if (this.processing || !this.alive) return;
     const generation = this.inputGeneration;
@@ -197,7 +235,7 @@ export class HandsFreeVoice {
       while (this.recordings.length && valid()) {
         const text = await this.io.transcribe(this.recordings.shift()!, this.transcription.signal);
         if (!valid()) return;
-        if (text.trim()) this.text.push(text.trim());
+        if (text.trim() && !this.ownVoice(text)) this.text.push(text.trim());
       }
       // If speech resumes during transcription, retain the text and combine it
       // with the next segment instead of sending half a thought or losing it.
@@ -257,10 +295,12 @@ export class HandsFreeVoice {
     }
   }
   private play() {
-    if (!this.alive || this.hearing || !this.acceptingReplies || !this.output.length || (this.io.sequential && !this.io.sentenceChunks && this.io.agentRunning())) return;
+    if (!this.alive || this.hearing || !this.acceptingReplies || !this.output.length || this.holdsReplies()) return;
     const text = this.output; this.output = [];
     this.thinkingPipeline.cancel();
     this.io.trace?.('reply_chunk');
+    this.spoken.push(...text); if (this.spoken.length > 8) this.spoken.splice(0, this.spoken.length - 8);
+    this.lastBusyAt = Date.now();
     this.pipeline.enqueue(text);
   }
   /** Mute is input-only: keep the agent and its spoken output running. */

@@ -78,3 +78,34 @@ test('buffered sentence prefetch generates during playback but never plays incom
  firstPlayback.resolve();await tick();assert.equal(calls.includes('play:two'),false);
  secondAudio.resolve();await tick();assert.deepEqual(calls,['generate:one','play:one','generate:two','play:two']);assert.equal(pipeline.busy,false);
 });
+
+test('merged replies speak a whole reply in one synthesis request',async()=>{
+ const calls:string[]=[];const audio=deferred<void>();
+ const pipeline=new SpeechPipeline(async text=>{calls.push(`generate:${text}`);return Object.assign(async()=>{calls.push(`play:${text}`);},{completed:audio.promise});},()=>{},e=>{throw e;},true,false,false,true);
+ pipeline.enqueue(['one','two','three']);await tick();
+ assert.deepEqual(calls,['generate:one two three']);
+ audio.resolve();await tick();await tick();
+ assert.deepEqual(calls,['generate:one two three','play:one two three']);assert.equal(pipeline.busy,false);
+});
+
+test('merged replies keep a status phrase as its own request and stay in order',async()=>{
+ const calls:string[]=[];const done=deferred<void>();
+ const pipeline=new SpeechPipeline(async text=>{calls.push(`generate:${text}`);return Object.assign(async()=>{calls.push(`play:${text}`);},{completed:text==='one'?done.promise:Promise.resolve()});},()=>{},e=>{throw e;},true,false,false,true);
+ pipeline.enqueue(['one'],'reply');pipeline.enqueue(['done'],'status');await tick();
+ assert.deepEqual(calls,['generate:one']);
+ done.resolve();await tick();await tick();await tick();
+ assert.ok(calls.includes('generate:one')&&calls.includes('generate:done'),'the status phrase is its own request');
+ assert.ok(calls.indexOf('play:one')<calls.indexOf('play:done'),'audio stays in order');
+ assert.equal(calls.filter(c=>c.startsWith('generate:')).length,2);
+ assert.equal(pipeline.busy,false);
+});
+
+test('merged replies never go over 600 characters and keep whole sentences', async () => {
+  const generated: string[] = [];
+  const pipeline = new SpeechPipeline(async text => { generated.push(text); return async () => {}; }, () => {}, () => {}, false, false, false, true);
+  const sentence = 'This is one sentence of a story, about sixty characters long.';
+  pipeline.enqueue(Array.from({ length: 40 }, () => sentence)); await tick(); await tick(); await tick();
+  assert.ok(generated.length > 1);
+  for (const text of generated) { assert.ok(text.length <= 600); assert.ok(text.endsWith('long.')); }
+  assert.equal(generated.join(' ').split(sentence).length - 1, 40, 'nothing is lost or repeated');
+});

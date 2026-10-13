@@ -45,6 +45,7 @@ upstream.post('/v1/audio/speech', express.raw({ type: () => true }), (req, res) 
   calls++; assert.match(speechBody, /name="instruction"/);
   res.set({ 'Content-Type': 'audio/pcm', 'X-Sample-Rate': '24000' }).send(Buffer.from([0, 0, 255, 127]));
 });
+upstream.get('/v1/audio/voices', (_req, res) => res.json({ voices: [{ name: 'emma' }, { name: 'ersen' }, { name: 'Severin' }] }));
 const backend = upstream.listen(0, '127.0.0.1');
 await new Promise<void>(r => backend.once('listening', r));
 const port = (backend.address() as { port: number }).port;
@@ -83,11 +84,35 @@ test('voice is opt-in, checks session existence, and proxies actual multipart co
   assert.equal(busy.status, 200);
   assert.equal(busyAttempts, 3);
   assert.equal(Buffer.from(await busy.arrayBuffer()).toString("ascii", 0, 4), "RIFF");
-  assert.match(transcriptionBody, /name="language"\r\n\r\nauto\r\n/);
+  // Recognition detects the language when the field is absent, and "auto" is not
+  // a code any recognition service accepts: nothing is sent for it.
+  assert.equal(transcriptionBody.includes('name="language"'), false);
+});
+test('a chosen language is passed to recognition, auto-detect is not', async () => {
+  const transcribe = () => fetch(`${base}/sessions/test/voice/transcribe`, { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: new Uint8Array(pcmWav(Buffer.alloc(32))) });
+  await fetch(`${base}/voice`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, language: 'tr' }) });
+  await transcribe();
+  assert.ok(transcriptionBody.includes('name="language"\r\n\r\ntr\r\n'));
+  await fetch(`${base}/voice`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, language: 'auto' }) });
+  await transcribe();
+  assert.equal(transcriptionBody.includes('name="language"'), false);
 });
 test('a voice that is not in the library is refused rather than spoken in another', () => {
   assert.throws(() => validateConfig({ ...settings, voice: 'missing' }));
   assert.throws(() => validateConfig({ ...settings, voice: '../other' }));
+});
+test('the speaking-voice menu lists what the speech engine has registered', async () => {
+  const cpp = await fetch(`${base}/voice`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, runtime: 'audio-cpp', voice: 'ersen' }) });
+  assert.equal(cpp.status, 200);
+  const engines = await (await fetch(`${base}/voice/engines`)).json();
+  assert.deepEqual(engines.voices, ['emma', 'ersen', 'Severin']);
+  // A voice of the engine's registry is saved as it is: OmniVoice speaks with it by name.
+  assert.equal((await cpp.json()).voice, 'ersen');
+  const other = await fetch(`${base}/voice`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, runtime: 'breeze', voice: 'ersen' }) });
+  assert.equal(other.status, 400);
+  const breeze = await fetch(`${base}/voice`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, runtime: 'breeze' }) });
+  assert.equal(breeze.status, 200);
+  assert.deepEqual((await (await fetch(`${base}/voice/engines`)).json()).voices, []);
 });
 test('selected input language is sent to Whisper and invalid languages are rejected', async () => {
   for (const language of ['en', 'hi', 'bn']) {
@@ -131,13 +156,31 @@ test('PCM reaches the client before synthesis completes, and cancelling disconne
   await Promise.race([closed, new Promise((_, reject) => setTimeout(() => reject(new Error('Upstream did not cancel')), 2000).unref())]);
 });
 
-test('audio.cpp receives cloning context and exposes incremental playback', async () => {
+test('audio.cpp names a registered OmniVoice voice and fixes the sampler per phrase', async () => {
   await fetch(`${base}/voice`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, runtime: 'audio-cpp', voice: await cloneVoice(), cfgScale: 1 }) });
   const response = await fetch(`${base}/sessions/test/voice/speech`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'audio/pcm' }, body: JSON.stringify({ text: 'Speak while generating.' }) });
   assert.equal(response.status, 200); assert.equal(response.headers.get('x-voice-streaming'), 'true');
-  assert.equal(nativeRequest.reference_text, 'Reference voice.');
-  assert.equal(nativeRequest.voice_ref.type, 'base64'); assert.equal(nativeRequest.stream_format, 'audio');
-  assert.equal(nativeRequest.options.guidance_scale, '1'); await response.arrayBuffer();
+  // OmniVoice reads no reference clip on this path: a library voice outside its
+  // registry is sent as no voice at all, and the sampler is fixed per phrase.
+  assert.equal(nativeRequest.voice, undefined);
+  assert.equal(nativeRequest.voice_ref, undefined); assert.equal(nativeRequest.reference_text, undefined);
+  assert.equal(nativeRequest.stream_format, 'audio');
+  assert.equal(nativeRequest.seed, 9); assert.equal(nativeRequest.temperature, 0.3);
+  assert.equal(nativeRequest.guidance_scale, 4); assert.equal(nativeRequest.steps, 32);
+  await response.arrayBuffer();
+});
+
+test('a voice registered in OmniVoice is sent by its registry name', async () => {
+  const { addVoice } = await import('../server/src/voice-presets.js');
+  const { samplesWav } = await import('../web/src/voice.js');
+  const audio = Buffer.from(await samplesWav(new Float32Array(16000)).arrayBuffer()).toString('base64');
+  const preset = addVoice({ name: 'ersen', kind: 'clone', instruction: 'A calm male voice.', transcript: 'Ersen words.', audio });
+  // The registry name is the preset's own name, lower-cased, as app.py registers it.
+  assert.equal((await fetch(`${base}/voice`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, runtime: 'audio-cpp', voice: preset.id }) })).status, 200);
+  const response = await fetch(`${base}/sessions/test/voice/speech`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'audio/pcm' }, body: JSON.stringify({ text: 'One speaker for every phrase.' }) });
+  assert.equal(response.status, 200); await response.arrayBuffer();
+  assert.equal(nativeRequest.voice, 'ersen');
+  assert.equal(nativeRequest.voice_ref, undefined);
 });
 
 
@@ -157,7 +200,7 @@ test('voice mode speaks with the voice of the agent the chat is with', async () 
   const response = await fetch(`${base}/sessions/herald-chat/voice/speech`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'Hello.' }) });
   assert.equal(response.status, 200);
   await response.arrayBuffer();
-  assert.equal(nativeRequest.reference_text, 'Herald reference.', "the agent's clone, not the designed voice in the settings");
+  assert.equal(nativeRequest.voice, undefined, "a library voice OmniVoice has no registry name for is sent as no voice");
 
   // A chat in a project speaks as the first agent, with its avatar and its voice.
   setVoice('home', clone.id);
@@ -166,11 +209,11 @@ test('voice mode speaks with the voice of the agent the chat is with', async () 
   const project = await fetch(`${base}/sessions/project-chat/voice/speech`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'Hello.' }) });
   assert.equal(project.status, 200);
   await project.arrayBuffer();
-  assert.equal(nativeRequest.reference_text, 'Herald reference.');
+  assert.equal(nativeRequest.voice, undefined, "the agent's clone, not the designed voice in the settings");
   setVoice('home', '');
 });
 
-test('custom clone sends its saved recording, transcript and description to audio.cpp', async () => {
+test('a library voice reaches audio.cpp as a registry name, not a reference clip', async () => {
   const { addVoice } = await import('../server/src/voice-presets.js');
   const { samplesWav } = await import('../web/src/voice.js');
   const audio = Buffer.from(await samplesWav(new Float32Array(16000)).arrayBuffer()).toString('base64');
@@ -180,8 +223,11 @@ test('custom clone sends its saved recording, transcript and description to audi
   const response = await fetch(`${base}/sessions/test/voice/speech`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'Custom voice response.' }) });
   assert.equal(response.status, 200);
   await response.arrayBuffer();
-  assert.deepEqual(nativeRequest.voice_ref, { type: 'base64', data: audio });
-  assert.equal(nativeRequest.reference_text, 'My reference words.');
+  // OmniVoice names a registered voice; it reads no clip, and a name with a
+  // space is not one its registry can hold - so this voice is sent as none.
+  assert.equal(nativeRequest.voice, undefined);
+  assert.equal(nativeRequest.voice_ref, undefined);
+  assert.equal(nativeRequest.reference_text, undefined);
   assert.equal(nativeRequest.options.instruction, 'Warm narrator.');
 });
 
@@ -201,8 +247,8 @@ test('a changed voice description reaches the next phrase on both Breeze runtime
   assert.deepEqual(await edited.json(), { id: preset.id, name: 'Edited narrator', kind: 'clone', instruction: 'A slow, low voice.', transcript: 'Words on the tape.' });
   await speak();
   assert.equal(nativeRequest.options.instruction, 'A slow, low voice.');
-  assert.deepEqual(nativeRequest.voice_ref, { type: 'base64', data: audio });
-  assert.equal(nativeRequest.reference_text, 'Words on the tape.');
+  assert.equal(nativeRequest.voice, undefined);
+  assert.equal(nativeRequest.voice_ref, undefined);
   // The Python runtime takes the same text as a form field.
   await select('breeze');
   await speak();
@@ -278,7 +324,7 @@ test('Kokoro speaks with a voice of its own, at the speed chosen, and an agent c
   assert.equal((await fetch(`${base}/voice`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...kokoro, runtime: 'audio-cpp' }) })).status, 200);
   await (await speak('kokoro-chat')).arrayBuffer();
   assert.equal(nativeRequest.model, 'breeze');
-  assert.equal(nativeRequest.reference_text, 'Reference voice.');
+  assert.equal(nativeRequest.voice, undefined, "an agent's Kokoro voice names no OmniVoice registry entry");
   assert.throws(() => setVoice(agent.id, 'xx_nobody'), /not in the voice library/);
   // Only its packaged voices, without the Japanese ones it cannot read, and the speeds the page offers.
   assert.throws(() => validateConfig({ ...kokoro, kokoroVoice: 'jf_alpha' }), /Kokoro's voices/);

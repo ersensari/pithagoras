@@ -15,6 +15,7 @@ import { useFollowBottom } from "../use-follow-bottom";
 import { CanvasPanel } from "./CanvasPanel";
 import { latestBrowserActivity, latestTerminalActivity } from "../voice-browser";
 import { VoiceControl } from "./VoiceControl";
+import { MeetingNotes } from "./MeetingNotes";
 import { DictationButton, DictationStrip } from "./Dictation";
 import { insertAtCaret } from "../dictation";
 import { useDictation } from "../use-dictation";
@@ -2109,6 +2110,7 @@ export function Chat({
               </button>
               <DictationButton dictation={dictation} />
               <VoiceControl folder={session.workspace} canvasOpen={canvasOpen} onCanvasMinimize={()=>setCanvasOpen(false)} onCanvasToggle={()=>setCanvasOpen(value=>!value)} key={session.id} sessionId={session.id} items={items} running={running} work={phase} onSend={onSend} onAbort={onAbort} stageTarget={voiceHost} onModeChange={setVoiceMode} title={session.title} browserAvailable={browserUp} browserActivity={browserActivity} terminalActivity={terminalActivity} toolEvents={events} />
+              <MeetingNotes key={`meeting-${session.id}`} sessionId={session.id} />
               {/* Mid-run, Stop stays while a message is written: it is the
                   moment the agent is seen going the wrong way, and whether to
                   steer it or stop it is still open. */}

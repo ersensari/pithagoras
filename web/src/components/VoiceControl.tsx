@@ -1,4 +1,5 @@
 import { DEFAULT_VAD } from '../api';
+import { EchoProbe, settleFor } from '../echo-guard';
 import { local, session } from '../safe-storage';
 import { VoiceProfiler, replyMarks } from '../voice-profile';
 import { VoiceProfile } from './VoiceProfile';
@@ -13,6 +14,9 @@ import { api, json, type PortalEvent, type PromptOptions } from "../api";
 import { micError } from "../mic-error";
 import type { Item } from "../transcript";
 import { LiveTranscription } from "../live-transcription";
+import { StreamedTranscription } from "../live-rtc";
+import { RtcStt } from "../rtc-stt";
+import { suppressNoise, type NoiseModel, type Suppressed } from "../noise";
 import { preparePcmSpeech, readPcmStream, playAudioBuffer, bufferOf } from "../pcm-stream";
 import { stretch, stretchInSteps } from "../time-stretch";
 import { joinSamples } from "../samples";
@@ -110,7 +114,11 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const [error, setError] = useState("");
   const [muted, setMuted] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const transcription = useRef<LiveTranscription | null>(null);
+  const transcription = useRef<StreamedTranscription | null>(null);
+  const rtcStt = useRef<RtcStt | undefined>(undefined);
+  const rtcEnabled = useRef(false);
+  const noiseModel = useRef<NoiseModel>('off');
+  const cleaned = useRef<Suppressed | undefined>(undefined);
   const [speaking, setSpeaking] = useState(false);
   const mutedRef = useRef(false);
   const muteBusy = useRef(false);
@@ -156,11 +164,22 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   };
   const voice = useRef<HandsFreeVoice | null>(null);
   const vad = useRef<MicVAD | null>(null);
+  // Speech heard while a reply plays: the reply is turned down and the VAD watched, to tell a person from the reply's own echo.
+  const echoProbe = useRef(new EchoProbe());
+  const echoSegment = useRef(false);
+  const playGain = useRef<GainNode | null>(null);
+  const ducked = useRef(false);
+  const duck = (on: boolean) => {
+    ducked.current = on;
+    const node = playGain.current;
+    if (node) { try { node.gain.setTargetAtTime(on ? 0 : 1, node.context.currentTime, on ? 0.01 : 0.03); } catch { /* the node is gone */ } }
+  };
   const vadSettings = useRef(DEFAULT_VAD);
   const sequential = useRef(false);
   const statusSpeech = useRef(true);
   const [comparison, setComparison] = useState(false);
   const sentenceChunks = useRef(false);
+  const mergeReplies = useRef(false);
   const ttsPrefetch = useRef(false);
   const [prefetchMode, setPrefetchMode] = useState(false);
   const [sentenceMode, setSentenceMode] = useState(false);
@@ -193,6 +212,9 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     replay.current?.abort(); replay.current = null;
     voice.current?.stop(); voice.current = null;
     transcription.current?.reset(); transcription.current = null;
+    rtcStt.current?.close(); rtcStt.current = undefined;
+    cleaned.current?.close(); cleaned.current = undefined;
+    echoProbe.current.stop(); echoSegment.current = false; ducked.current = false;
     const detector = vad.current; vad.current = null;
     void detector?.destroy().catch(() => {});
     stream.current?.getTracks().forEach(track => track.stop()); stream.current = null;
@@ -210,6 +232,9 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       sequential.current = config.pipelineMode === "sequential";
       setSequentialMode(sequential.current);
       sentenceChunks.current = config.sentenceChunks === true;
+      mergeReplies.current = config.mergeReplies === true;
+      rtcEnabled.current = config.sttWebrtc === true && typeof RTCPeerConnection !== 'undefined';
+      noiseModel.current = config.noiseModel === 'rnnoise' || config.noiseModel === 'gtcrn' ? config.noiseModel : 'off';
       setSentenceMode(sentenceChunks.current);
       ttsPrefetch.current = config.ttsPrefetch === true;
       setPrefetchMode(ttsPrefetch.current);
@@ -328,7 +353,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const playThrough = async (audio: AudioContext, signal: AbortSignal, start: (analyser: AnalyserNode, started: (scheduledAt?: number) => void) => Promise<void>, onStarted?: (scheduledAt: number) => void) => {
     signal.throwIfAborted();
     const analyser = audio.createAnalyser(); analyser.fftSize = 256;
-    analyser.connect(audio.destination);
+    const gain = audio.createGain(); gain.gain.value = ducked.current ? 0 : 1; playGain.current = gain;
+    analyser.connect(gain); gain.connect(audio.destination);
     const samples = new Float32Array(analyser.fftSize);
     let animation = 0;
     const meter = () => {
@@ -339,7 +365,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     try {
       await start(analyser, (scheduledAt = audio.currentTime) => { onStarted?.(scheduledAt); setSpeaking(true); meter(); });
     } finally {
-      analyser.disconnect(); cancelAnimationFrame(animation); levels.current.output = 0;
+      analyser.disconnect(); gain.disconnect(); if (playGain.current === gain) playGain.current = null; cancelAnimationFrame(animation); levels.current.output = 0;
       if (mounted.current) setSpeaking(false);
     }
   };
@@ -484,7 +510,32 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         if (mounted.current && current()) setWaitingForTap(false);
         if (!current()) return;
       }
-      const audio = new AudioContext(); context.current = audio;
+      // 2026-10-12: forced to 24000 to match the TTS PCM streams' own rate
+      // (pcm-stream.ts's bufferOf() always builds buffers at 24000 - every
+      // engine behind /voice/speech, Chatterbox and OmniVoice both, sends
+      // audio/pcm at X-Sample-Rate: 24000). Without this, the context ran at
+      // the device's native output rate (commonly 48000, sometimes 44100),
+      // and preparePcmSpeech() in pcm-stream.ts builds a SEPARATE AudioBuffer
+      // per network read of the streamed response (confirmed directly
+      // against forgeloop-ai's real TTS backends: 265-378 separate reads for
+      // a single ~20s reply, not one continuous buffer) - each one
+      // independently resampled by the browser on playback since buffer rate
+      // != context rate. Resampling many small buffers in isolation (no
+      // shared filter context across the cut points) introduces a boundary
+      // artifact at every seam; with hundreds of seams per reply this reads
+      // as continuous crackling/static for the whole reply, not a few
+      // isolated clicks - matching a real report of exactly that ("every
+      // reply, start to finish"). Forcing the context to 24000 makes every
+      // buffer's rate match the context's rate exactly, so Web Audio does no
+      // resampling at all, regardless of how many small buffers the network
+      // stream gets split into. Shared with MicVAD below (`audioContext:
+      // audio`) - vad-web's own API is designed to accept an arbitrary
+      // pre-existing context (every browser already hands it one at an
+      // unpredictable native rate), so it does its own internal resampling
+      // to whatever Silero VAD needs; this is not expected to change mic
+      // detection behavior, but wasn't re-verified against a real
+      // microphone from here.
+      const audio = new AudioContext({ sampleRate: 24000 }); context.current = audio;
       await audio.resume();
       if (!current()) return;
       const mic = await navigator.mediaDevices.getUserMedia({ audio: {
@@ -492,6 +543,9 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       } });
       if (!current()) { mic.getTracks().forEach(track => track.stop()); return; }
       stream.current = mic;
+      // What the VAD and the recognizer hear: the microphone through the noise model, or the microphone where there is none.
+      const heard = cleaned.current = await suppressNoise(mic, noiseModel.current);
+      if (!current()) { heard.close(); return; }
       if(managed.current){
         const lease=crypto.randomUUID();connection.current=lease;
         await connectVoice(lease,true);
@@ -500,7 +554,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       }
       const detectorModule = await import("@ricky0123/vad-web");
       if (!current()) return;
-      const live = new LiveTranscription(async (samples, signal) => {
+      const showPreview = (text: string) => { if (current()) { setTranscript(text); voice.current?.heard(text); } };
+      const plain = new LiveTranscription(async (samples, signal) => {
         const trace=profiling.current?profiler.current!.current:undefined;
         const started=performance.now();if(trace)profiler.current!.mark('stt_request',{audioMs:samples.length/16},trace);
         let result: { text: string; serverTiming: string };
@@ -512,12 +567,14 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         }
         if(trace)profiler.current!.mark('stt_result',{requestMs:performance.now()-started,serverTiming:result.serverTiming,ok:true},trace);
         return result.text;
-      }, text => { if (current()) { setTranscript(text); voice.current?.heard(text); } }, !sequential.current);
+      }, showPreview, !sequential.current);
+      const live = new StreamedTranscription(plain, () => rtcStt.current, showPreview);
       transcription.current = live;
       const controller = new HandsFreeVoice({
         statusSpeech: statusSpeech.current,
         sequential: sequential.current,
         sentenceChunks: sentenceChunks.current,
+        mergeReplies: mergeReplies.current,
         ttsPrefetch: ttsPrefetch.current,
         transcribe: async (samples, signal) => {const result=await live.finish(samples, signal);profileMark('transcript_ready');return result;},
         send: async text => {
@@ -551,17 +608,43 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       }, latest.current.items);
       voice.current = controller;
       controller.setCompacting(latest.current.compacting);
+      // Speech that is for the assistant: what it is told stops the reply, and is recorded as a request.
+      const confirmSpeech = () => {
+        // Talking over a repeated reply stops it, as it does a new one.
+        replay.current?.abort();
+        if (pushToTalk.current) return;
+        setError(""); if (latest.current.compacting) live.discard(); else live.confirm(); controller.speechStart();
+        clearTimeout(maxTurn.current);
+        maxTurn.current = setTimeout(async () => {
+          if (!current() || !vad.current) return;
+          // Bound recording size; keep the same mic stream while submitting
+          // the segment and automatically listening for the continuation.
+          const active = vad.current;
+          try { await active.pause(); if (current()) await active.start(); }
+          catch (e) { if (current()) { setError((e as Error).message); stop(); } }
+        }, 60000);
+      };
+      // The speech went on with the reply turned down: a person talking over it.
+      const bargeIn = () => {
+        echoProbe.current.stop(); confirmSpeech();
+        // The reply is stopped by now; whatever plays next is turned up again.
+        setTimeout(() => duck(false), 250);
+      };
+      // The speech went away with the reply turned down: it was the reply's own echo. Turned up again, and the rest of the segment ignored.
+      const dismissEcho = () => {
+        echoProbe.current.stop(); duck(false); echoSegment.current = true; live.discard();
+      };
       const detector = await detectorModule.MicVAD.new({
         model: "v5", audioContext: audio, startOnLoad: false,
         baseAssetPath: "/voice-assets/", onnxWASMBasePath: "/voice-assets/",
         ortConfig: ort => { ort.env.wasm.numThreads = 1; },
-        getStream: async () => mic,
+        getStream: async () => heard.stream,
         pauseStream: async () => {},
-        resumeStream: async () => mic,
+        resumeStream: async () => heard.stream,
         ...vadSettings.current,
         submitUserSpeechOnPause: true,
         onSpeechStart: () => { if (current() && !pushToTalk.current && !mutedRef.current && !latest.current.compacting) {if(profiling.current)profiler.current!.begin();live.begin();} },
-        onVADMisfire: () => { if (current() && !pushToTalk.current) {live.discard();if(profiling.current)profiler.current!.close('vad_misfire');} },
+        onVADMisfire: () => { if (current() && !pushToTalk.current) {if (echoProbe.current.active) { echoProbe.current.stop(); duck(false); } live.discard();if(profiling.current)profiler.current!.close('vad_misfire');} },
         onFrameProcessed: (probabilities, frame) => {
           if (pushToTalk.current) {
             // Only what is said while the button or Space is held counts.
@@ -574,29 +657,30 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
             levels.current.input = Math.min(1, Math.sqrt(frame.reduce((sum, value) => sum + value * value, 0) / frame.length) * 7);
             return;
           }
+          if (echoProbe.current.active) {
+            const verdict = echoProbe.current.frame(performance.now(), probabilities.isSpeech);
+            if (verdict === "person") bargeIn(); else if (verdict === "echo") dismissEcho();
+          }
           if(current()&&!mutedRef.current&&profiling.current&&probabilities.isSpeech>=0.35)profiler.current!.lastSpeech();
           if (current() && !mutedRef.current && !latest.current.compacting) live.frame(probabilities.isSpeech, frame);
           if (current() && !mutedRef.current) levels.current.input = Math.min(1, Math.sqrt(frame.reduce((sum, value) => sum + value * value, 0) / frame.length) * 7);
         },
         onSpeechRealStart: () => {
           if (!current() || mutedRef.current) return;
-          // Talking over a repeated reply stops it, as it does a new one.
-          replay.current?.abort();
-          if (pushToTalk.current) return;
-          setError(""); if (latest.current.compacting) live.discard(); else live.confirm(); controller.speechStart();
-          clearTimeout(maxTurn.current);
-          maxTurn.current = setTimeout(async () => {
-            if (!current() || !vad.current) return;
-            // Bound recording size; keep the same mic stream while submitting
-            // the segment and automatically listening for the continuation.
-            const active = vad.current;
-            try { await active.pause(); if (current()) await active.start(); }
-            catch (e) { if (current()) { setError((e as Error).message); stop(); } }
-          }, 60000);
+          if (!pushToTalk.current && !latest.current.compacting && levels.current.output >= 0.04) {
+            // A reply is playing: turn it down and see whether the speech goes on without it, see echo-guard.ts.
+            echoProbe.current.start(performance.now(), settleFor(playGain.current?.context && (playGain.current.context as AudioContext).outputLatency)); duck(true); return;
+          }
+          confirmSpeech();
         },
         onSpeechEnd: samples => {
           if (pushToTalk.current) return;
           clearTimeout(maxTurn.current);
+          if (echoProbe.current.active) {
+            // Over before the quiet could say what it was.
+            if (echoProbe.current.end() === "person") bargeIn(); else { dismissEcho(); echoSegment.current = false; return; }
+          }
+          if (echoSegment.current) { echoSegment.current = false; return; }
           if (current() && !mutedRef.current) { if (!latest.current.compacting) {profileMark('endpoint');live.end(samples);} controller.speechEnd(samples); }
         },
       });
@@ -607,6 +691,19 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       };
       await detector.start();
       if (!current()) return;
+      // Streaming recognition comes up beside the plain upload, which stays the way every utterance goes until it is up.
+      if (rtcEnabled.current) {
+        const connectRtc = (delay: number) => {
+          if (!current()) return;
+          const rtc = new RtcStt(offer => api.rtcOffer(sessionId, offer), {
+            interim: live.interim,
+            state: up => { if (!up && current() && rtcStt.current === rtc) { rtc.close(); rtcStt.current = undefined; setTimeout(() => connectRtc(Math.min(delay * 2, 30000)), delay); } },
+          });
+          rtcStt.current = rtc;
+          rtc.connect(heard.stream).catch(() => { if (rtcStt.current === rtc) { rtc.close(); rtcStt.current = undefined; if (current()) setTimeout(() => connectRtc(Math.min(delay * 2, 30000)), delay); } });
+        };
+        connectRtc(2000);
+      }
       // With push-to-talk the microphone is open only while held.
       if (pushToTalk.current) mic.getTracks().forEach(track => { track.enabled = false; });
       setEnabled(true); setStarting(false); cue("start");

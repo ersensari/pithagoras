@@ -15,7 +15,7 @@ export const DEFAULT_VOICE_INSTRUCTIONS = 'This is a live voice conversation. St
  * have left out for the tool to be there.
  */
 export function audioSystemRule(instructions: string = DEFAULT_VOICE_INSTRUCTIONS, extra = ''): string {
-  return 'The portal prefixes user requests sent in voice mode with [Audio mode], including microphone transcriptions and typed requests that should receive spoken replies. This paragraph only describes the marker: it does not mean any request has it. A request is spoken only when its own text begins with the line [Audio mode]. Decide the reply format from the latest user request only. When it starts with [Audio mode], follow these speaking rules for the entire reply, including updates after tools: ' + instructions.trim() + (extra ? ' ' + extra : '') + ' Do not read the marker aloud. When the latest user request has no [Audio mode] prefix, use normal chat formatting; an audio marker in older conversation history does not keep voice mode enabled.';;
+  return 'The portal prefixes user requests sent in voice mode with [Audio mode], including microphone transcriptions and typed requests that should receive spoken replies. This paragraph only describes the marker: it does not mean any request has it. A request is spoken only when its own text begins with the line [Audio mode]. Decide the reply format from the latest user request only. When it starts with [Audio mode], follow these speaking rules for the entire reply, including updates after tools: ACT, DON\'T ASK. When a spoken request asks you to find, look up, search, check or do something, do not ask what the user wants and do not offer options: say at most one short sentence and call the tool in that same turn, choosing sensible defaults yourself. Never end the turn with only the announcement and never write a tool call as text. ' + instructions.trim() + (extra ? ' ' + extra : '') + ' Do not read the marker aloud. When the latest user request has no [Audio mode] prefix, use normal chat formatting; an audio marker in older conversation history does not keep voice mode enabled.';;
 }
 /** The rule with the built-in instructions. */
 export const AUDIO_SYSTEM_RULE = audioSystemRule();
@@ -126,22 +126,66 @@ export function listsProvider(list: readonly string[], provider: string | undefi
   return !!provider && list.some((name) => provider === name || provider.startsWith(`${name}=`));
 }
 
-/** First-call thinking is transient; formatting is governed by AudioRule. */
+/**
+ * The text of the request being answered: the last user message of the payload,
+ * without the portal's [Audio mode] marker or the <acp ...> tags a context proxy
+ * puts in front of every message.
+ */
+export function spokenRequest(messages: unknown): string {
+  if (!Array.isArray(messages)) return '';
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role !== 'user') continue;
+    const text = textOf(messages[i].content).replace(/<acp\b[^>]*>.*?<\/acp>\s*/gs, '').trim();
+    if (text.startsWith(AUDIO_MESSAGE_PREFIX)) return text.slice(AUDIO_MESSAGE_PREFIX.length).trim();
+  }
+  return '';
+}
+
+/**
+ * First-call thinking is transient; formatting is governed by AudioRule.
+ *
+ * With `needsTools`, thinking is spent only where a spoken request needs tools:
+ * a model that answers a tool request without thinking tends to announce the
+ * search and end its turn, or ask what it should search for, so such a turn
+ * thinks from its first call to its last. Plain conversation keeps the old
+ * rule: the first call goes without thinking, for the quick spoken reply.
+ */
 export class VoiceFirstTurn {
   private active = false;
   private first = false;
+  /** Whether this spoken turn was judged to need tools; decided once, at its first call. */
+  private tools: boolean | undefined;
   /** `providers`: the list saved in the voice settings, read at each call; none saved means every llama.cpp server, as the portal knows them. */
-  constructor(private readonly providers: () => readonly string[] | undefined = () => undefined) {}
-  arm(first = true) { this.active = true; this.first = first; }
-  reset() { this.active = false; this.first = false; }
+  constructor(
+    private readonly providers: () => readonly string[] | undefined = () => undefined,
+    private readonly needsTools?: (text: string) => Promise<boolean>,
+  ) {}
+  arm(first = true) { this.active = true; this.first = first; this.tools = undefined; }
+  reset() { this.active = false; this.first = false; this.tools = undefined; }
   extension = (pi: any) => {
     pi.on('before_provider_request', (event: any, ctx: any) => {
       if (process.env.VOICE_SKIP_FIRST_THINKING === 'false') return;
       const saved = this.providers(), provider = ctx.model?.provider as string | undefined;
-      if (!this.active || !this.first || !(saved === undefined ? isLlamaProvider(provider) : listsProvider(saved, provider))) return;
-      const payload = { ...event.payload, chat_template_kwargs: { ...event.payload.chat_template_kwargs, enable_thinking: false } };
-      delete payload.thinking_budget_tokens;
-      return payload;
+      if (!this.active || !(saved === undefined ? isLlamaProvider(provider) : listsProvider(saved, provider))) return;
+      const apply = () => {
+        if (this.tools) {
+          // The chat's own level wins when it is set: "none" is a person's explicit off, and thinking they
+          // switched off must not come back. Only a request with no level at all is raised, since the chat
+          // template reads thinking from the effort.
+          if (event.payload.reasoning_effort) return;
+          const payload = { ...event.payload, reasoning_effort: 'medium' };
+          if (payload.chat_template_kwargs?.enable_thinking === false) payload.chat_template_kwargs = { ...payload.chat_template_kwargs, enable_thinking: true };
+          return payload;
+        }
+        if (!this.first) return;
+        const payload = { ...event.payload, chat_template_kwargs: { ...event.payload.chat_template_kwargs, enable_thinking: false } };
+        delete payload.thinking_budget_tokens;
+        return payload;
+      };
+      // Only the first call of a turn asks, and only where a classifier was given: the rest stays synchronous.
+      if (!this.needsTools || this.tools !== undefined || !this.first) return apply();
+      const text = spokenRequest(event.payload?.messages);
+      return (text ? this.needsTools(text) : Promise.resolve(false)).then((needs) => { this.tools = needs; return apply(); });
     });
     pi.on('turn_end', () => { this.first = false; });
     pi.on('agent_end', () => this.reset());

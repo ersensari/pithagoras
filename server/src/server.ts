@@ -76,6 +76,7 @@ import { memoryLlmRouter } from "./memory-llm.js";
 import { modelLevels, modelRuntime, providersRouter } from "./api/providers.js";
 import { peopleRouter } from "./api/people.js";
 import { voiceRouter } from "./api/voice.js";
+import { meetingNotesRouter } from "./api/meeting-notes.js";
 import { adoptPortalBrowser, browserRouter, pinConnection } from "./api/browser.js";
 import { endAllTerminals, terminalRouter } from "./api/terminal.js";
 import { BACKGROUND_SUPPORTED, MARKER, clearFinished, listJobs, readOutput, stopJob, stopJobsIn } from "./background.js";
@@ -775,28 +776,72 @@ app.delete("/api/sessions/:id", async (req, res) => {
  * for sessions this same mechanism switched (never a session the user put on
  * Strata on purpose), so it reverts to the fast model as soon as an ordinary
  * message comes in.
+ *
+ * 2026-10-08: the trigger judgment itself moved from a keyword list to a
+ * real typed-decision call (forgeloop-ai's laya-multilingual,
+ * convaiinnovations/laya-multilingual - see that repo's AGENTS.md section
+ * 3). Tried forgeloop-ai's existing English Laya deployment
+ * (laya-typed-decisions via ChunkLaya) for this first, since this is an
+ * English voice assistant - measured ~3.9s per call and only 0.52
+ * confidence on an explicitly serious example, barely above a coin flip:
+ * too slow to sit inline in every prompt, and not actually more decisive
+ * than the keyword list it was meant to replace. laya-multilingual, same
+ * question, same text: 42-50ms, 0.80-0.99 confidence, every test case
+ * correct - used here instead. SERIOUS_TRIGGER_WORDS stays as the
+ * deterministic fallback if the LAYA_URL call fails or times out (network
+ * blip, forgeloop-ai stack down) - degrade to the old behavior, never
+ * throw and break prompting.
  */
 const SERIOUS_TRIGGER_WORDS = ["serious", "properly", "make sure", "double-check", "double check", "verify", "important"];
+const LAYA_URL = process.env.LAYA_URL || "http://127.0.0.1:10085/classify";
+const LAYA_TIMEOUT_MS = 2000;
+const SERIOUS_CRITERIA = {
+  yes: "the message describes something serious, important, or sensitive that needs careful, reliable handling",
+  no: "the message is a casual, routine, or low-stakes request",
+};
 const FAST_MODEL = { provider: "gpt-oss-20b", model: "/models/gpt-oss-20b-MXFP4.gguf" };
 const SERIOUS_MODEL = { provider: "forgeloop-provider", model: "swift-1.5-iq3_xxs" };
 const autoRoutedToSerious = new Set<string>();
 
-function hasSeriousTrigger(text: string): boolean {
+function hasSeriousTriggerWord(text: string): boolean {
   const lower = text.toLowerCase();
   return SERIOUS_TRIGGER_WORDS.some((word) => lower.includes(word));
+}
+
+async function isSerious(text: string): Promise<boolean> {
+  try {
+    const upstream = await fetch(LAYA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, criteria: SERIOUS_CRITERIA }),
+      signal: AbortSignal.timeout(LAYA_TIMEOUT_MS),
+    });
+    if (!upstream.ok) throw new Error(`laya-multilingual returned HTTP ${upstream.status}`);
+    const body = await upstream.json() as { choice?: unknown };
+    if (body.choice === "yes" || body.choice === "no") return body.choice === "yes";
+    throw new Error("laya-multilingual returned an unexpected choice");
+  } catch {
+    return hasSeriousTriggerWord(text);
+  }
 }
 
 async function applySeriousDelegation(sessionId: string, message: string): Promise<void> {
   const session = getSession(sessionId);
   if (!session) return;
   const current = chatModel(session, getSettings());
-  const triggered = typeof message === "string" && hasSeriousTrigger(message);
-  if (current.provider === FAST_MODEL.provider && triggered) {
+  const onFast = current.provider === FAST_MODEL.provider;
+  const autoRouted = autoRoutedToSerious.has(sessionId);
+  // Neither branch below can fire either way - skip the LAYA call (and its
+  // up-to-2s timeout) on every message that has nothing to do with this
+  // mechanism, which is most of them.
+  if (!onFast && !autoRouted) return;
+  const triggered = typeof message === "string" && await isSerious(message);
+  if (onFast && triggered) {
     const client = await sessions.client(sessionId);
     await client.setModel(SERIOUS_MODEL.provider, SERIOUS_MODEL.model);
     updateSession(sessionId, { provider: SERIOUS_MODEL.provider, model: SERIOUS_MODEL.model });
     autoRoutedToSerious.add(sessionId);
-  } else if (autoRoutedToSerious.has(sessionId) && !triggered) {
+  } else if (autoRouted && !triggered) {
     const client = await sessions.client(sessionId);
     await client.setModel(FAST_MODEL.provider, FAST_MODEL.model);
     updateSession(sessionId, { provider: FAST_MODEL.provider, model: FAST_MODEL.model });
@@ -1373,6 +1418,7 @@ app.use("/api", providersRouter());
 app.use("/api", peopleRouter());
 app.use("/api", browserRouter());
 app.use("/api", voiceRouter());
+app.use("/api", meetingNotesRouter());
 app.use("/api", terminalRouter());
 app.use("/api", canvasesRouter());
 // Before the SPA fallback, which answers everything that is not /api.

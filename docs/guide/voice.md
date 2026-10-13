@@ -544,7 +544,8 @@ and the system-prompt rule is never sent, which is what the
 your text for when the variable is removed. Any other value leaves them on.
 `VOICE_SKIP_FIRST_THINKING=false` keeps thinking on for the first call. The
 remaining `VOICE_*` variables (`VOICE_PIPELINE_MODE`, `VOICE_SENTENCE_CHUNKS`,
-`VOICE_TTS_PREFETCH`, `VOICE_STATUS_SPEECH`, `VOICE_COMPARISON`) are described in
+`VOICE_TTS_PREFETCH`, `VOICE_MERGE_REPLIES`, `VOICE_STATUS_SPEECH`,
+`VOICE_COMPARISON`) are described in
 the comparison guide.
 
 ## Status lines while it works
@@ -575,6 +576,16 @@ All the spoken lines are off in the [sequential baseline](/guide/voice-compariso
 and `VOICE_STATUS_SPEECH=false` on the portal turns them off everywhere. Only the
 lines go: what you say during compaction is still dropped, with nothing said about
 it.
+
+## Streaming recognition and noise
+
+With the microphone on, the browser opens a WebRTC connection to the portal and sends the microphone as an Opus audio track while you speak. Your browser's VAD still decides where an utterance starts and ends and says so over a data channel; the portal collects the audio, sends **interim** transcripts back while you are still talking (they appear as the live preview), and one transcript of the whole utterance when it ends. Interim results go to the recognition service with the language it found in the first ones, so the rest of the utterance, and the final transcript, are not detected again. The next utterance starts open, so you can change language between turns. If the connection is down, or a streamed transcript fails, the recording is uploaded as it always was.
+
+The audio goes by UDP straight to the host; only the signalling goes through your proxy. The portal runs on the host's network, so nothing is published. Pin the ports with `VOICE_RTC_PORT_MIN` and `VOICE_RTC_PORT_MAX` and open them in the firewall. A browser that reaches the portal through a CDN proxy that does not carry UDP (Cloudflare's orange cloud) cannot connect and uploads the recording instead; an unproxied name (DNS only), a LAN address or Tailscale works. Behind NAT, `VOICE_RTC_ADDRESSES` lists an address the browser can reach. `VOICE_STT_WEBRTC=false` turns it off.
+
+The recognition service must return `verbose_json` (speaches and faster-whisper-server do).
+
+**Noise.** The microphone goes through the browser's own suppression and then through a small neural model before the VAD and the recognizer hear it: `VOICE_NOISE_MODEL=rnnoise` (the default, light), `gtcrn` (heavier) or `off`. They remove noise, not other people: a voice in the background that is as loud as yours is still speech. Whisper also turns noise into confident sentences in some other language, so set `VOICE_STT_LANGUAGES` to the languages you speak (for example `en,tr`): a transcript in another language is dropped, and a guess in one is never the language the rest of the utterance is locked to. Segments that Whisper itself doubts (probably silence, poor probability), phrases it writes for silence and transcripts of punctuation alone are dropped as well.
 
 ## Speech runtimes
 
@@ -788,6 +799,18 @@ without saving the other settings, if the description cannot be saved. Breeze is
 the engine that reads the description. Chatterbox takes no description: it speaks
 from the recording alone, so editing the description of a voice used with
 Chatterbox changes nothing you can hear.
+
+### OmniVoice's voices
+
+OmniVoice (`audio.cpp` with the OmniVoice engine at **Speech synthesis address**)
+speaks only with the voices registered in its own registry, and it reads no
+reference recording from a phrase request. With that runtime, **Speaking voice**
+lists the registry as the engine reports it: a name matching a voice in your
+library is offered as that voice, so its description stays behind it, and a voice
+registered on the engine's side - its own page, a new preset - appears by its own
+name without any change here. A library voice the engine has not registered is not
+offered: OmniVoice would answer with a voice it designed from the description, and
+the reply would sound like a different speaker in every phrase.
 
 ### Kokoro's voices
 

@@ -6,6 +6,7 @@ import { EDIT_IMAGE_SOURCE, EDIT_IMAGE_TOOL, GENERATE_IMAGE_SOURCE, GENERATE_IMA
 import { GENERATED_PICTURE_MARK } from "../generated-picture.js";
 import { acceptPrompt } from "./accept-prompt.js";
 import { AUDIO_MESSAGE_PREFIX, AudioRule, VoiceFirstTurn, audioMessage, spokenIn } from "./voice-first.js";
+import { needsTools } from "./tool-need.js";
 import { crossModelThinkingExtension } from "./cross-model-thinking.js";
 import { BROWSER_READING_RULE, BROWSER_SCREENSHOT_RULE } from "./browser-mcp-rules.js";
 import { browserTools } from "../browser/tools.js";
@@ -373,7 +374,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     // Without an explicit loader the SDK starts with no extensions, skills or
     // prompt templates — so installed packages contribute no commands at all.
     // The CLI wires this up for you; here it has to be asked for.
-    const voiceFirst = new VoiceFirstTurn(getSkipThinkingProviders);
+    const voiceFirst = new VoiceFirstTurn(getSkipThinkingProviders, needsTools);
     let resourceLoader: any;
     // What the conversation has switched off: the client's, once there is one.
     let switchedOff: () => ReadonlySet<string> = () => new Set(opts.toolsOff ?? []);

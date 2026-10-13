@@ -245,3 +245,32 @@ test('what a tool says of itself follows the instructions, whatever they are, an
  assert.equal(rule.set(true), true, 'and went again');
  assert.deepEqual(rule.lines(), [audioSystemRule('Answer in one word.')]);
 });
+
+test('a spoken request that needs tools thinks from its first call, plain conversation keeps the quick first reply', async () => {
+ const run = async (needs: (text: string) => Promise<boolean>, effort: string, text: string) => {
+  const turn = new VoiceFirstTurn(() => ['forgeloop-ai'], needs), handlers = new Map<string, (...args: any[]) => any>();
+  turn.extension({ on: (name: string, fn: any) => handlers.set(name, fn) }); turn.arm();
+  const payload = { reasoning_effort: effort, messages: [{ role: 'system', content: 'x' }, { role: 'user', content: '<acp tokens="4" type="text">m00002</acp>\n' + audioMessage(text) }] };
+  const call = () => handlers.get('before_provider_request')!({ payload }, { model: { provider: 'forgeloop-ai' } });
+  return { first: await call(), later: (handlers.get('turn_end')!(), await call()) };
+ };
+ const asked: string[] = [];
+ const tools = await run(async (text) => { asked.push(text); return true; }, '', 'find me a speech model');
+ assert.deepEqual(asked, ['find me a speech model'], 'the classifier gets the request alone: no marker, no context tags');
+ assert.equal(tools.first?.reasoning_effort, 'medium');
+ assert.equal(tools.later?.reasoning_effort, 'medium', 'a tool turn keeps thinking after its first call');
+ const off = await run(async () => true, 'none', 'find me a speech model');
+ assert.equal(off.first?.reasoning_effort ?? 'none', 'none', 'thinking the person switched off stays off, tools or not');
+ assert.equal(off.later, undefined);
+ assert.equal((await run(async () => true, 'xhigh', 'find it')).first, undefined, 'a chat already thinking is left as it is');
+ const chat = await run(async () => false, 'none', 'how are you');
+ assert.equal(chat.first?.chat_template_kwargs?.enable_thinking, false);
+ assert.equal(chat.first?.reasoning_effort, 'none');
+ assert.equal(chat.later, undefined, 'plain conversation goes back to the chat\'s own level after the first call');
+});
+
+test('the rule tells the model to call a tool in the turn that announces it', () => {
+ assert.match(AUDIO_SYSTEM_RULE, /call the tool in that same turn/);
+ assert.match(AUDIO_SYSTEM_RULE, /never write a tool call as text/);
+ assert.match(AUDIO_SYSTEM_RULE, /ACT, DON'T ASK/);
+});

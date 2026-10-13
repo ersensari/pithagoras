@@ -24,12 +24,14 @@ import { local } from "../safe-storage";
 import { filterSessions } from "../session-filter";
 import { isEscape } from "../shortcuts";
 import { pick, useFlip } from "../motion";
-import { HOME, folderKeys, folderName, groupByFolder, sortFolders, type Places } from "../session-folders";
+import { HOME, folderKeys, folderName, groupByFolder, sortFolders, type Folder, type Places } from "../session-folders";
 import { useFolderPrefs, useOpenFolders } from "../use-session-folders";
 import { t, useLanguage } from "../i18n";
 
 /** How many unpinned sessions the sidebar shows before deferring to Sessions. */
 const RECENTS_LIMIT = 12;
+/** Remembers which agent's home a chat was last explicitly started in, so the bare "+ New" button can reuse it instead of always opening Home. */
+const PREFERRED_NEW_CHAT_KEY = "pithagoras.preferredNewChatWorkspace";
 /** How many of a folder's chats the sidebar shows before deferring to Sessions, opened at that folder. */
 const FOLDER_LIMIT = 8;
 
@@ -89,6 +91,11 @@ export const Sidebar = memo(function Sidebar({
   };
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // The main "+ New" button used to always start in Home, with no way to
+  // make it open a different agent by default short of digging into that
+  // agent's own folder row every time - remembers whichever agent a chat
+  // was last explicitly started in (including Home, stored as "") and the
+  // bare button reuses it next time.
   const newChat = async (workspace?: string) => {
     if (starting) return;
     setStarting(true);
@@ -100,6 +107,14 @@ export const Sidebar = memo(function Sidebar({
     } finally {
       setStarting(false);
     }
+  };
+  // "" stands for Home (newChat's own workspace=undefined), distinct from
+  // "never chosen one explicitly yet" (the key missing entirely).
+  const newChatInPreferred = () => newChat(local.get(PREFERRED_NEW_CHAT_KEY) || undefined);
+  const newChatIn = (f: Folder<Session>) => {
+    const workspace = f.key === HOME ? undefined : f.path!;
+    local.set(PREFERRED_NEW_CHAT_KEY, workspace ?? "");
+    return newChat(workspace);
   };
 
   // Only worth a field once the list is longer than it shows: below that the
@@ -201,7 +216,7 @@ export const Sidebar = memo(function Sidebar({
       {/* Folded, the places are still one click away: a rail of their icons. */}
       {collapsed && (
         <nav className="sidebar-rail max-md:hidden" aria-label={t("Destinations")}>
-          <RailButton icon={<LuPlus />} label={t("New chat")} onClick={() => newChat()} />
+          <RailButton icon={<LuPlus />} label={t("New chat")} onClick={() => newChatInPreferred()} />
           <hr />
           {destinations.map((d) => (
             <RailButton key={d.to} icon={d.icon} label={d.label} onClick={() => onNavigate(d.to)} current={view === d.to}>
@@ -232,7 +247,7 @@ export const Sidebar = memo(function Sidebar({
 
       {/* Destinations, above the session lists. */}
       <nav className="px-2 pb-2" aria-label={t("Destinations")}>
-        <NavItem icon={<LuPlus />} label={t("New")} onClick={() => newChat()} active={starting} isNew />
+        <NavItem icon={<LuPlus />} label={t("New")} onClick={() => newChatInPreferred()} active={starting} isNew />
         {destinations.map((d) => (
           <NavItem key={d.to} icon={d.icon} label={d.label} onClick={() => onNavigate(d.to)} active={view === d.to} />
         ))}
@@ -281,7 +296,7 @@ export const Sidebar = memo(function Sidebar({
               isOpen={openFolders.isOpen}
               onToggle={openFolders.toggle}
               onMove={searching || !allKeys ? undefined : (shown, key, to) => move(shown, key, to, allKeys)}
-              onNewChat={(f) => newChat(f.key === HOME ? undefined : f.path!)}
+              onNewChat={newChatIn}
             >
               {(f) => {
                 const chats = listed.get(f.key)!;

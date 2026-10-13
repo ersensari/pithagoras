@@ -24,7 +24,7 @@ export default defineConfig({
     configureServer(server) {
       // ORT dynamically imports its runtime. Serve these generated files as
       // static assets in development, just as the production server does.
-      const assets = new Set(["ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm", "silero_vad_v5.onnx", "vad.worklet.bundle.min.js"]);
+      const assets = new Set(["ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm", "silero_vad_v5.onnx", "vad.worklet.bundle.min.js", "rnnoise-worklet.js", "gtcrn-worklet.js", "rnnoise.wasm", "rnnoise_simd.wasm", "gtcrn.wasm"]);
       server.middlewares.use((req, res, next) => {
         const path = new URL(req.url || "/", "http://localhost").pathname;
         const name = path.slice("/voice-assets/".length);

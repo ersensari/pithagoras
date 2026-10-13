@@ -9,6 +9,8 @@ import * as voiceService from '../extensions/voice-service.js';
 import { setTimeout as delay } from "node:timers/promises";
 import { once } from "node:events";
 import express, { type Router } from "express";
+import { answerOffer, type RtcStt } from "../voice-stt/rtc.js";
+import { whisperTranscribe } from "../voice-stt/whisper.js";
 import { getSession, getSetting, putSetting } from "../db.js";
 import { agentOf, defaultAgent } from "../agents.js";
 
@@ -46,7 +48,36 @@ export const MAX_RESPONSE_INSTRUCTIONS = 8000;
 // The addresses of a portal with nothing set up: services of the Compose overlay, not the managed ones.
 const DEFAULT_WHISPER_URL = "http://127.0.0.1:8178/inference";
 const DEFAULT_BREEZE_URL = "http://127.0.0.1:7860/v1/audio/speech";
-function config(): VoiceConfig {
+/**
+ * The voice library ids the OmniVoice engine (forgeloop-ai-omnivoice, reached
+ * through the audio-cpp wire shape) speaks with by name. OmniVoice has no
+ * per-request reference clone on this path: `tts-server` only reads a `voice`
+ * field naming a voice registered in its own registry, and `app.py` registers
+ * the bundled presets there by the ids below - so a library voice is sent as
+ * that name, not as a `voice_ref` clip. A voice outside this table is sent as
+ * no voice at all: OmniVoice then designs one from the instructions, which is
+ * what made every phrase of one reply sound like a different speaker.
+ */
+const OMNIVOICE_VOICES = new Map<string, string>([
+  ["voice-a3cc8c3b-0237-41ac-a01f-0bacc9dcfd2c", "ersen"],
+  ["voice-4f8e2a91-7c3d-4b6e-9a1f-2d5c8e6b3a09", "ersen-tr"],
+  ["voice-c6f49cf4-0542-48e0-91d9-dbb83e360b9f", "emma"],
+  ["voice-cb02ec68-5ccb-4cd4-98bf-59608dd99c0a", "severin"],
+]);
+/** The OmniVoice registry name of a voice library row: the preset's own name,
+ * lower-cased - the same form `app.py` registers it with (`preset["name"].lower()`),
+ * so a preset added on either side matches without touching this file. */
+function omnivoiceVoice(voiceId: string, name: string): string | undefined {
+  return OMNIVOICE_VOICES.get(voiceId) ?? (/^[a-z0-9][a-z0-9-]*$/.test(name) ? name : undefined);
+}
+/** A voice chosen from the engine's own registry has no library row: the name
+ * is the registry name itself, so the lookup is tolerant of that. */
+function libraryVoice(voiceId: string) {
+  try { return readVoice(voiceId); } catch (e) { if (e instanceof VoiceNotFound) return undefined; throw e; }
+}
+/** The shape OmniVoice accepts for a voice of its own registry: a lower-case name. */
+const REGISTRY_VOICE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+export function config(): VoiceConfig {
   const stored = getSetting("voice");
   return stored ? { voice: "design", language: "auto", cfgScale: 4, ...JSON.parse(stored) } : {
     voice: "design", language: "auto", cfgScale: 4,
@@ -71,7 +102,14 @@ export function validateConfig(value: any): VoiceConfig {
     throw new Error("Provide a voice description of 1–1000 characters");
   const voice = value.voice ?? "design";
   if (typeof voice !== "string") throw new Error("Choose a speaking voice");
-  const preset = voice === "design" ? undefined : readVoice(voice);
+  const preset = voice === "design" ? undefined : libraryVoice(voice);
+  if (!preset && voice !== "design") {
+    // OmniVoice speaks with a voice registered in its own registry, which the picker
+    // lists straight from the engine: such a voice is no library row. Everywhere else
+    // a voice outside the library is refused, not spoken with another one.
+    if (runtime !== "audio-cpp") throw new VoiceNotFound();
+    if (!REGISTRY_VOICE.test(voice)) throw new Error("Choose a voice the speech engine has registered");
+  }
   const language = value.language ?? "auto";
   if (!INPUT_LANGUAGES.some(([code]) => code === language))
     throw new Error("Choose a supported input language");
@@ -348,7 +386,23 @@ export function voiceRouter(): Router {
       res.json(withInstructions(connectManagedVoice(state.choice)));
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
-  router.get("/voice", (_req, res) => res.json({...withInstructions(config()),managed:managedVoice(),speech:config().runtime!=="none",comparison:process.env.VOICE_COMPARISON === "true",statusSpeech:process.env.VOICE_STATUS_SPEECH !== "false",ttsPrefetch:process.env.VOICE_TTS_PREFETCH === "true",sentenceChunks:process.env.VOICE_SENTENCE_CHUNKS === "true",pipelineMode:process.env.VOICE_PIPELINE_MODE === "sequential" ? "sequential" : "parallel"}));
+  router.get("/voice", (_req, res) => res.json({...withInstructions(config()),managed:managedVoice(),speech:config().runtime!=="none",comparison:process.env.VOICE_COMPARISON === "true",statusSpeech:process.env.VOICE_STATUS_SPEECH !== "false",ttsPrefetch:process.env.VOICE_TTS_PREFETCH === "true",sentenceChunks:process.env.VOICE_SENTENCE_CHUNKS === "true",pipelineMode:process.env.VOICE_PIPELINE_MODE === "sequential" ? "sequential" : "parallel",sttWebrtc:process.env.VOICE_STT_WEBRTC !== 'false',noiseModel:['off','gtcrn','rnnoise'].includes(process.env.VOICE_NOISE_MODEL ?? '')?process.env.VOICE_NOISE_MODEL:'rnnoise',mergeReplies:process.env.VOICE_MERGE_REPLIES === "true" || (process.env.VOICE_MERGE_REPLIES !== "false" && config().runtime === "audio-cpp")}));
+  // The voices the speech engine has registered in its own registry. OmniVoice
+  // speaks only with these, and a voice added on the engine's side has to be
+  // pickable here without a code change, so the list is read from the engine.
+  router.get("/voice/engines", async (_req, res) => {
+    const settings = config();
+    const runtime = settings.runtime ?? "breeze";
+    if (runtime !== "audio-cpp") return res.json({ runtime, voices: [] });
+    try {
+      const url = new URL(settings.breezeUrl);
+      url.pathname = url.pathname.replace(/\/[^/]*$/, "/voices");
+      const upstream = await fetch(url.href, { redirect: "error", signal: AbortSignal.timeout(5000) });
+      if (!upstream.ok) throw new Error(`The speech engine returned HTTP ${upstream.status}`);
+      const body = await upstream.json() as { voices?: { name?: unknown }[] };
+      res.json({ runtime, voices: (body.voices ?? []).map(v => (typeof v?.name === "string" ? v.name : "")).filter(Boolean) });
+    } catch (e) { res.json({ runtime, voices: [], error: (e as Error).message }); }
+  });
   router.put("/voice", (req, res) => {
     try {
       const saved = validateConfig(req.body);
@@ -378,7 +432,10 @@ export function voiceRouter(): Router {
     const form = new FormData();
     form.set("file", new Blob([new Uint8Array(req.body)], { type: "audio/wav" }), "recording.wav");
     form.set("response_format", "json");
-    form.set("language", settings.language);
+    // Recognition services name a language with its own code and detect one when
+    // the field is absent; "auto" is not a code any of them accepts, and sending
+    // it fails the request before the audio is looked at.
+    if (settings.language !== "auto") form.set("language", settings.language);
     // OpenAI-compatible recognition services (audio.cpp, Qwen3-ASR) name the
     // loaded model here; Whisper.cpp has one model and ignores the field.
     if (settings.sttModel) form.set("model", settings.sttModel);
@@ -393,6 +450,34 @@ export function voiceRouter(): Router {
       res.set("Server-Timing", `whisper_upstream;dur=${(performance.now()-sttStarted).toFixed(1)}`);
       res.json({ text: result.text.trim() });
     } catch (e) { if (!res.destroyed) res.status(502).json({ error: (e as Error).message }); }
+  });
+  // Streaming recognition over WebRTC: the browser sends its microphone as Opus and the VAD's start/end markers on a
+  // data channel, and gets interim and final transcripts back on it. One live connection per chat; a new offer for a
+  // chat replaces its old one. The media goes over UDP straight to this host (set VOICE_RTC_PORT_MIN/MAX to pin the
+  // ports, VOICE_RTC_ADDRESSES for an address that is not on an interface), only this signalling goes through the proxy.
+  const rtc = new Map<string, RtcStt>();
+  router.post("/sessions/:id/voice/rtc", express.json({ limit: "64kb" }), async (req, res) => {
+    const offer = req.body?.sdp;
+    if (req.body?.type !== "offer" || typeof offer !== "string" || offer.length > 32768) return res.status(400).json({ error: "An SDP offer is required" });
+    const id = String(req.params.id);
+    if (!rtc.has(id) && rtc.size >= 8) return res.status(429).json({ error: "Too many live recognition connections" });
+    const settings = config();
+    const min = Number(process.env.VOICE_RTC_PORT_MIN), max = Number(process.env.VOICE_RTC_PORT_MAX);
+    try {
+      rtc.get(id)?.close();
+      let peer: RtcStt | undefined;
+      peer = await answerOffer(offer, {
+        transcribe: whisperTranscribe(settings.whisperUrl, settings.sttModel || undefined),
+        // The chat's own language setting, where it is one; and the languages that count as speech where VOICE_STT_LANGUAGES lists them (en,tr).
+        ...(settings.language && settings.language !== "auto" ? { language: settings.language } : {}),
+        languages: (process.env.VOICE_STT_LANGUAGES ?? "").split(",").map(l => l.trim().toLowerCase()).filter(Boolean),
+        ...(min > 0 && max >= min ? { portRange: [min, max] as [number, number] } : {}),
+        ...(process.env.VOICE_RTC_ADDRESSES ? { extraAddresses: process.env.VOICE_RTC_ADDRESSES.split(",").map(a => a.trim()).filter(Boolean) } : {}),
+        onClose: () => { if (rtc.get(id) === peer) rtc.delete(id); },
+      });
+      rtc.set(id, peer);
+      res.json({ type: "answer", sdp: peer.answer });
+    } catch (e) { res.status(502).json({ error: (e as Error).message }); }
   });
   router.post("/sessions/:id/voice/speech", async (req, res) => {
     // Recognition alone has nothing to speak with: say so, rather than send the text to an address that is not there.
@@ -417,9 +502,14 @@ export function voiceRouter(): Router {
       let reference: { audio: Buffer; transcript: string; filename: string } | undefined;
       // Kokoro speaks with a voice of its own and reads no library voice.
       if (settings.runtime !== "kokoro" && settings.voice !== "design") {
-        const preset = readVoice(settings.voice);
-        instruction = preset.instruction;
-        if (preset.audio) reference = { audio: preset.audio, transcript: preset.transcript, filename: "reference.wav" };
+        const preset = libraryVoice(settings.voice);
+        // A voice of OmniVoice's own registry has no library row; anywhere else it is
+        // a voice this portal does not have, and speaking with another one is a lie.
+        if (!preset && settings.runtime !== "audio-cpp") throw new VoiceNotFound();
+        if (preset) {
+          instruction = preset.instruction;
+          if (preset.audio) reference = { audio: preset.audio, transcript: preset.transcript, filename: "reference.wav" };
+        }
       }
       // Chatterbox clones a speaker; it has no designed or built-in voice.
       // validateConfig refuses this combination on save; a config written before
@@ -439,8 +529,18 @@ export function voiceRouter(): Router {
           response_format: "wav", options: { exaggeration: String(settings.exaggeration ?? 0.5), seed: "42" },
           voice_ref: { type: "base64", data: reference!.audio.toString("base64") } };
       } else if (settings.runtime === "audio-cpp") {
-        json = { model: "breeze", input: text, stream: true, stream_format: "audio", response_format: "pcm", options: { instruction, guidance_scale: String(settings.cfgScale), seed: "42", stream_frames_per_event: "8", stream_lookahead_margin: "4" } };
-        if (reference) { json.voice_ref = { type: "base64", data: reference.audio.toString("base64") }; json.reference_text = reference.transcript; }
+        // OmniVoice (the engine this address serves) names a voice registered in
+        // its own registry; it reads no reference clip, no instruction and no
+        // guidance from a phrase request. Seed is fixed so the sampler stays on
+        // one speaker across the phrases a reply is spoken in. A library voice
+        // outside that registry is sent as no voice at all - OmniVoice then
+        // designs one from the instructions, which is what made every phrase of
+        // one reply sound like a different speaker.
+        json = { model: "breeze", input: text, stream: true, stream_format: "audio", response_format: "pcm",
+          seed: 9, temperature: 0.3, guidance_scale: 4, steps: 32,
+          options: { instruction, guidance_scale: String(settings.cfgScale), seed: "42", stream_frames_per_event: "8", stream_lookahead_margin: "4" } };
+        const voiceName = settings.voice === "design" ? undefined : omnivoiceVoice(settings.voice, libraryVoice(settings.voice)?.name ?? settings.voice);
+        if (voiceName) json.voice = voiceName;
       } else {
         form = new FormData();
         form.set("text", text); form.set("instruction", instruction); form.set("cfg_scale", String(settings.cfgScale));

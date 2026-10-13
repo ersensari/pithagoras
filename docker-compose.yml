@@ -87,6 +87,17 @@ services:
       # something else. Left empty, the card with the most room is used.
       VOICE_GPU: ${VOICE_GPU:-}
       VOICE_VRAM_RESERVE_MIB: ${VOICE_VRAM_RESERVE_MIB:-}
+      # Streaming recognition over WebRTC (see docs/guide/voice.md). The media is UDP straight to this host, so a
+      # firewall needs the port range open; the portal is host-networked, so nothing else has to be published.
+      VOICE_STT_WEBRTC: ${VOICE_STT_WEBRTC:-}
+      VOICE_RTC_PORT_MIN: ${VOICE_RTC_PORT_MIN:-}
+      VOICE_RTC_PORT_MAX: ${VOICE_RTC_PORT_MAX:-}
+      # An address the browser can reach this host on, where it is not on an interface (public IP behind NAT).
+      VOICE_RTC_ADDRESSES: ${VOICE_RTC_ADDRESSES:-}
+      # The languages you speak, such as en,tr: Whisper's guesses in any other language on noise are dropped.
+      VOICE_STT_LANGUAGES: ${VOICE_STT_LANGUAGES:-}
+      # rnnoise (default), gtcrn or off: what cleans the microphone before the VAD hears it.
+      VOICE_NOISE_MODEL: ${VOICE_NOISE_MODEL:-}
 
 volumes:
   portal-data:

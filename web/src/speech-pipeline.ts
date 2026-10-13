@@ -1,4 +1,6 @@
 export type PreparedSpeech = ((signal: AbortSignal) => Promise<void>) & { completed?: Promise<void> };
+/** The most one synthesis request carries when sentences are merged: the TTS engine's own limit. */
+export const MERGE_MAX_CHARS = 600;
 type Phrase = {text:string;kind:'reply'|'status'};
 type Run = { controller: AbortController; text: Phrase[]; audio: {phrase:Phrase;play:PreparedSpeech}[]; generating?: Phrase; playing?: Phrase };
 
@@ -12,6 +14,7 @@ export class SpeechPipeline {
     private sequential = false,
     private sentenceBySentence = false,
     private prefetch = false,
+    private mergeReplies = false,
   ) {}
   private fresh(): Run { return { controller: new AbortController(), text: [], audio: [] }; }
   get busy() { const r = this.run; return !!(r.generating || r.playing || r.text.length || r.audio.length); }
@@ -47,7 +50,17 @@ export class SpeechPipeline {
     // Keep at most two completed phrases ahead of playback. Breeze itself has
     // one GPU request slot; overlapping playback needs no additional GPU slot.
     if (!run.generating && (this.sequential && !this.prefetch ? !run.playing : run.audio.length < 2) && run.text.length) {
-      const phrase = run.text.shift()!;
+      let phrase = run.text.shift()!;
+      // OmniVoice crossfades the chunks it splits a request into, and nothing between
+      // two requests: one request per sentence leaves a fade-out and a pad at every
+      // sentence boundary, which is what a listener hears as clicks. Sentences
+      // go together up to MERGE_MAX_CHARS, so the engine's own crossfade is the only seam within one.
+      if (this.mergeReplies && phrase.kind === 'reply') {
+        let text = phrase.text;
+        // Whole sentences only, up to the engine's limit: what does not fit starts the next request.
+        while (run.text.length && run.text[0].kind === 'reply' && text.length + 1 + run.text[0].text.length <= MERGE_MAX_CHARS) text = `${text} ${run.text.shift()!.text}`;
+        phrase = { text, kind: 'reply' };
+      }
       run.generating = phrase;
       void (async () => {
         try {

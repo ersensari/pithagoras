@@ -14,8 +14,10 @@
     "cookie-parser": "^1.4.7",
     "express": "^5.0.1",
     "nanoid": "^5.0.9",
+    "opusscript": "^0.1.1",
     "playwright-core": "1.63.0",
-    "typebox": "^1.1.38"
+    "typebox": "^1.1.38",
+    "werift": "^0.25.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",

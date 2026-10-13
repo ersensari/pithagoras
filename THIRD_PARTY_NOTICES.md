@@ -50,6 +50,34 @@ Files: `vad.worklet.bundle.min.js` and `silero_vad_v5.onnx`, from the npm packag
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
+## Noise suppression
+
+Files: `rnnoise-worklet.js`, `rnnoise.wasm`, `rnnoise_simd.wasm`, `gtcrn-worklet.js` and `gtcrn.wasm`, from the npm package `@sapphi-red/web-noise-suppressor` 0.4.1 (https://github.com/sapphi-red/web-noise-suppressor), licensed under the MIT License. They carry RNNoise (https://github.com/xiph/rnnoise, BSD 3-Clause, through shiguredo/rnnoise-wasm) and GTCRN (https://github.com/Xiaobin-Rong/gtcrn, MIT, through sapphi-red/gtcrn-wasm); the notices of those projects are in their repositories.
+
+### @sapphi-red/web-noise-suppressor (MIT)
+
+    MIT License
+
+    Copyright (c) 2022 翠 / green
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
 ## ONNX Runtime Web
 
 Files: `ort-wasm-simd-threaded.mjs` and `ort-wasm-simd-threaded.wasm`, from the npm package `onnxruntime-web` 1.29.0 (https://github.com/microsoft/onnxruntime), licensed under the MIT License. The WebAssembly build also contains third-party code, whose notices are listed in https://github.com/microsoft/onnxruntime/blob/main/ThirdPartyNotices.txt.

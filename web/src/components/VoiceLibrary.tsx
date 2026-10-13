@@ -15,6 +15,21 @@ export type Preset={id:string;name:string;kind:'design'|'clone';instruction:stri
 export const kokoroVoiceOptions=()=>KOKORO_VOICES.map(v=>({value:v.id,label:v.name,text:v.name,hint:`${languageName(v.locale,v.language)} · ${v.female?t('female'):t('male')}`}));
 /** The voices in the library. */
 export const voicePresets=():Promise<Preset[]>=>request();
+/**
+ * The speaking-voice menu. With `engineVoices` it is the list the speech engine
+ * itself has registered: a name matching a library row is offered as that row, so
+ * its description and recording stay behind it, and a voice added on the engine's
+ * side is offered by its own name - OmniVoice speaks with it without a code change.
+ */
+export const voiceOptions=(voices:Preset[],engineVoices?:string[])=>[
+  {value:'design',label:t('Designed voice')},
+  ...(engineVoices
+    ? engineVoices.map(n=>n.trim().toLowerCase()).filter(Boolean).sort().map(n=>{
+        const row=voices.find(v=>v.name.trim().toLowerCase()===n);
+        return row?{value:row.id,label:row.name,text:row.name,hint:row.kind==='clone'?t('Reference clone'):t('Designed')}:{value:n,label:n,text:n,hint:t('Registered in the speech engine')};
+      })
+    : voices.map(v=>({value:v.id,label:v.name,text:v.name,hint:v.kind==='clone'?t('Reference clone'):t('Designed')}))),
+];
 const request=(path='',method='GET',body?:unknown)=>json<any>('/api/voice/presets'+path,{method,...(body===undefined?{}:{body:JSON.stringify(body)})});
 async function reference(file:File){
  if(file.size>20*1024*1024)throw Error(t('Choose an audio file smaller than 20 MB'));
@@ -31,7 +46,7 @@ async function reference(file:File){
  * `onPending` hands the page a function that saves the descriptions edited and not yet saved, or null
  * when there are none, so that the page's own save button cannot report "Saved" over them.
  */
-export function VoiceLibrary({value,onChange,onError,onPending}:{value:string;onChange:(id:string)=>void;onError:(message:string)=>void;onPending:(save:(()=>Promise<void>)|null)=>void}){
+export function VoiceLibrary({value,onChange,onError,onPending,engineVoices}:{value:string;onChange:(id:string)=>void;onError:(message:string)=>void;onPending:(save:(()=>Promise<void>)|null)=>void;engineVoices?:string[]}){
  const [voices,setVoices]=useState<Preset[]>([]),[adding,setAdding]=useState(false),[busy,setBusy]=useState(false);
  // Edited descriptions by voice id, kept while another voice is selected; a voice's description is saved on its own, not with the settings.
  const [drafts,setDrafts]=useState<Record<string,string>>({});
@@ -48,7 +63,7 @@ export function VoiceLibrary({value,onChange,onError,onPending}:{value:string;on
  useEffect(()=>{onPending(toSave.length?async()=>{for(const v of toSave)await saveDescription(v.id,drafts[v.id]);}:null);return()=>onPending(null);},[voices,drafts,value]);
  const field=`mt-1 ${inputSmCls}`;
  return <div className="space-y-2">
-  <div className="block text-xs text-fg-muted">{t("Speaking voice")}<Select aria-label={t("Speaking voice")} className="mt-1.5 w-full" value={value} onChange={onChange} options={[{value:'design',label:t('Designed voice')},...voices.map(v=>({value:v.id,label:v.name,text:v.name,hint:v.kind==='clone'?t('Reference clone'):t('Designed')}))]}/></div>
+  <div className="block text-xs text-fg-muted">{t("Speaking voice")}<Select aria-label={t("Speaking voice")} className="mt-1.5 w-full" value={value} onChange={onChange} options={voiceOptions(voices, engineVoices)}/></div>
   {selected&&<div className="rounded-lg border border-line p-3 space-y-2"><div className="space-y-2"><label className="block text-xs text-fg-muted">{t("Voice description")}<textarea className={field} value={drafts[selected.id]??selected.instruction} maxLength={1000} onChange={e=>setDrafts(d=>({...d,[selected.id]:e.target.value}))}/></label><button type="button" disabled={busy||!(drafts[selected.id]??'').trim()||!edited.includes(selected)} className="rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent disabled:opacity-40" onClick={async()=>{setBusy(true);try{await saveDescription(selected.id,drafts[selected.id]);}catch(e){onError((e as Error).message);}finally{setBusy(false);}}}>{busy?t("Saving voice…"):t("Save description")}</button></div>{selected.kind==='clone'&&<><audio aria-label={t("Voice reference preview")} controls preload="none" className="w-full h-9" src={`/api/voice/presets/${selected.id}/audio`}/><p className="text-xs text-fg-faint">{selected.transcript}</p></>}<button type="button" disabled={busy} className="inline-flex items-center gap-1 text-xs text-danger" onClick={async()=>{if(!await confirmDialog({title:t('Delete voice “{name}”?',{name:selected.name}),confirmLabel:t('Delete'),danger:true,deletes:true}))return;setBusy(true);try{await request('/'+selected.id,'DELETE');setVoices(v=>v.filter(p=>p.id!==selected.id));onChange('design');window.dispatchEvent(new Event('voice-config-changed'));}catch(e){onError((e as Error).message);}finally{setBusy(false);}}}><LuTrash2/>{t("Delete voice")}</button></div>}
   <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent" onClick={()=>setAdding(v=>!v)}><LuPlus/>{adding?t("Close new voice"):t("Add voice")}</button>
   {adding&&<div className="rounded-lg border border-line bg-surface p-3 space-y-3">

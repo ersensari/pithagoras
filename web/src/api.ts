@@ -373,6 +373,12 @@ export interface VoiceConfig {
   skipThinkingProviders?: string[];
   defaultSkipThinkingProviders?: string[];
   pipelineMode?: "parallel" | "sequential";
+  /** Speak a whole reply in one synthesis request: the engine crossfades the chunks it splits it into. */
+  mergeReplies?: boolean;
+  /** Whether the portal offers streaming recognition over WebRTC (VOICE_STT_WEBRTC, on unless set to false). */
+  sttWebrtc?: boolean;
+  /** The noise model the microphone goes through before the VAD hears it (VOICE_NOISE_MODEL: rnnoise by default, gtcrn, or off). */
+  noiseModel?: 'off' | 'rnnoise' | 'gtcrn';
   // False with no speech synthesis (runtime "none"): the page can listen, but replies are not spoken.
   speech?: boolean;
   vad?: typeof DEFAULT_VAD;
@@ -443,8 +449,27 @@ export const api = {
     if (!res.ok) throw new ApiError(body.error || t("Transcription failed"), res.status, body);
     return { text: String(body.text ?? ""), serverTiming: res.headers.get("server-timing") ?? "" };
   },
+  /** Trades a WebRTC offer for the portal's answer: the signalling of streaming recognition. */
+  rtcOffer: async (sessionId: string, offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> => {
+    const res = await send(`/api/sessions/${sessionId}/voice/rtc`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "offer", sdp: offer.sdp }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(body.error || t("Live recognition failed"), res.status, body);
+    return { type: "answer", sdp: String(body.sdp ?? "") };
+  },
+  startMeeting: (sessionId: string) => json<{ ok: boolean }>(`/api/sessions/${sessionId}/meeting/start`, { method: "POST" }),
+  /** Fire-and-forget from the recorder's point of view, but awaited by the caller so chunks never overlap in flight and land on disk out of order. */
+  sendMeetingChunk: async (sessionId: string, samples: Float32Array, signal?: AbortSignal): Promise<void> => {
+    const res = await send(`/api/sessions/${sessionId}/meeting/chunk`, { method: "POST", headers: { "Content-Type": "audio/wav" }, body: samplesWav(samples), signal });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(body.error || t("Could not save meeting audio"), res.status, body);
+    }
+  },
+  stopMeeting: (sessionId: string) => json<{ ok: boolean; transcriptPath?: string }>(`/api/sessions/${sessionId}/meeting/stop`, { method: "POST" }),
   setVoiceGpu: (gpu: string) => json<{ selected: string; restarting: boolean }>('/api/voice/gpu', { method: 'PUT', body: JSON.stringify({ gpu }) }),
   voice: () => json<VoiceConfig>("/api/voice"),
+  /** The voices the speech engine has registered in its own registry (OmniVoice); empty for the other engines. */
+  voiceEngines: () => json<{ runtime: string; voices: string[]; error?: string }>("/api/voice/engines"),
   setVoice: (value: VoiceConfig) => json<VoiceConfig>("/api/voice", { method: "PUT", body: JSON.stringify(value) }),
   authStatus: () => json<{ authRequired: boolean; authed: boolean; shortPassword?: boolean }>("/api/auth/status"),
   login: (password: string) =>

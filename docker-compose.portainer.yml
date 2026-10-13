@@ -77,6 +77,12 @@ services:
       # something else. Left empty, the card with the most room is used.
       VOICE_GPU: ${VOICE_GPU:-}
       VOICE_VRAM_RESERVE_MIB: ${VOICE_VRAM_RESERVE_MIB:-}
+      VOICE_STT_WEBRTC: ${VOICE_STT_WEBRTC:-}
+      VOICE_RTC_PORT_MIN: ${VOICE_RTC_PORT_MIN:-}
+      VOICE_RTC_PORT_MAX: ${VOICE_RTC_PORT_MAX:-}
+      VOICE_RTC_ADDRESSES: ${VOICE_RTC_ADDRESSES:-}
+      VOICE_STT_LANGUAGES: ${VOICE_STT_LANGUAGES:-}
+      VOICE_NOISE_MODEL: ${VOICE_NOISE_MODEL:-}
 
 volumes:
   pithagoras-data:
