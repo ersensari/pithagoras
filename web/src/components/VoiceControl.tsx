@@ -16,6 +16,7 @@ import type { Item } from "../transcript";
 import { LiveTranscription } from "../live-transcription";
 import { StreamedTranscription } from "../live-rtc";
 import { RtcStt, type RtcSpeaker } from "../rtc-stt";
+import { ignoredVoice } from "../speaker-filter";
 import { suppressNoise, type NoiseModel, type Suppressed } from "../noise";
 import { preparePcmSpeech, readPcmStream, playAudioBuffer, bufferOf } from "../pcm-stream";
 import { stretch, stretchInSteps } from "../time-stretch";
@@ -84,6 +85,11 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   // read by the controller and the speech at the moment they matter.
   const [steer, setSteer] = useState(() => local.get('voiceSteer') === 'on');
   const steering = useRef(steer); steering.current = steer;
+  // On by default: a voice the portal is sure is not an enrolled one never reaches the agent (see speaker-filter.ts).
+  const [onlyOwner, setOnlyOwner] = useState(() => local.get('voiceOnlyOwner') !== 'off');
+  const onlyOwnerNow = useRef(onlyOwner); onlyOwnerNow.current = onlyOwner;
+  /** The verdict for the utterance being finished, set by whichever path transcribed it. */
+  const speakerNow = useRef<RtcSpeaker | undefined>(undefined);
   const [rate, setRate] = useState(() => { const saved = Number(local.get('voiceRate')); return VOICE_RATES.includes(saved) ? saved : 1; });
   const speed = useRef(rate); speed.current = rate;
   const [ptt, setPtt] = useState(() => local.get('voicePtt') === 'on');
@@ -568,10 +574,10 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
           throw e;
         }
         if(trace)profiler.current!.mark('stt_result',{requestMs:performance.now()-started,serverTiming:result.serverTiming,ok:true},trace);
-        if (current() && result.speaker) setSpeaker(result.speaker);
+        if (current() && result.speaker) { setSpeaker(result.speaker); speakerNow.current = result.speaker; }
         return result.text;
       }, showPreview, !sequential.current);
-      const live = new StreamedTranscription(plain, () => rtcStt.current, showPreview, speaker => { if (current()) setSpeaker(speaker); });
+      const live = new StreamedTranscription(plain, () => rtcStt.current, showPreview, speaker => { if (current()) { setSpeaker(speaker); speakerNow.current = speaker; } });
       transcription.current = live;
       const controller = new HandsFreeVoice({
         statusSpeech: statusSpeech.current,
@@ -579,7 +585,13 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         sentenceChunks: sentenceChunks.current,
         mergeReplies: mergeReplies.current,
         ttsPrefetch: ttsPrefetch.current,
-        transcribe: async (samples, signal) => {const result=await live.finish(samples, signal);profileMark('transcript_ready');return result;},
+        transcribe: async (samples, signal) => {
+          speakerNow.current = undefined;
+          const result = await live.finish(samples, signal);
+          profileMark('transcript_ready');
+          // Empty text is what hands-free treats as noise: nothing is sent and an interrupted reply is spoken on.
+          return ignoredVoice(onlyOwnerNow.current, speakerNow.current) ? "" : result;
+        },
         send: async text => {
           profileSeq.current=eventSeq.current;profileMark('send'); cue("sent");
           // The pictures waiting now go with it, and only they leave the tray:
@@ -747,6 +759,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         canRepeat={canRepeat} onRepeat={() => { repeatReply(); }}
         rate={rate} onRate={value => { local.set('voiceRate', String(value)); setRate(value); }}
         steer={steer} onSteer={value => { local.set('voiceSteer', value ? 'on' : 'off'); setSteer(value); }}
+        onlyOwner={onlyOwner} onOnlyOwner={value => { local.set('voiceOnlyOwner', value ? 'on' : 'off'); setOnlyOwner(value); }}
         ptt={ptt} onPtt={value => { void choosePtt(value); }} holding={holding} onHold={hold} />, stageTarget,
     )}
     <div className="relative flex items-center gap-1">

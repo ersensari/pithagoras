@@ -49,7 +49,7 @@ const watchWide = (changed: () => void) => {
 const editing = (target: EventTarget | null) => !!(target as Element | null)?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
 
 export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasMinimize, onCanvasToggle, title, phase, starting, muted, speaking, levels, error, transcript, speaker, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue,
-  waitingForTap, items, running, onStop, attachments, onAddPictures, onRemovePicture, canRepeat, onRepeat, rate, onRate, steer, onSteer, ptt, onPtt, holding, onHold }: {
+  waitingForTap, items, running, onStop, attachments, onAddPictures, onRemovePicture, canRepeat, onRepeat, rate, onRate, steer, onSteer, onlyOwner, onOnlyOwner, ptt, onPtt, holding, onHold }: {
   sessionId: string; folder: string;
   workPhase?: Activity | null;
   canvasOpen: boolean; onCanvasMinimize: () => void; onCanvasToggle: () => void;
@@ -64,6 +64,8 @@ export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasM
   canRepeat: boolean; onRepeat: () => void;
   rate: number; onRate: (rate: number) => void;
   steer: boolean; onSteer: (steer: boolean) => void;
+  /** Voices that are surely not an enrolled one are ignored (only where voice identification is on). */
+  onlyOwner: boolean; onOnlyOwner: (onlyOwner: boolean) => void;
   ptt: boolean; onPtt: (ptt: boolean) => void; holding: boolean; onHold: (down: boolean) => void;
 }) {
   const end = useRef<HTMLButtonElement>(null), browser = useRef<HTMLElement>(null), stage = useRef<HTMLElement>(null);
@@ -400,7 +402,7 @@ export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasM
         {!terminalShown && <button type="button" aria-label={t("Show terminal")} title={`${t("Show terminal")}${hint("voice.terminal")}`} onClick={openTerminal}><LuTerminal /></button>}
         <button ref={settingsToggle} type="button" data-voice-settings-toggle onClick={() => setSettings(v => !v)} title={`${t("Voice settings")}${hint("voice.settings")}`} aria-label={t("Voice settings")} aria-expanded={settings}><LuSlidersHorizontal /></button>
       </div>
-      {settings && <VoiceSettings anchor={settingsToggle} sounds={sounds} onSounds={onSounds} rate={rate} onRate={onRate} steer={steer} onSteer={onSteer} ptt={ptt} onPtt={onPtt} onClose={() => setSettings(false)} />}
+      {settings && <VoiceSettings anchor={settingsToggle} sounds={sounds} onSounds={onSounds} rate={rate} onRate={onRate} steer={steer} onSteer={onSteer} onlyOwner={onlyOwner} onOnlyOwner={onOnlyOwner} ptt={ptt} onPtt={onPtt} onClose={() => setSettings(false)} />}
     </header>
     {attachments.length > 0 && <div className="voice-attachments" role="group" aria-label={t("Pictures for your next message")}>
       <div>{attachments.map(a => <figure key={a.id}>
@@ -451,7 +453,7 @@ export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasM
         </>}
       </div>
       {!anyPanel && transcript && (input || holding || phase === "Transcribing") && <p className="voice-live-transcript" role="group" aria-label={t("Live transcription")}>{transcript}</p>}
-      {speaker?.reliable && <p className={`voice-speaker${speaker.matched && speaker.name ? "" : " is-unknown"}`} role="status" aria-label={t("Speaker")}>{speaker.matched && speaker.name ? speaker.name.charAt(0).toUpperCase() + speaker.name.slice(1) : t("Unknown voice")}</p>}
+      {speaker?.reliable && <p className={`voice-speaker${speaker.matched && speaker.name ? "" : " is-unknown"}`} role="status" aria-label={t("Speaker")}>{speaker.matched && speaker.name ? speaker.name.charAt(0).toUpperCase() + speaker.name.slice(1) : onlyOwner ? t("Unknown voice, ignored") : t("Unknown voice")}</p>}
 
       <div className="voice-stage-controls">
         {ptt

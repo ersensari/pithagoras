@@ -14,10 +14,11 @@ export const VOICE_RATES = [1, 1.25, 1.5, 1.75];
  * layer, and the canvas panel beside it would otherwise cover the card. It is
  * placed above the button that opens it, and follows it when the window changes.
  */
-export function VoiceSettings({ anchor, sounds, onSounds, rate, onRate, steer, onSteer, ptt, onPtt, onClose }: {
+export function VoiceSettings({ anchor, sounds, onSounds, rate, onRate, steer, onSteer, onlyOwner, onOnlyOwner, ptt, onPtt, onClose }: {
   sounds: boolean; onSounds: () => void;
   rate: number; onRate: (rate: number) => void;
   steer: boolean; onSteer: (steer: boolean) => void;
+  onlyOwner: boolean; onOnlyOwner: (onlyOwner: boolean) => void;
   ptt: boolean; onPtt: (ptt: boolean) => void;
   onClose: () => void;
   anchor: RefObject<HTMLElement>;
@@ -59,6 +60,14 @@ export function VoiceSettings({ anchor, sounds, onSounds, rate, onRate, steer, o
         {choice(true, steer, t("Adds to the task"), onSteer)}
       </div>
       <p>{steer ? t("What you say goes into the running task after its current step. The stop button still stops it.") : t("What you say stops the task and starts a new turn.")}</p>
+    </div>
+    <div className="voice-setting" role="group" aria-label={t("Other voices")}>
+      <span aria-hidden="true">{t("Other voices")}</span>
+      <div className="voice-segments">
+        {choice(false, onlyOwner, t("Listen to all"), onOnlyOwner)}
+        {choice(true, onlyOwner, t("Only enrolled voices"), onOnlyOwner)}
+      </div>
+      <p>{onlyOwner ? t("A voice the portal is sure is not an enrolled one is ignored. Short or unclear speech still goes through.") : t("Every voice is heard.")}</p>
     </div>
     <div className="voice-setting" role="group" aria-label={t("Push to talk")}>
       <span aria-hidden="true">{t("Push to talk")}</span>
