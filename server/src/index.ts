@@ -1,3 +1,4 @@
+import net from "node:net";
 import path from "node:path";
 import { DATA_DIR } from "./data-dir.js";
 import { holdDataDir } from "./instance-lock.js";
@@ -10,6 +11,16 @@ import { piCli } from "./pi/package.js";
  * a second server on it would mark the running one's chats interrupted. One
  * that is turned away has loaded nothing else.
  */
+/*
+ * Node's Happy Eyeballs gives each address it tries 250 ms before moving on.
+ * api.telegram.org answers with an AAAA as well as an A, this box has no IPv6
+ * route (the AAAA fails ENETUNREACH), and the IPv4 handshake to Telegram takes
+ * 314-323 ms measured here - so every attempt burns its 250 ms budget and the
+ * request dies as "fetch failed", while curl on the same URL succeeds in 1.0 s.
+ * Widening the per-attempt budget keeps IPv6 preference and fixes it.
+ */
+net.setDefaultAutoSelectFamilyAttemptTimeout(2000);
+
 let ours: boolean;
 try {
   ours = await holdDataDir(DATA_DIR);
