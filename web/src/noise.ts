@@ -38,7 +38,12 @@ export async function suppressNoise(mic: MediaStream, model: NoiseModel, base = 
     source.connect(node); node.connect(sink);
     await ctx.resume();
     const context = ctx;
-    return { stream: sink.stream, close() { try { node.destroy(); } catch { /* gone */ } void context.close().catch(() => {}); } };
+    // A suspended context (background tab, output device change, power saving) turns the stream to silence for good: the VAD and the orb hear nothing and nothing says why. Bring it back.
+    const revive = () => { if (context.state !== "running" && context.state !== "closed") void context.resume().catch(() => {}); };
+    context.addEventListener("statechange", revive);
+    document.addEventListener("visibilitychange", revive);
+    const watchdog = setInterval(revive, 2000);
+    return { stream: sink.stream, close() { clearInterval(watchdog); document.removeEventListener("visibilitychange", revive); try { node.destroy(); } catch { /* gone */ } void context.close().catch(() => {}); } };
   } catch {
     void ctx?.close().catch(() => {});
     return raw;
