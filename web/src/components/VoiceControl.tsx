@@ -175,6 +175,9 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   // Speech heard while a reply plays: the reply is turned down and the VAD watched, to tell a person from the reply's own echo.
   const echoProbe = useRef(new EchoProbe());
   const echoSegment = useRef(false);
+  /** What the input watchdog knows: when a VAD frame last came, when one last carried any sound, whether the raw microphone replaced the cleaned one. */
+  const inputWatch = useRef<{ lastFrame: number; liveAt: number; raw: boolean; timer?: ReturnType<typeof setInterval> }>({ lastFrame: 0, liveAt: 0, raw: false });
+  const reconnectRtc = useRef<() => void>(() => {});
   const playGain = useRef<GainNode | null>(null);
   const ducked = useRef(false);
   const duck = (on: boolean) => {
@@ -215,7 +218,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     if (sound) { if (soundsEnabled.current && mounted.current) voiceCue(sound, 'end'); setTimeout(() => { if (sound.state !== 'closed') void sound.close(); }, 180); }
     mutedRef.current = false;
     levels.current = { input: 0, output: 0 };
-    clearTimeout(maxTurn.current);
+    clearTimeout(maxTurn.current); clearInterval(inputWatch.current.timer); inputWatch.current = { lastFrame: 0, liveAt: 0, raw: false }; reconnectRtc.current = () => {};
     clearTimeout(holdLimit.current); clearTimeout(held.current?.timer); held.current = null;
     replay.current?.abort(); replay.current = null;
     voice.current?.stop(); voice.current = null;
@@ -655,7 +658,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         ortConfig: ort => { ort.env.wasm.numThreads = 1; },
         getStream: async () => heard.stream,
         pauseStream: async () => {},
-        resumeStream: async () => heard.stream,
+        resumeStream: async () => (inputWatch.current.raw ? mic : heard.stream),
         ...vadSettings.current,
         submitUserSpeechOnPause: true,
         onSpeechStart: () => {
@@ -664,6 +667,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
           if (current() && !pushToTalk.current && !mutedRef.current && !latest.current.compacting) {if(profiling.current)profiler.current!.begin();live.begin();} },
         onVADMisfire: () => { if (current() && !pushToTalk.current) {if (echoProbe.current.active) { echoProbe.current.stop(); duck(false); } live.discard();if(profiling.current)profiler.current!.close('vad_misfire');} },
         onFrameProcessed: (probabilities, frame) => {
+          { const w = inputWatch.current, now = performance.now(); w.lastFrame = now; let peak = 0; for (let i = 0; i < frame.length; i++) { const a = Math.abs(frame[i]); if (a > peak) peak = a; } if (peak > 1e-6) w.liveAt = now; }
           if (pushToTalk.current) {
             // Only what is said while the button or Space is held counts.
             const press = held.current;
@@ -711,6 +715,41 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       };
       await detector.start();
       if (!current()) return;
+      // Input watchdog. Nothing else notices when the microphone path dies in the middle of a session: the orb stays flat, the VAD hears nothing and the page says "Listening".
+      // Two ways it dies, told apart here: the VAD frames stop (its context or worklet stalled), or they go on as digital silence (the noise model's node died, or the microphone itself did).
+      const rawProbe = audio.createAnalyser(); rawProbe.fftSize = 1024;
+      try { audio.createMediaStreamSource(mic).connect(rawProbe); } catch { /* no probe: the cleaned path is judged by frames alone */ }
+      const rawBuf = new Float32Array(rawProbe.fftSize);
+      inputWatch.current.lastFrame = inputWatch.current.liveAt = performance.now();
+      let restarting = false;
+      const restartDetector = async (why: string, mark: () => void) => {
+        if (restarting) return; restarting = true;
+        console.warn(`voice: ${why}`);
+        try {
+          if (audio.state !== "running") await audio.resume();
+          mark();
+          const d = vad.current;
+          if (d && d === detector) { await d.pause(); await d.start(); }
+        } catch (e) { console.warn("voice: restarting the detector failed", e); }
+        finally { restarting = false; }
+      };
+      clearInterval(inputWatch.current.timer);
+      inputWatch.current.timer = setInterval(() => {
+        const w = inputWatch.current, now = performance.now();
+        if (!current() || pushToTalk.current || mutedRef.current || latest.current.compacting || document.hidden || vad.current !== detector) { w.lastFrame = w.liveAt = now; return; }
+        if (now - w.lastFrame > 3000) { void restartDetector(`no VAD frames for 3 s (context ${audio.state}), restarting the detector`, () => { w.lastFrame = now; }); return; }
+        if (now - w.liveAt > 8000 && !w.raw && heard.stream !== mic) {
+          rawProbe.getFloatTimeDomainData(rawBuf);
+          const rawPeak = rawBuf.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+          if (rawPeak > 1e-5) {
+            // The microphone has sound and what the noise model passes on has none: its node died. Use the microphone itself from here on.
+            void restartDetector("the noise model's output went silent while the microphone has sound, switching to the raw microphone", () => {
+              w.raw = true; w.liveAt = now;
+              const r = rtcStt.current; if (r) { rtcStt.current = undefined; r.close(); reconnectRtc.current(); }
+            });
+          } else if (now - w.liveAt > 8000) { w.liveAt = now; console.warn("voice: the microphone itself is silent"); }
+        }
+      }, 1000);
       // Streaming recognition comes up beside the plain upload, which stays the way every utterance goes until it is up.
       if (rtcEnabled.current) {
         const connectRtc = (delay: number) => {
@@ -720,9 +759,10 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
             state: up => { if (!up && current() && rtcStt.current === rtc) { rtc.close(); rtcStt.current = undefined; setTimeout(() => connectRtc(Math.min(delay * 2, 30000)), delay); } },
           });
           rtcStt.current = rtc;
-          rtc.connect(heard.stream).catch(() => { if (rtcStt.current === rtc) { rtc.close(); rtcStt.current = undefined; if (current()) setTimeout(() => connectRtc(Math.min(delay * 2, 30000)), delay); } });
+          rtc.connect(inputWatch.current.raw ? mic : heard.stream).catch(() => { if (rtcStt.current === rtc) { rtc.close(); rtcStt.current = undefined; if (current()) setTimeout(() => connectRtc(Math.min(delay * 2, 30000)), delay); } });
         };
         connectRtc(2000);
+        reconnectRtc.current = () => connectRtc(0);
       }
       // With push-to-talk the microphone is open only while held.
       if (pushToTalk.current) mic.getTracks().forEach(track => { track.enabled = false; });
