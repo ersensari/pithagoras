@@ -101,7 +101,7 @@ export class SttSession {
   private closed = false;
 
   constructor(private readonly transcribe: Transcribe, private readonly send: (m: SttMessage) => void, options: SttOptions = {}) {
-    this.o = { interimMs: 600, minNewMs: 400, preRollMs: 500, interimWindowMs: 25000, flushIdleMs: 60, flushMaxMs: 200, ...options };
+    this.o = { interimMs: 600, minNewMs: 400, preRollMs: 1200, interimWindowMs: 25000, flushIdleMs: 60, flushMaxMs: 200, ...options };
   }
 
   get speaking() { return this.utt !== null; }
