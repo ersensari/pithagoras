@@ -1,10 +1,11 @@
 import { t } from "./i18n";
 import type { Item } from "./transcript";
+import { stripUnspoken } from "./speech-strip";
 
 /** Keep code blocks and link destinations out of speech; split without losing text. */
 export function speechChunks(text: string): string[] {
-  const plain = text.replace(/```[\s\S]*?(?:```|$)/g, () => ` ${t("Code is shown in the transcript.")} `)
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+  const plain = stripUnspoken(text.replace(/```[\s\S]*?(?:```|$)/g, () => ` ${t("Code is shown in the transcript.")} `)
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1'))
     .replace(/<[^>]*>/g, '').replace(/[*_`#>|]/g, '').replace(/\s+/g, ' ').trim();
   const chunks: string[] = [];
   let remaining = plain;
