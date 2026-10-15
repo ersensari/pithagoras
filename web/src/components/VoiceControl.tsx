@@ -658,7 +658,10 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         resumeStream: async () => heard.stream,
         ...vadSettings.current,
         submitUserSpeechOnPause: true,
-        onSpeechStart: () => { if (current() && !pushToTalk.current && !mutedRef.current && !latest.current.compacting) {if(profiling.current)profiler.current!.begin();live.begin();} },
+        onSpeechStart: () => {
+          // A new segment starts clean: nothing left over from an earlier one may decide it (a probe never finished, an echo flag never cleared, the reply still turned down).
+          if (current() && !pushToTalk.current) { if (echoProbe.current.active) echoProbe.current.stop(); echoSegment.current = false; if (!playGain.current && ducked.current) duck(false); }
+          if (current() && !pushToTalk.current && !mutedRef.current && !latest.current.compacting) {if(profiling.current)profiler.current!.begin();live.begin();} },
         onVADMisfire: () => { if (current() && !pushToTalk.current) {if (echoProbe.current.active) { echoProbe.current.stop(); duck(false); } live.discard();if(profiling.current)profiler.current!.close('vad_misfire');} },
         onFrameProcessed: (probabilities, frame) => {
           if (pushToTalk.current) {
@@ -682,6 +685,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         },
         onSpeechRealStart: () => {
           if (!current() || mutedRef.current) return;
+          // The level is only believed while a reply is really playing: with no playback node it is a stale reading, and treating it as a reply made every later turn a probe that could throw the speaker away.
+          if (!playGain.current) levels.current.output = 0;
           if (!pushToTalk.current && !latest.current.compacting && levels.current.output >= 0.04) {
             // A reply is playing: turn it down and see whether the speech goes on without it, see echo-guard.ts.
             echoProbe.current.start(performance.now(), settleFor(playGain.current?.context && (playGain.current.context as AudioContext).outputLatency)); duck(true); return;
