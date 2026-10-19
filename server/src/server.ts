@@ -80,6 +80,7 @@ import { peopleRouter } from "./api/people.js";
 import { voiceRouter } from "./api/voice.js";
 import { meetingNotesRouter } from "./api/meeting-notes.js";
 import { speechRouter } from "./api/speech.js";
+import { mem0Router } from "./api/mem0.js";
 import { adoptPortalBrowser, browserRouter, pinConnection } from "./api/browser.js";
 import { endAllTerminals, terminalRouter } from "./api/terminal.js";
 import { BACKGROUND_SUPPORTED, MARKER, clearFinished, listJobs, readOutput, stopJob, stopJobsIn } from "./background.js";
@@ -1426,6 +1427,7 @@ app.use("/api", browserRouter());
 app.use("/api", voiceRouter());
 app.use("/api", meetingNotesRouter());
 app.use("/api", speechRouter());
+app.use("/api", mem0Router());
 app.use("/api", terminalRouter());
 app.use("/api", canvasesRouter());
 // Before the SPA fallback, which answers everything that is not /api.
