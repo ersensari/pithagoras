@@ -1,6 +1,10 @@
 export type PreparedSpeech = ((signal: AbortSignal) => Promise<void>) & { completed?: Promise<void> };
-/** The most one synthesis request carries when sentences are merged: the TTS engine's own limit. */
-export const MERGE_MAX_CHARS = 600;
+/**
+ * The most one synthesis request carries when sentences are merged. Merging is on for the audio-cpp engine only
+ * (GET /api/voice mergeReplies), which takes 2000 characters: fewer, longer requests mean fewer seams in the voice
+ * (2026-10-19, was 600).
+ */
+export const MERGE_MAX_CHARS = 2000;
 type Phrase = {text:string;kind:'reply'|'status'};
 type Run = { controller: AbortController; text: Phrase[]; audio: {phrase:Phrase;play:PreparedSpeech}[]; generating?: Phrase; playing?: Phrase };
 

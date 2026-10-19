@@ -514,8 +514,9 @@ export function voiceRouter(): Router {
     const speechStarted=performance.now();
     let busyMs=0;
     const text = req.body?.text;
-    // A song ("[style: Song: ...]") is sent whole so the engine sings it as one piece: up to 2000 characters (web/src/voice.ts).
-    const maxChars = typeof text === "string" && /\[\s*style\s*:\s*song\b/i.test(text) ? 2000 : 600;
+    // Merged sentences (MERGE_MAX_CHARS) and whole songs ("[style: Song: ...]", web/src/voice.ts) go to the audio-cpp engine in
+    // one request of up to 2000 characters; the other engines are sent single phrases of at most 600.
+    const maxChars = config().runtime === "audio-cpp" || (typeof text === "string" && /\[\s*style\s*:\s*song\b/i.test(text)) ? 2000 : 600;
     if (typeof text !== "string" || !text.trim() || text.length > maxChars)
       return res.status(400).json({ error: `Speech text must contain 1–${maxChars} characters` });
     // The voice of the agent the chat is with, where it has one of its own: the
@@ -667,6 +668,9 @@ export function voiceRouter(): Router {
       const wav = pcmWav(Buffer.from(await upstream.arrayBuffer()), Number(rate));
       res.set({ "Content-Type": "audio/wav", "Cache-Control": "no-store" }).send(wav);
     } catch (e) {
+      // Logged so a "Failed to fetch" / broken reply in the browser can be traced (nothing was logged before, 2026-10-19).
+      // A cancel from the page itself (barge-in, a newer reply) is the normal case and stays quiet.
+      if (!controller.signal.aborted) console.warn(`voice speech failed after ${Math.round(performance.now() - speechStarted)} ms (${res.headersSent ? "mid-stream" : "before audio"}, ${String(text).length} chars): ${(e as Error).message}`);
       if (!res.destroyed) {
         if (res.headersSent) res.destroy(e as Error);
         else res.status(502).json({ error: (e as Error).message });
