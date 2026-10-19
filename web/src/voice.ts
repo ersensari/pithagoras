@@ -3,16 +3,16 @@ import type { Item } from "./transcript";
 import { stripUnspoken } from "./speech-strip";
 
 /** Keep code blocks and link destinations out of speech; split without losing text. */
-export function speechChunks(text: string): string[] {
+export function speechChunks(text: string, max = 600): string[] {
   const plain = stripUnspoken(text.replace(/```[\s\S]*?(?:```|$)/g, () => ` ${t("Code is shown in the transcript.")} `)
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1'))
     .replace(/<[^>]*>/g, '').replace(/[*_`#>|]/g, '').replace(/\s+/g, ' ').trim();
   const chunks: string[] = [];
   let remaining = plain;
-  while (remaining.length > 600) {
-    const prefix = remaining.slice(0, 600);
+  while (remaining.length > max) {
+    const prefix = remaining.slice(0, max);
     const sentence = Math.max(prefix.lastIndexOf('. '), prefix.lastIndexOf('? '), prefix.lastIndexOf('! '));
-    const end = sentence > 100 ? sentence + 1 : prefix.lastIndexOf(' ') > 0 ? prefix.lastIndexOf(' ') : 600;
+    const end = sentence > 100 ? sentence + 1 : prefix.lastIndexOf(' ') > 0 ? prefix.lastIndexOf(' ') : max;
     chunks.push(remaining.slice(0, end)); remaining = remaining.slice(end).trimStart();
   }
   if (remaining) chunks.push(remaining);
@@ -49,7 +49,21 @@ export class StreamingSpeech {
       let offset = this.offsets.get(item.id) || 0;
       while (offset < item.text.length) {
         const tail = item.text.slice(offset);
-        const end = phraseBoundary(tail, item.done);
+        // A song is sung in one piece, not one request per line: from its "[style: Song: ...]" marker the rest of the
+        // reply waits until the reply is complete and goes out whole, so the engine streams it as one performance.
+        const songAt = tail.search(SONG_MARKER), inSong = SONG_MARKER.test(this.styles.get(item.id) ?? '');
+        if (songAt === 0 || (inSong && songAt < 0)) {
+          if (!item.done) break;
+          // Normally one piece; a song longer than SONG_MAX_CHARS goes in pieces, each carrying the song's marker.
+          const marker = songAt === 0 ? (tail.match(STYLE_MARKER)?.[0].trim() ?? '') : this.styles.get(item.id)!;
+          speechChunks(tail, SONG_MAX_CHARS).forEach((piece, i) => {
+            if (piece.trim()) result.push(i === 0 && songAt === 0 ? piece : `${marker} ${piece}`);
+          });
+          if (marker) this.styles.set(item.id, marker);
+          offset = item.text.length;
+          break;
+        }
+        const end = songAt > 0 ? (phraseBoundary(tail.slice(0, songAt), true) || songAt) : phraseBoundary(tail, item.done);
         if (!end) break;
         for (let chunk of speechChunks(tail.slice(0, end).replace(/—$/, '').replace(/—/g, ', '))) {
           const marks = chunk.match(STYLE_MARKER);
@@ -103,6 +117,10 @@ function phraseBoundary(text: string, done: boolean): number {
   return 0;
 }
 
+
+/** A song: "[style: Song: pop music, beat, happy]". Everything after it is sung as one request of up to SONG_MAX_CHARS. */
+export const SONG_MARKER = /\[\s*style\s*:\s*song\b/i;
+export const SONG_MAX_CHARS = 2000;
 
 /** A per-sentence delivery marker for the speech engine, "[style: whispering]" (ForgeLoop audio, 2026-10-19). */
 export const STYLE_MARKER = /[ \t]*\[\s*style\s*:[^\]\n]{0,80}\][ \t]*/gi;

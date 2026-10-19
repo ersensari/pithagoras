@@ -514,8 +514,10 @@ export function voiceRouter(): Router {
     const speechStarted=performance.now();
     let busyMs=0;
     const text = req.body?.text;
-    if (typeof text !== "string" || !text.trim() || text.length > 600)
-      return res.status(400).json({ error: "Speech text must contain 1–600 characters" });
+    // A song ("[style: Song: ...]") is sent whole so the engine sings it as one piece: up to 2000 characters (web/src/voice.ts).
+    const maxChars = typeof text === "string" && /\[\s*style\s*:\s*song\b/i.test(text) ? 2000 : 600;
+    if (typeof text !== "string" || !text.trim() || text.length > maxChars)
+      return res.status(400).json({ error: `Speech text must contain 1–${maxChars} characters` });
     // The voice of the agent the chat is with, where it has one of its own: the
     // first agent's for a chat in a project, as its avatar is.
     // An agent's voice is one of Kokoro's or one from the library, and is used by the runtime it belongs to.
