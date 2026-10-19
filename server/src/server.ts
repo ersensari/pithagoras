@@ -57,6 +57,7 @@ import { deleteNotesOf } from "./activity.js";
 import { EXECUTOR_KIND } from "./executor-kind.js";
 import { sessions, CommandFailed, IMAGE_ROOT } from "./session-manager.js";
 import { parseSpokenBy, withSpeaker } from "./pi/voice-speaker.js";
+import { withNow } from "./pi/now-block.js";
 import { ImageError, MAX_IMAGE_BYTES, MAX_IMAGES, imagePath, mimeOf, parseImages, saveImages } from "./prompt-images.js";
 import { defaultsFor, exceptionsFor, toolEnabled, toolSource } from "./tool-policy.js";
 import { mcpRouter, mcpServerNames } from "./api/mcp.js";
@@ -876,7 +877,8 @@ app.post("/api/sessions/:id/prompt", promptJson, async (req, res) => {
     // regardless of what this browser does next.
     // A spoken message says whose voice it was, ahead of the words.
     const spoken = req.body?.voice === true ? withSpeaker(message, parseSpokenBy(req.body?.speaker)) : message;
-    const sent = await sessions.prompt(session.id, spoken, { voice: req.body?.voice === true, images, steer: req.body?.steer === true });
+    // And what day and time it is (the model is told nowhere else; see pi/now-block.ts).
+    const sent = await sessions.prompt(session.id, withNow(spoken), { voice: req.body?.voice === true, images, steer: req.body?.steer === true });
     // A Stop got there first: the words are back with the person, as not sent,
     // and a chat they were the start of is not named after them.
     if (!sent) return res.json({ ok: true, unsent: true });

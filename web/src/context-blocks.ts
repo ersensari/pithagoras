@@ -12,6 +12,7 @@ import { msg } from "./i18n";
  * Keep in step with FRAMING_TAGS in the server's channels/framing.ts, which a test compares.
  */
 export const CONTEXT_BLOCKS: { tag: string; label: string }[] = [
+  { tag: "now", label: msg("Date and time") },
   { tag: "speaker", label: msg("Speaker") },
   { tag: "sent-since-you-last-spoke", label: msg("Sent while idle") },
   { tag: "answer-from-primary", label: msg("Answer") },

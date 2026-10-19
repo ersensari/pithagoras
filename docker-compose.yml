@@ -103,6 +103,8 @@ services:
       # Telegram voice: messages are transcribed, the final answer is also spoken back. Empty = text only.
       TELEGRAM_STT_URL: ${TELEGRAM_STT_URL:-}
       TELEGRAM_STT_MODEL: ${TELEGRAM_STT_MODEL:-}
+      # the zone the <now> block in front of each message is written in (server/src/pi/now-block.ts)
+      PORTAL_TIMEZONE: ${PORTAL_TIMEZONE:-}
       TELEGRAM_TTS_URL: ${TELEGRAM_TTS_URL:-}
       TELEGRAM_TTS_VOICE: ${TELEGRAM_TTS_VOICE:-}
       TELEGRAM_OGG_URL: ${TELEGRAM_OGG_URL:-}

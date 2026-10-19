@@ -362,6 +362,7 @@ const de: Locale = {
     "Close the git panel": "Git-Bereich schließen",
     "Terminal": "Terminal",
     "Close the terminal": "Terminal schließen",
+    "Date and time": "Datum und Uhrzeit",
     "Speaker": "Sprecher",
     "Attached pictures": "Angehängte Bilder",
     "Sent while idle": "Gesendet, während er frei war",

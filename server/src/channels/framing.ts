@@ -7,7 +7,7 @@ import { deface, wrapUntrusted } from "../pi/guard.js";
  * and the page folds them away, so its list (CONTEXT_BLOCKS in
  * web/src/context-blocks.ts) must hold the same names.
  */
-export const FRAMING_TAGS = ["speaker", "sent-since-you-last-spoke", "answer-from-primary", "channel-instructions", "routine", "attachments"] as const;
+export const FRAMING_TAGS = ["now", "speaker", "sent-since-you-last-spoke", "answer-from-primary", "channel-instructions", "routine", "attachments"] as const;
 
 const FRAMING_TAG = new RegExp(`<(\\s*/?\\s*)(${FRAMING_TAGS.join("|")})(?=[\\s>/])`, "gi");
 

@@ -1,6 +1,6 @@
 import { t } from "./i18n";
 import type { Item } from "./transcript";
-import { stripUnspoken } from "./speech-strip";
+import { stripReasoningTags, stripUnspoken } from "./speech-strip";
 
 /** Keep code blocks and link destinations out of speech; split without losing text. */
 export function speechChunks(text: string, max = 600): string[] {
@@ -142,4 +142,4 @@ export function displaySpeechText(text: string, done: boolean): string {
 
 /** What the agent said, as it is read — without the reasoning model's stray tags. */
 export const assistantText = (item: { text: string; done: boolean; audio?: boolean }): string =>
-  (item.audio ? displaySpeechText(item.text, item.done) : item.text).replace(/<\/?think(ing)?>/gi, "");
+  stripReasoningTags((item.audio ? displaySpeechText(item.text, item.done) : item.text).replace(/<\/?think(ing)?>/gi, ""));
