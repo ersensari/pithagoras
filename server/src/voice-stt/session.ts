@@ -11,6 +11,8 @@ export interface Speaker {
   matched: boolean;
   /** The clip was long enough (>= ~2 s) for the verdict to carry weight. */
   reliable: boolean;
+  /** An unmatched, reliable clip the speech service kept for enrolling: see the enroll_voice tool. */
+  clip?: string;
 }
 
 export interface Transcript {

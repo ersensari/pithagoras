@@ -22,6 +22,7 @@ import { forgetTaint } from "./pi/guard.js";
 import { textOf } from "./pi/entries.js";
 import { removeSessionFiles } from "./session-files.js";
 import { dropImages, forLog, forPi, loadImages, removeImages, storedIn, type Attached } from "./prompt-images.js";
+import { attachmentsBlock, keepAttached } from "./pi/attached-pictures.js";
 import { forgetBrowserSession } from "./browser/tools.js";
 import { BACKGROUND_SUPPORTED, listJobs, startedWhen, type BackgroundJob } from "./background.js";
 import { forgetSession as forgetLlamaProxy } from "./llama-progress.js";
@@ -1590,7 +1591,10 @@ class SessionManager extends EventEmitter {
         own = { waiting };
         this.fresh.set(sessionId, [...(this.fresh.get(sessionId) ?? []), own]);
       }
-      const sent = client.prompt(message, {
+      // An attached picture is also a file in the chat's folder, named at the end of what pi gets, so edit_image can take it.
+      const workspace = images.length && !isCommand ? getSession(sessionId)?.workspace : undefined;
+      const toPi = workspace ? message + attachmentsBlock(keepAttached(workspace, images)) : message;
+      const sent = client.prompt(toPi, {
         voice: options?.voice,
         ...(images.length ? { images: forPi(images) } : {}),
         ...(options?.steer ? { steer: true } : {}),

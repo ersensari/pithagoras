@@ -14,6 +14,7 @@ import { speakerIdUrl, speakerIdentify } from "../voice-stt/speaker.js";
 import { whisperTranscribe } from "../voice-stt/whisper.js";
 import { getSession, getSetting, putSetting } from "../db.js";
 import { agentOf, defaultAgent } from "../agents.js";
+import { voiceHeaders } from "../voice-auth.js";
 
 const DEFAULT_VAD = { positiveSpeechThreshold: 0.65, negativeSpeechThreshold: 0.35, minSpeechMs: 256, preSpeechPadMs: 320, redemptionMs: 1000 };
 export interface VoiceConfig {
@@ -75,6 +76,29 @@ function omnivoiceVoice(voiceId: string, name: string): string | undefined {
  * is the registry name itself, so the lookup is tolerant of that. */
 function libraryVoice(voiceId: string) {
   try { return readVoice(voiceId); } catch (e) { if (e instanceof VoiceNotFound) return undefined; throw e; }
+}
+/** "[style: ...]" per-sentence delivery markers: only the ForgeLoop audio engine (audio-cpp runtime) reads them; any other engine would speak them. */
+const STYLE_MARKER = /\s*\[\s*style\s*:[^\]\n]{0,80}\]\s*/gi;
+/** The PCM stream rates the player handles (X-Sample-Rate). */
+const STREAM_RATES = new Set(["24000", "48000"]);
+let rateProbe: { url: string; rate: number; at: number } | undefined;
+/**
+ * The rate an audio-cpp engine streams at, read from its /health `output_rate`
+ * (VoxCPM2's adapter reports 48000 or 24000; OmniVoice reports none): the
+ * browser opens its audio context at it so streamed speech is not resampled.
+ * Cached a minute; anything unreadable means 24000, the rate every other engine sends.
+ */
+async function speechSampleRate(c: VoiceConfig): Promise<number> {
+  if (c.runtime !== "audio-cpp" || !c.breezeUrl) return 24000;
+  if (rateProbe?.url === c.breezeUrl && Date.now() - rateProbe.at < 60000) return rateProbe.rate;
+  let rate = 24000;
+  try {
+    const r = await fetch(new URL("/health", c.breezeUrl), { headers: voiceHeaders(), redirect: "error", signal: AbortSignal.timeout(2000) });
+    const body = r.ok ? await r.json() as { output_rate?: unknown } : {};
+    if (body.output_rate === 48000) rate = 48000;
+  } catch { /* the engine is down or answers otherwise: speech then fails on its own, with its own message */ }
+  rateProbe = { url: c.breezeUrl, rate, at: Date.now() };
+  return rate;
 }
 /** The shape OmniVoice accepts for a voice of its own registry: a lower-case name. */
 const REGISTRY_VOICE = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -201,12 +225,12 @@ export function wavPcm(wav: Buffer, runtime = "Chatterbox"): Buffer {
   }
   throw new Error(`${runtime} returned no audio data`);
 }
-export function pcmWav(pcm: Buffer): Buffer {
+export function pcmWav(pcm: Buffer, sampleRate = 24000): Buffer {
   if (!pcm.length || pcm.length % 2) throw new Error("Breeze returned invalid PCM audio");
   const header = Buffer.alloc(44);
   header.write("RIFF"); header.writeUInt32LE(36 + pcm.length, 4); header.write("WAVEfmt ", 8);
   header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20); header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(24000, 24); header.writeUInt32LE(48000, 28);
+  header.writeUInt32LE(sampleRate, 24); header.writeUInt32LE(sampleRate * 2, 28);
   header.writeUInt16LE(2, 32); header.writeUInt16LE(16, 34);
   header.write("data", 36); header.writeUInt32LE(pcm.length, 40);
   return Buffer.concat([header, pcm]);
@@ -387,7 +411,7 @@ export function voiceRouter(): Router {
       res.json(withInstructions(connectManagedVoice(state.choice)));
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
-  router.get("/voice", (_req, res) => res.json({...withInstructions(config()),managed:managedVoice(),speech:config().runtime!=="none",comparison:process.env.VOICE_COMPARISON === "true",statusSpeech:process.env.VOICE_STATUS_SPEECH !== "false",ttsPrefetch:process.env.VOICE_TTS_PREFETCH === "true",sentenceChunks:process.env.VOICE_SENTENCE_CHUNKS === "true",pipelineMode:process.env.VOICE_PIPELINE_MODE === "sequential" ? "sequential" : "parallel",sttWebrtc:process.env.VOICE_STT_WEBRTC !== 'false',noiseModel:['off','gtcrn','rnnoise'].includes(process.env.VOICE_NOISE_MODEL ?? '')?process.env.VOICE_NOISE_MODEL:'rnnoise',mergeReplies:process.env.VOICE_MERGE_REPLIES === "true" || (process.env.VOICE_MERGE_REPLIES !== "false" && config().runtime === "audio-cpp")}));
+  router.get("/voice", async (_req, res) => res.json({...withInstructions(config()),speechSampleRate:await speechSampleRate(config()),managed:managedVoice(),speech:config().runtime!=="none",comparison:process.env.VOICE_COMPARISON === "true",statusSpeech:process.env.VOICE_STATUS_SPEECH !== "false",ttsPrefetch:process.env.VOICE_TTS_PREFETCH === "true",sentenceChunks:process.env.VOICE_SENTENCE_CHUNKS === "true",pipelineMode:process.env.VOICE_PIPELINE_MODE === "sequential" ? "sequential" : "parallel",sttWebrtc:process.env.VOICE_STT_WEBRTC !== 'false',noiseModel:['off','gtcrn','rnnoise'].includes(process.env.VOICE_NOISE_MODEL ?? '')?process.env.VOICE_NOISE_MODEL:'rnnoise',mergeReplies:process.env.VOICE_MERGE_REPLIES === "true" || (process.env.VOICE_MERGE_REPLIES !== "false" && config().runtime === "audio-cpp")}));
   // The voices the speech engine has registered in its own registry. OmniVoice
   // speaks only with these, and a voice added on the engine's side has to be
   // pickable here without a code change, so the list is read from the engine.
@@ -398,7 +422,7 @@ export function voiceRouter(): Router {
     try {
       const url = new URL(settings.breezeUrl);
       url.pathname = url.pathname.replace(/\/[^/]*$/, "/voices");
-      const upstream = await fetch(url.href, { redirect: "error", signal: AbortSignal.timeout(5000) });
+      const upstream = await fetch(url.href, { headers: voiceHeaders(), redirect: "error", signal: AbortSignal.timeout(5000) });
       if (!upstream.ok) throw new Error(`The speech engine returned HTTP ${upstream.status}`);
       const body = await upstream.json() as { voices?: { name?: unknown }[] };
       res.json({ runtime, voices: (body.voices ?? []).map(v => (typeof v?.name === "string" ? v.name : "")).filter(Boolean) });
@@ -447,7 +471,7 @@ export function voiceRouter(): Router {
       // Who is talking is asked while Whisper works (opt-in VOICE_SPEAKER_ID + SPEECH_URL); it never fails the request.
       const idUrl = speakerIdUrl();
       const speakerP = idUrl ? speakerIdentify(idUrl)(req.body, controller.signal) : undefined;
-      const upstream = await fetch(settings.whisperUrl, { method: "POST", body: form, redirect: "error", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]) });
+      const upstream = await fetch(settings.whisperUrl, { method: "POST", body: form, headers: voiceHeaders(), redirect: "error", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]) });
       if (!upstream.ok) throw new Error(`Whisper returned HTTP ${upstream.status}`);
       const result = await upstream.json() as { text?: unknown };
       if (typeof result.text !== "string") throw new Error("Whisper returned no transcript");
@@ -500,6 +524,11 @@ export function voiceRouter(): Router {
     const settings = { ...saved, ...(own && saved.runtime === "kokoro" && isKokoroVoice(own) ? { kokoroVoice: own } : own && !isKokoroVoice(own) ? { voice: own } : {}) };
     const controller = new AbortController();
     res.on("close", () => controller.abort());
+    // What the player takes: raw PCM, and Ogg/Opus where its browser can decode it (WebCodecs). Only an
+    // audio-cpp engine is asked for Ogg; any other engine answers PCM or WAV, which the player still reads.
+    const accepts = req.get("accept") ?? "";
+    const wantsPcm = /\baudio\/pcm\b/.test(accepts);
+    const wantsOgg = /\baudio\/ogg\b/.test(accepts);
     try {
       // Resolve the voice once: a reference clip is up to a megabyte, and only
       // the runtime that is about to be called should pay to carry it.
@@ -524,13 +553,25 @@ export function voiceRouter(): Router {
       let form: FormData | undefined;
       let json: Record<string, unknown> | undefined;
       if (settings.runtime === "kokoro") {
-        // Kokoro has no streaming mode in audio.cpp either, and is fast enough that a phrase is ready
-        // soon after it is asked for. The voice names the language, so none is sent.
-        json = { model: "kokoro", input: text, voice: settings.kokoroVoice ?? DEFAULT_KOKORO_VOICE, speed: settings.speed ?? 1, response_format: "wav", options: { seed: "42" } };
+        // Kokoro reads sound tags such as [laughter] (OmniVoice's) aloud as words, so they are removed here; its own
+        // stress/phoneme markup [word](+2) / [word](/.../) is kept. A phrase that was only a tag is spoken as a short silence.
+        const spoken = text.replace(STYLE_MARKER, " ").replace(/\s*\[[a-z][a-z-]*\](?!\()\s*/gi, " ").replace(/\s{2,}/g, " ").trim();
+        if (!spoken) {
+          const pcm = Buffer.alloc(24000 * 2 / 10);                       // 100 ms of silence, 24 kHz s16le
+          if (wantsPcm) return res.set({ "Content-Type": "audio/pcm", "X-Sample-Rate": "24000", "X-Sample-Format": "s16le", "Cache-Control": "no-store" }).send(pcm);
+          const h = Buffer.alloc(44);
+          h.write("RIFF", 0); h.writeUInt32LE(36 + pcm.length, 4); h.write("WAVEfmt ", 8); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20);
+          h.writeUInt16LE(1, 22); h.writeUInt32LE(24000, 24); h.writeUInt32LE(48000, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
+          h.write("data", 36); h.writeUInt32LE(pcm.length, 40);
+          return res.set({ "Content-Type": "audio/wav", "Cache-Control": "no-store" }).send(Buffer.concat([h, pcm]));
+        }
+        // Kokoro is fast enough that a phrase is ready soon after it is asked for. The voice names the language, so none is sent.
+        // Kokoro is deterministic and takes no seed; the voice service refuses fields an engine does not have.
+        json = { model: "kokoro", input: spoken, voice: settings.kokoroVoice ?? DEFAULT_KOKORO_VOICE, speed: settings.speed ?? 1, response_format: "wav" };
       } else if (settings.runtime === "chatterbox") {
         // Chatterbox has no streaming mode in audio.cpp: one phrase, one WAV.
         // The browser buffers each phrase before playing it either way.
-        json = { model: "chatterbox", input: spokenNumbers(text, settings.language), language: settings.language,
+        json = { model: "chatterbox", input: spokenNumbers(text.replace(STYLE_MARKER, " "), settings.language), language: settings.language,
           response_format: "wav", options: { exaggeration: String(settings.exaggeration ?? 0.5), seed: "42" },
           voice_ref: { type: "base64", data: reference!.audio.toString("base64") } };
       } else if (settings.runtime === "audio-cpp") {
@@ -560,7 +601,7 @@ export function voiceRouter(): Router {
       // Keep one browser request pending instead of exposing normal contention.
       do {
         const attemptStarted=performance.now();
-        upstream = await fetch(settings.breezeUrl, { method: "POST", body: json ? JSON.stringify(json) : form!, headers: json ? { "Content-Type": "application/json" } : undefined, redirect: "error", signal });
+        upstream = await fetch(settings.breezeUrl, { method: "POST", body: json ? JSON.stringify(json) : form!, headers: voiceHeaders(json ? { "Content-Type": "application/json", ...(wantsOgg && settings.runtime === "audio-cpp" ? { Accept: "audio/ogg, audio/pcm;q=0.9" } : {}) } : undefined), redirect: "error", signal });
         if (upstream.status !== 409) break;
         await upstream.body?.cancel();
         await delay(750, undefined, { signal });
@@ -574,15 +615,36 @@ export function voiceRouter(): Router {
         // Validate before either branch, so a malformed WAV is never passed on.
         const pcm = wavPcm(wav, runtimeName);
         res.set("Server-Timing", `tts_headers;dur=${(performance.now()-speechStarted).toFixed(1)}, tts_busy;dur=${busyMs.toFixed(1)}`);
-        if (req.get("accept") !== "audio/pcm") return res.set({ "Content-Type": "audio/wav", "Cache-Control": "no-store" }).send(wav);
+        if (!wantsPcm) return res.set({ "Content-Type": "audio/wav", "Cache-Control": "no-store" }).send(wav);
         return res.set({ "Content-Type": "audio/pcm", "X-Sample-Rate": "24000", "X-Sample-Format": "s16le", "Cache-Control": "no-store" }).send(pcm);
       }
-      if (!upstream.headers.get("content-type")?.startsWith("audio/pcm") && !(settings.runtime === "audio-cpp" && upstream.headers.get("content-type")?.startsWith("application/octet-stream"))) throw new Error("Expected PCM audio from the Breeze API");
-      const rate = upstream.headers.get("x-sample-rate");
-      if (rate && rate !== "24000") throw new Error(`Unsupported Breeze sample rate: ${rate}`);
-      if (req.get("accept") === "audio/pcm") {
+      if (wantsOgg && upstream.headers.get("content-type")?.startsWith("audio/ogg")) {
+        // Passed on as it comes: the engine flushes one Ogg page per 20 ms Opus frame.
         if (!upstream.body) throw new Error("Breeze returned no audio stream");
-        res.set({ "Content-Type": "audio/pcm", "X-Sample-Rate": "24000", "X-Sample-Format": "s16le", "Cache-Control": "no-store", "X-Accel-Buffering": "no" });
+        res.set({ "Content-Type": "audio/ogg; codecs=opus", "X-Sample-Rate": "48000", "Cache-Control": "no-store", "X-Accel-Buffering": "no", "X-Voice-Streaming": "true" });
+        res.set("Server-Timing", `tts_headers;dur=${(performance.now()-speechStarted).toFixed(1)}, tts_busy;dur=${busyMs.toFixed(1)}`);
+        res.flushHeaders();
+        const reader = upstream.body.getReader();
+        let bytes = 0;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            bytes += value.length;
+            if (!res.write(value)) await once(res, "drain", { signal: controller.signal });
+          }
+          if (!bytes) throw new Error("Breeze returned no audio");
+          res.end();
+        } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+        return;
+      }
+      if (!upstream.headers.get("content-type")?.startsWith("audio/pcm") && !(settings.runtime === "audio-cpp" && upstream.headers.get("content-type")?.startsWith("application/octet-stream"))) throw new Error("Expected PCM audio from the Breeze API");
+      // 24 kHz unless the engine says otherwise; VoxCPM2's adapter streams 48 kHz, passed on untouched.
+      const rate = upstream.headers.get("x-sample-rate") ?? "24000";
+      if (!STREAM_RATES.has(rate)) throw new Error(`Unsupported Breeze sample rate: ${rate}`);
+      if (wantsPcm) {
+        if (!upstream.body) throw new Error("Breeze returned no audio stream");
+        res.set({ "Content-Type": "audio/pcm", "X-Sample-Rate": rate, "X-Sample-Format": "s16le", "Cache-Control": "no-store", "X-Accel-Buffering": "no" });
         if (settings.runtime === "audio-cpp") res.set("X-Voice-Streaming", "true");
         res.set("Server-Timing", `tts_headers;dur=${(performance.now()-speechStarted).toFixed(1)}, tts_busy;dur=${busyMs.toFixed(1)}`);
         res.flushHeaders();
@@ -600,7 +662,7 @@ export function voiceRouter(): Router {
         } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
         return;
       }
-      const wav = pcmWav(Buffer.from(await upstream.arrayBuffer()));
+      const wav = pcmWav(Buffer.from(await upstream.arrayBuffer()), Number(rate));
       res.set({ "Content-Type": "audio/wav", "Cache-Control": "no-store" }).send(wav);
     } catch (e) {
       if (!res.destroyed) {

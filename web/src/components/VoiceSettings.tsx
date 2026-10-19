@@ -1,3 +1,4 @@
+import type { UnknownVoices } from "../speaker-filter";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../i18n";
@@ -14,11 +15,11 @@ export const VOICE_RATES = [1, 1.25, 1.5, 1.75];
  * layer, and the canvas panel beside it would otherwise cover the card. It is
  * placed above the button that opens it, and follows it when the window changes.
  */
-export function VoiceSettings({ anchor, sounds, onSounds, rate, onRate, steer, onSteer, onlyOwner, onOnlyOwner, ptt, onPtt, onClose }: {
+export function VoiceSettings({ anchor, sounds, onSounds, rate, onRate, steer, onSteer, unknownVoices, onUnknownVoices, ptt, onPtt, onClose }: {
   sounds: boolean; onSounds: () => void;
   rate: number; onRate: (rate: number) => void;
   steer: boolean; onSteer: (steer: boolean) => void;
-  onlyOwner: boolean; onOnlyOwner: (onlyOwner: boolean) => void;
+  unknownVoices: UnknownVoices; onUnknownVoices: (mode: UnknownVoices) => void;
   ptt: boolean; onPtt: (ptt: boolean) => void;
   onClose: () => void;
   anchor: RefObject<HTMLElement>;
@@ -64,10 +65,11 @@ export function VoiceSettings({ anchor, sounds, onSounds, rate, onRate, steer, o
     <div className="voice-setting" role="group" aria-label={t("Other voices")}>
       <span aria-hidden="true">{t("Other voices")}</span>
       <div className="voice-segments">
-        {choice(false, onlyOwner, t("Listen to all"), onOnlyOwner)}
-        {choice(true, onlyOwner, t("Only enrolled voices"), onOnlyOwner)}
+        {choice("all" as UnknownVoices, unknownVoices, t("Listen to all"), onUnknownVoices)}
+        {choice("enrolled" as UnknownVoices, unknownVoices, t("Only enrolled voices"), onUnknownVoices)}
+        {choice("ask" as UnknownVoices, unknownVoices, t("Ask who they are"), onUnknownVoices)}
       </div>
-      <p>{onlyOwner ? t("A voice the portal is sure is not an enrolled one is ignored. Short or unclear speech still goes through.") : t("Every voice is heard.")}</p>
+      <p>{unknownVoices === "enrolled" ? t("A voice the portal is sure is not an enrolled one is ignored. Short or unclear speech still goes through.") : unknownVoices === "ask" ? t("A voice the portal does not know is answered as a guest: the agent says it does not recognise them, asks who they are and remembers their voice.") : t("Every voice is heard.")}</p>
     </div>
     <div className="voice-setting" role="group" aria-label={t("Push to talk")}>
       <span aria-hidden="true">{t("Push to talk")}</span>

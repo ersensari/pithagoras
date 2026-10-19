@@ -44,12 +44,12 @@ export const EDIT_IMAGE_VOICE_LINE =
   "To change a picture in the chat folder, call edit_image: it saves the result as a new picture and shows it, so do not call show_image on it afterwards.";
 
 /**
- * Said in both shapes: a picture attached to a message reaches the model as what it sees (see prompt-images.ts), not as a file of the
- * folder, so there is no path for it, and an agent that is not told guesses one or edits another picture in its place.
+ * Said in both shapes: a picture attached to a message reaches the model as what it sees, and is also saved in the folder with its path
+ * named in the message's <attachments> block (see attached-pictures.ts); an agent that is not told guesses a path or edits another picture.
  */
 const ATTACHED =
-  "A picture the person attached to a message is not a file in the chat's folder, so it cannot be given here: if the one to use was only attached, say so, " +
-  "and ask them to put it in the chat's folder (the Files panel) or to change it on the Images page. Do not guess a path or edit another picture instead. ";
+  "A picture the person attached to a message is also saved in the chat's folder: the message ends with an <attachments> block naming the paths, in the order attached; give that path. " +
+  "If no path is named for the one to use (an older message), say so and ask them to attach it again or put it in the chat's folder. Do not guess a path or edit another picture instead. ";
 
 /** What the model is told about the pictures of an edit when the endpoint takes one, and when it takes several. */
 const ONE_PICTURE =
@@ -185,7 +185,7 @@ export class EditImageTool {
           checkTotal(total);
         }
         const target = imageEditingTarget(config);
-        const { bytes, ext } = await editImage(target, { prompt, image: images.length > 1 ? images : images[0] }, { signal });
+        const { bytes, ext } = await editImage(target, { prompt, image: images.length > 1 ? images : images[0], ...(target.fromNoise ? { native: { fromNoise: true } } : {}) }, { signal });
         const rel = saveGenerated(folder, bytes, ext, editedName(originals[0], ext));
         // Listed in the Images page's gallery, tied to the pictures it was made from that are listed there.
         if (sessionId) recordChatPicture({ sessionId, path: rel, kind: "edited", prompt, from: originals, bytes: bytes.length, params: target.model ? { model: target.model } : {} });

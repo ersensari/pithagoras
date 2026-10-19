@@ -24,6 +24,7 @@ import { findSessionFile } from "./session-file.js";
 import { CONTEXT_FILES, SHARED_FILES } from "./context-files.js";
 import { heartbeatTool } from "./heartbeat-tool.js";
 import { askPrimaryTool } from "./ask-primary.js";
+import { enrollVoiceOn, enrollVoiceTool } from "./enroll-voice.js";
 import { proxyBaseUrl } from "../llama-progress.js";
 import { bridgeSubagents, SUBAGENT_INPUT, SUBAGENT_STOP, type Bridge } from "../subagent-protocol.js";
 import { contextWindowFor, getSkipThinkingProviders, getVoiceInstructions, portalBrowserOn, voiceSpeaks } from "../db.js";
@@ -423,6 +424,10 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       // nobody to escalate to, and the tool would just be noise.
       if (opts.sessionId && opts.role && opts.role !== "primary") {
         factories.push({ name: "ask-primary", factory: askPrimaryTool(opts.sessionId) });
+      }
+      // The primary user's own conversations only (the guard keeps it from anybody else), and only where voices are identified.
+      if (opts.sessionId && (!opts.role || opts.role === "primary") && enrollVoiceOn()) {
+        factories.push({ name: "enroll-voice", factory: enrollVoiceTool() });
       }
       // Only when there is somewhere for it to go — a tool that always fails is
       // worse than no tool, and the model will keep trying it.

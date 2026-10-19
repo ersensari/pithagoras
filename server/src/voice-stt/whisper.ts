@@ -1,5 +1,6 @@
 import type { Identify } from "./speaker.js";
 import type { Transcribe, Transcript } from "./session.js";
+import { voiceHeaders } from "../voice-auth.js";
 
 /** An OpenAI-compatible transcription endpoint (speaches, faster-whisper-server, audio.cpp) asked for verbose JSON. */
 export function whisperTranscribe(url: string, model?: string, timeoutMs = 120000, identify?: Identify): Transcribe {
@@ -12,7 +13,7 @@ export function whisperTranscribe(url: string, model?: string, timeoutMs = 12000
     form.set("response_format", "verbose_json");
     if (language) form.set("language", language);
     if (model) form.set("model", model);
-    const upstream = await fetch(url, { method: "POST", body: form, redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) });
+    const upstream = await fetch(url, { method: "POST", body: form, headers: voiceHeaders(), redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) });
     if (!upstream.ok) throw new Error(`Whisper returned HTTP ${upstream.status}`);
     const body = await upstream.json() as Partial<Transcript>;
     if (typeof body.text !== "string") throw new Error("Whisper returned no transcript");

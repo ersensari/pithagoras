@@ -30,6 +30,7 @@ import path from "node:path";
 import { getSession } from "../db.js";
 import { sessions } from "../session-manager.js";
 import { config } from "./voice.js";
+import { voiceHeaders } from "../voice-auth.js";
 
 interface MeetingState {
   filePath: string;
@@ -93,7 +94,7 @@ export function meetingNotesRouter(): Router {
     form.set("language", settings.language);
     if (settings.sttModel) form.set("model", settings.sttModel);
     try {
-      const upstream = await fetch(settings.whisperUrl, { method: "POST", body: form, redirect: "error", signal: AbortSignal.timeout(60000) });
+      const upstream = await fetch(settings.whisperUrl, { method: "POST", body: form, headers: voiceHeaders(), redirect: "error", signal: AbortSignal.timeout(60000) });
       if (!upstream.ok) throw new Error(`Whisper returned HTTP ${upstream.status}`);
       const result = await upstream.json() as { text?: unknown };
       const text = typeof result.text === "string" ? result.text.trim() : "";

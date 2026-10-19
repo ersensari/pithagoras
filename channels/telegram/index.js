@@ -38,6 +38,7 @@ const API = `${API_HOST}/bot`;
  *                     final answer to a voice message is also sent back as a voice message.
  *   TELEGRAM_TTS_VOICE, TELEGRAM_TTS_MODEL   voice / model names for that endpoint.
  *   TELEGRAM_OGG_URL  endpoint taking multipart `file` and returning OGG/Opus (Telegram's voice format).
+ *   VOICE_API_KEY     bearer key sent to the three endpoints above (forgeloop-ai-voice needs one).
  */
 const STT_URL = process.env.TELEGRAM_STT_URL || "";
 const STT_MODEL = process.env.TELEGRAM_STT_MODEL || "whisper-1";
@@ -45,6 +46,9 @@ const TTS_URL = process.env.TELEGRAM_TTS_URL || "";
 const TTS_VOICE = process.env.TELEGRAM_TTS_VOICE || "";
 const TTS_MODEL = process.env.TELEGRAM_TTS_MODEL || "tts";
 const OGG_URL = process.env.TELEGRAM_OGG_URL || "";
+// forgeloop-ai-voice wants `Authorization: Bearer <key>` on STT, TTS and OGG conversion; unset = no header.
+const VOICE_KEY = (process.env.VOICE_API_KEY || "").trim();
+const voiceHeaders = (extra = {}) => (VOICE_KEY ? { ...extra, authorization: `Bearer ${VOICE_KEY}` } : extra);
 const MAX_VOICE_CHARS = 1500;
 
 /** The bytes of a file Telegram holds (a voice message the user sent). */
@@ -61,7 +65,7 @@ async function transcribe(audio, signal) {
   form.set("file", new Blob([audio], { type: "audio/ogg" }), "voice.ogg");
   form.set("model", STT_MODEL);
   form.set("response_format", "json");
-  const res = await fetch(STT_URL, { method: "POST", body: form, signal: signal ?? AbortSignal.timeout(120_000) });
+  const res = await fetch(STT_URL, { method: "POST", body: form, headers: voiceHeaders(), signal: signal ?? AbortSignal.timeout(120_000) });
   if (!res.ok) throw new Error(`speech recognition returned HTTP ${res.status}`);
   const body = await res.json();
   return typeof body.text === "string" ? body.text.trim() : "";
@@ -70,17 +74,20 @@ async function transcribe(audio, signal) {
 /** Text to an OGG/Opus voice message; null when voice replies are not configured or anything fails. */
 async function synthesize(text, signal) {
   if (!TTS_URL || !OGG_URL) return null;
+  // Sound tags such as [laughter] are OmniVoice's; Kokoro would read them aloud. Its own [word](+2) markup is kept.
+  text = String(text).replace(/\s*\[[a-z][a-z-]*\](?!\()\s*/gi, " ").replace(/\s{2,}/g, " ").trim();
+  if (!text) return null;
   try {
     const spoken = await fetch(TTS_URL, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: voiceHeaders({ "content-type": "application/json" }),
       body: JSON.stringify({ model: TTS_MODEL, input: text, ...(TTS_VOICE ? { voice: TTS_VOICE } : {}) }),
       signal: signal ?? AbortSignal.timeout(180_000),
     });
     if (!spoken.ok) return null;
     const form = new FormData();
     form.set("file", new Blob([await spoken.arrayBuffer()]), "speech");
-    const ogg = await fetch(OGG_URL, { method: "POST", body: form, signal: signal ?? AbortSignal.timeout(60_000) });
+    const ogg = await fetch(OGG_URL, { method: "POST", body: form, headers: voiceHeaders(), signal: signal ?? AbortSignal.timeout(60_000) });
     if (!ogg.ok) return null;
     return Buffer.from(await ogg.arrayBuffer());
   } catch {

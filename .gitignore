@@ -22,3 +22,4 @@ test-results/
 # What a read-only open of a database leaves beside it (the upgrade fixtures are kept without a journal, so nothing should)
 server/test/fixtures/*.db-shm
 server/test/fixtures/*.db-wal
+.env.bak*

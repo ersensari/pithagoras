@@ -8,7 +8,7 @@ import { TimeStretch } from "./time-stretch";
  * were spoken, before any of that, so a reply can be played again later at
  * whatever speed is chosen then.
  */
-export interface SpeechOptions { rate?: number; record?: (samples: Float32Array) => void }
+export interface SpeechOptions { rate?: number; record?: (samples: Float32Array) => void; /** The stream's X-Sample-Rate (24000 unless the engine says otherwise). */ sampleRate?: number }
 
 const samplesOf = (bytes: Uint8Array, count: number) => {
   const samples = new Float32Array(count), view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -56,7 +56,7 @@ export async function readPcmStream(
   const reader = body.getReader();
   // The stretch is worked on each chunk as it arrives, so the whole buffer
   // does not have to wait for one long stretch pass over everything.
-  const stretcher = new TimeStretch(options.rate ?? 1);
+  const stretcher = new TimeStretch(options.rate ?? 1, options.sampleRate ?? 24000);
   const chunks: Uint8Array[] = [];
   const stretched: Float32Array[] = [];
   const decoder = pcmDecoder();
@@ -82,7 +82,7 @@ export async function readPcmStream(
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   options.record?.(samplesOf(bytes, length / 2));
-  const buffer = bufferOf(audio, joinSamples(stretched));
+  const buffer = bufferOf(audio, joinSamples(stretched), options.sampleRate);
   if (!buffer) throw incompleteAudio();
   signal.throwIfAborted();
   return buffer;
@@ -104,7 +104,7 @@ export async function playAudioBuffer(buffer: AudioBuffer, audio: AudioContext, 
 /** Start from a small PCM cushion while the producer continues generating. */
 export async function preparePcmSpeech(body: ReadableStream<Uint8Array>, audio: AudioContext, signal: AbortSignal, options: SpeechOptions = {}) {
   const reader = body.getReader();
-  const stretcher = new TimeStretch(options.rate ?? 1);
+  const stretcher = new TimeStretch(options.rate ?? 1, options.sampleRate ?? 24000);
   let spoken = 0;
   const pending: AudioBuffer[] = [];
   const sources = new Set<AudioBufferSourceNode>();
@@ -142,14 +142,14 @@ export async function preparePcmSpeech(body: ReadableStream<Uint8Array>, audio: 
         const samples = decoder.push(value);
         if (!samples) continue;
         spoken += samples.length; options.record?.(samples);
-        const buffer = bufferOf(audio, stretcher.push(samples));
+        const buffer = bufferOf(audio, stretcher.push(samples), options.sampleRate);
         if (!buffer) continue;
         pending.push(buffer); buffered += buffer.duration;
         if (buffered >= 0.65) ready();
         pump();
       }
       if (!spoken || decoder.cut) throw incompleteAudio();
-      const rest = bufferOf(audio, stretcher.flush());
+      const rest = bufferOf(audio, stretcher.flush(), options.sampleRate);
       if (rest) { pending.push(rest); buffered += rest.duration; }
       finished = true; ready(); pump();
     } catch (error) { rejectReady(error); failPlay?.(error); throw error; }

@@ -170,9 +170,27 @@ export function checkPassword(candidate: unknown): boolean {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * A service on this host (the LiveKit voice agent) signs in with `Authorization: Bearer $PORTAL_SERVICE_KEY` instead of a login
+ * cookie. Accepted only on a DIRECT local connection: a request that came through a reverse proxy (Caddy adds X-Forwarded-For)
+ * also arrives from 127.0.0.1, so a forwarded request is never let in with the key. Unset key = no service access (at least 32 chars).
+ */
+const SERVICE_KEY = (process.env.PORTAL_SERVICE_KEY || "").trim();
+export function isServiceRequest(req: Request): boolean {
+  if (SERVICE_KEY.length < 32) return false;
+  const auth = req.headers.authorization || "";
+  if (!auth.startsWith("Bearer ")) return false;
+  if (req.headers["x-forwarded-for"] || req.headers["forwarded"] || req.headers["x-real-ip"]) return false;
+  const ip = req.socket.remoteAddress || "";
+  if (!(ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1")) return false;
+  const a = Buffer.from(auth.slice(7).trim()), b = Buffer.from(SERVICE_KEY);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!authEnabled) return next();
   if (verify(req.cookies?.[COOKIE])) return next();
+  if (isServiceRequest(req)) return next();
   res.status(401).json({ error: "Unauthorized" });
 }
 

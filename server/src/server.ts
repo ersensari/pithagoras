@@ -56,6 +56,7 @@ import { heartbeat } from "./heartbeat.js";
 import { deleteNotesOf } from "./activity.js";
 import { EXECUTOR_KIND } from "./executor-kind.js";
 import { sessions, CommandFailed, IMAGE_ROOT } from "./session-manager.js";
+import { parseSpokenBy, withSpeaker } from "./pi/voice-speaker.js";
 import { ImageError, MAX_IMAGE_BYTES, MAX_IMAGES, imagePath, mimeOf, parseImages, saveImages } from "./prompt-images.js";
 import { defaultsFor, exceptionsFor, toolEnabled, toolSource } from "./tool-policy.js";
 import { mcpRouter, mcpServerNames } from "./api/mcp.js";
@@ -873,7 +874,9 @@ app.post("/api/sessions/:id/prompt", promptJson, async (req, res) => {
     await applySeriousDelegation(session.id, message);
     // Returns as soon as pi accepts the prompt. The run continues server-side
     // regardless of what this browser does next.
-    const sent = await sessions.prompt(session.id, message, { voice: req.body?.voice === true, images, steer: req.body?.steer === true });
+    // A spoken message says whose voice it was, ahead of the words.
+    const spoken = req.body?.voice === true ? withSpeaker(message, parseSpokenBy(req.body?.speaker)) : message;
+    const sent = await sessions.prompt(session.id, spoken, { voice: req.body?.voice === true, images, steer: req.body?.steer === true });
     // A Stop got there first: the words are back with the person, as not sent,
     // and a chat they were the start of is not named after them.
     if (!sent) return res.json({ ok: true, unsent: true });

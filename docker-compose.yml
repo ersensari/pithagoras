@@ -102,9 +102,15 @@ services:
       VOICE_SPEAKER_ID: ${VOICE_SPEAKER_ID:-}
       # Telegram voice: messages are transcribed, the final answer is also spoken back. Empty = text only.
       TELEGRAM_STT_URL: ${TELEGRAM_STT_URL:-}
+      TELEGRAM_STT_MODEL: ${TELEGRAM_STT_MODEL:-}
       TELEGRAM_TTS_URL: ${TELEGRAM_TTS_URL:-}
       TELEGRAM_TTS_VOICE: ${TELEGRAM_TTS_VOICE:-}
       TELEGRAM_OGG_URL: ${TELEGRAM_OGG_URL:-}
+      TELEGRAM_TTS_MODEL: ${TELEGRAM_TTS_MODEL:-}
+      # bearer key for forgeloop-ai-voice (STT, TTS, speakers, convert); sent on every voice request, empty = no header
+      VOICE_API_KEY: ${VOICE_API_KEY:-}
+      # bearer key for local services (the LiveKit voice agent): accepted on direct 127.0.0.1 connections only, never via Caddy
+      PORTAL_SERVICE_KEY: ${PORTAL_SERVICE_KEY:-}
       # rnnoise (default), gtcrn or off: what cleans the microphone before the VAD hears it.
       VOICE_NOISE_MODEL: ${VOICE_NOISE_MODEL:-}
 

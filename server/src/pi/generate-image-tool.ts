@@ -87,7 +87,10 @@ export class GenerateImageTool {
         "The picture is a PNG, JPEG, GIF or WebP saved in the chat's folder and appears on their screen as show_image's does, " +
         "so do not call show_image on it. Describe what it should show: the subject, the style, the setting, the colours. " +
         "It can take a minute and costs the person something, so make one picture, and another only when asked. " +
-        "Give a short title. Say in words what you made; do not describe it in detail unless asked.",
+        "Give a short title. Say in words what you made; do not describe it in detail unless asked. " +
+        // Seen 2026-10-18: asked for "an avatar of me" from an attached photo, the agent described the photo here and got a stranger.
+        "It never sees any picture, only your words: to make a picture FROM one (an avatar or portrait of the person in a photo, a variation, " +
+        "the same subject in another style or place), use edit_image with that picture's path if you have edit_image, never this tool.",
       parameters: Type.Object({
         prompt: Type.String({ description: "What the picture should show." }),
         title: Type.Optional(Type.String({ description: "A few words shown above the picture." })),

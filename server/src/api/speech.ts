@@ -17,6 +17,7 @@ import express, { type Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { getSession } from "../db.js";
+import { voiceHeaders } from "../voice-auth.js";
 
 const MAX_AUDIO = "512mb";
 
@@ -44,7 +45,7 @@ export function speechRouter(): Router {
 
   const relay = async (res: express.Response, url: string, init: RequestInit) => {
     try {
-      const upstream = await fetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(15 * 60_000) });
+      const upstream = await fetch(url, { ...init, headers: voiceHeaders(init.headers as Record<string, string> | undefined), redirect: "error", signal: AbortSignal.timeout(15 * 60_000) });
       const text = await upstream.text();
       res.status(upstream.status).type(upstream.headers.get("content-type") ?? "application/json").send(text);
     } catch (e) {
@@ -68,7 +69,7 @@ export function speechRouter(): Router {
 
     if (req.query.save !== "1") return relay(res, `${base}/v1/audio/diarize`, { method: "POST", body: form });
     try {
-      const upstream = await fetch(`${base}/v1/audio/diarize`, { method: "POST", body: form, redirect: "error", signal: AbortSignal.timeout(15 * 60_000) });
+      const upstream = await fetch(`${base}/v1/audio/diarize`, { method: "POST", body: form, headers: voiceHeaders(), redirect: "error", signal: AbortSignal.timeout(15 * 60_000) });
       if (!upstream.ok) throw new Error(`Speech service returned HTTP ${upstream.status}`);
       const text = await upstream.text();
       const dir = path.join(session.workspace, ".meeting-notes");

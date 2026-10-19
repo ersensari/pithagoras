@@ -5,7 +5,7 @@
  * Nothing here decides anything about speech: the portal does the recognizing.
  */
 /** Who spoke, where the portal identifies voices (VOICE_SPEAKER_ID): `matched` is the service's own verdict, `reliable` says the clip was long enough. */
-export type RtcSpeaker = { name: string | null; score: number | null; matched: boolean; reliable: boolean };
+export type RtcSpeaker = { name: string | null; score: number | null; matched: boolean; reliable: boolean; clip?: string };
 export type RtcResult = { text: string; language?: string; speaker?: RtcSpeaker };
 type Message =
   | { t: "ready" }

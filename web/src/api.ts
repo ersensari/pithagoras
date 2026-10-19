@@ -267,6 +267,8 @@ export interface PromptImage {
 
 export interface PromptOptions {
   voice?: boolean;
+  /** Whose voice a spoken message was, where the portal identifies voices: the server turns it into a note for the agent. */
+  speaker?: { name: string | null; matched: boolean; reliable: boolean; clip?: string };
   images?: PromptImage[];
   /** Sent mid-run, go into that run instead of waiting for it to end. */
   steer?: boolean;
@@ -376,6 +378,8 @@ export interface VoiceConfig {
   pipelineMode?: "parallel" | "sequential";
   /** Speak a whole reply in one synthesis request: the engine crossfades the chunks it splits it into. */
   mergeReplies?: boolean;
+  /** The sample rate the speech engine streams at (24000 or 48000); the audio context is opened at it. */
+  speechSampleRate?: number;
   /** Whether the portal offers streaming recognition over WebRTC (VOICE_STT_WEBRTC, on unless set to false). */
   sttWebrtc?: boolean;
   /** The noise model the microphone goes through before the VAD hears it (VOICE_NOISE_MODEL: rnnoise by default, gtcrn, or off). */
@@ -527,6 +531,7 @@ export const api = {
       body: JSON.stringify({
         message,
         ...(options?.voice ? { voice: true } : {}),
+        ...(options?.voice && options.speaker ? { speaker: options.speaker } : {}),
         ...(options?.images?.length ? { images: options.images.map(({ data, mimeType }) => ({ data, mimeType })) } : {}),
         ...(options?.steer ? { steer: true } : {}),
       }),

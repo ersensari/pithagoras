@@ -16,9 +16,10 @@ import type { Item } from "../transcript";
 import { LiveTranscription } from "../live-transcription";
 import { StreamedTranscription } from "../live-rtc";
 import { RtcStt, type RtcSpeaker } from "../rtc-stt";
-import { ignoredVoice } from "../speaker-filter";
+import { ignoresUnknown, speakerForPrompt, unknownVoicesFrom, type UnknownVoices } from "../speaker-filter";
 import { suppressNoise, type NoiseModel, type Suppressed } from "../noise";
 import { preparePcmSpeech, readPcmStream, playAudioBuffer, bufferOf } from "../pcm-stream";
+import { OPUS_RATE, oggOpusToPcm, opusSupported } from "../ogg-opus";
 import { stretch, stretchInSteps } from "../time-stretch";
 import { joinSamples } from "../samples";
 import { asksToRepeat, couldAskToRepeat } from "../voice-commands";
@@ -85,9 +86,9 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   // read by the controller and the speech at the moment they matter.
   const [steer, setSteer] = useState(() => local.get('voiceSteer') === 'on');
   const steering = useRef(steer); steering.current = steer;
-  // On by default: a voice the portal is sure is not an enrolled one never reaches the agent (see speaker-filter.ts).
-  const [onlyOwner, setOnlyOwner] = useState(() => local.get('voiceOnlyOwner') !== 'off');
-  const onlyOwnerNow = useRef(onlyOwner); onlyOwnerNow.current = onlyOwner;
+  // What to do with a voice that is not enrolled: hear it, ignore it, or (default) have the agent ask who it is (see speaker-filter.ts).
+  const [unknownVoices, setUnknownVoices] = useState<UnknownVoices>(() => unknownVoicesFrom(local.get('voiceOnlyOwner')));
+  const unknownVoicesNow = useRef(unknownVoices); unknownVoicesNow.current = unknownVoices;
   /** The verdict for the utterance being finished, set by whichever path transcribed it. */
   const speakerNow = useRef<RtcSpeaker | undefined>(undefined);
   const [rate, setRate] = useState(() => { const saved = Number(local.get('voiceRate')); return VOICE_RATES.includes(saved) ? saved : 1; });
@@ -190,6 +191,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const statusSpeech = useRef(true);
   const [comparison, setComparison] = useState(false);
   const sentenceChunks = useRef(false);
+  /** The rate the speech engine streams at (GET /api/voice): the audio context runs at it, so streamed speech is never resampled. */
+  const speechRate = useRef(24000);
   const mergeReplies = useRef(false);
   const ttsPrefetch = useRef(false);
   const [prefetchMode, setPrefetchMode] = useState(false);
@@ -244,6 +247,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       setSequentialMode(sequential.current);
       sentenceChunks.current = config.sentenceChunks === true;
       mergeReplies.current = config.mergeReplies === true;
+      speechRate.current = config.speechSampleRate === 48000 ? 48000 : 24000;
       rtcEnabled.current = config.sttWebrtc === true && typeof RTCPeerConnection !== 'undefined';
       noiseModel.current = config.noiseModel === 'rnnoise' || config.noiseModel === 'gtcrn' ? config.noiseModel : 'off';
       setSentenceMode(sentenceChunks.current);
@@ -392,7 +396,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       const kept = phrase.stretched;
       // One cut short by an earlier Repeat is worked out again.
       if (kept?.rate === rate && (kept.ready || !kept.signal.aborted)) return kept.samples;
-      const stretched: NonNullable<KeptPhrase["stretched"]> = { rate, signal: controller.signal, samples: stretchInSteps(joinSamples(phrase.samples), rate, controller.signal) };
+      const stretched: NonNullable<KeptPhrase["stretched"]> = { rate, signal: controller.signal, samples: stretchInSteps(joinSamples(phrase.samples), rate, controller.signal, phrase.sampleRate) };
       stretched.samples.then(() => { stretched.ready = true; }, () => {});
       phrase.stretched = stretched;
       return stretched.samples;
@@ -420,7 +424,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     do {
       signal.throwIfAborted();
       response = await fetch(`/api/sessions/${sessionId}/voice/speech`, {
-        method: "POST", headers: { "Content-Type": "application/json", "Accept": "audio/pcm" },
+        method: "POST", headers: { "Content-Type": "application/json", "Accept": await opusSupported() ? "audio/ogg, audio/pcm;q=0.9" : "audio/pcm" },
         body: JSON.stringify({ text }), signal,
       });
       if (response.ok) break;
@@ -440,14 +444,19 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     } while (true);
     mark('tts_headers',{serverTiming:response.headers.get('server-timing')??''});
     let body=response.body;
+    // Ogg/Opus (asked for above where WebCodecs decodes it) becomes 48 kHz s16le here; the rest plays it as PCM.
+    const ogg = !!body && (response.headers.get("content-type") ?? "").startsWith("audio/ogg");
+    if (ogg) body = oggOpusToPcm(body!);
     if(body&&trace){let first=true;body=body.pipeThrough(new TransformStream<Uint8Array<ArrayBuffer>,Uint8Array<ArrayBuffer>>({transform(chunk,controller){if(first&&chunk.length){first=false;mark('first_bytes');}controller.enqueue(chunk);}}));}
     let buffer: AudioBuffer | undefined;
     let stream: Awaited<ReturnType<typeof preparePcmSpeech>> | undefined;
     // Kept for Repeat once it is played; a phrase prepared and then cancelled was never heard.
     const phrase = { samples: [] as Float32Array[], sampleRate: 24000 };
     const options = { rate: speed.current, ...(kind === 'reply' ? { record: (samples: Float32Array) => { phrase.samples.push(samples); } } : {}) };
-    if (response.headers.get("content-type")?.startsWith("audio/pcm")) {
-      if (response.headers.get("x-sample-rate") !== "24000" || !body) throw new Error(t("Unsupported speech stream"));
+    if (ogg || response.headers.get("content-type")?.startsWith("audio/pcm")) {
+      const rate = ogg ? OPUS_RATE : Number(response.headers.get("x-sample-rate"));
+      if ((rate !== 24000 && rate !== 48000) || !body) throw new Error(t("Unsupported speech stream"));
+      phrase.sampleRate = rate; Object.assign(options, { sampleRate: rate });
       if (!sequential.current && response.headers.get("x-voice-streaming") === "true") stream = await preparePcmSpeech(body!, audio, signal, options);
       else buffer = await readPcmStream(body!, audio, signal, options);
     } else {
@@ -455,7 +464,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       const decoded = await audio.decodeAudioData(bytes); signal.throwIfAborted();
       const samples = decoded.getChannelData(0).slice();
       phrase.sampleRate = decoded.sampleRate; options.record?.(samples);
-      buffer = options.rate === 1 ? decoded : bufferOf(audio, stretch(samples, options.rate), decoded.sampleRate);
+      buffer = options.rate === 1 ? decoded : bufferOf(audio, stretch(samples, options.rate, decoded.sampleRate), decoded.sampleRate);
       if (!buffer) throw new Error(t("Speech generation returned no audio"));
     }
     mark('audio_ready');
@@ -521,6 +530,10 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         if (mounted.current && current()) setWaitingForTap(false);
         if (!current()) return;
       }
+      // 2026-10-19: the rate now follows the engine (`speechSampleRate` from
+      // GET /api/voice: 48000 for VoxCPM2, 24000 otherwise) - same reason as
+      // below, a context at the stream's own rate resamples nothing. A whole
+      // WAV phrase at another rate (Kokoro) is one buffer, resampled once.
       // 2026-10-12: forced to 24000 to match the TTS PCM streams' own rate
       // (pcm-stream.ts's bufferOf() always builds buffers at 24000 - every
       // engine behind /voice/speech, Chatterbox and OmniVoice both, sends
@@ -546,7 +559,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       // to whatever Silero VAD needs; this is not expected to change mic
       // detection behavior, but wasn't re-verified against a real
       // microphone from here.
-      const audio = new AudioContext({ sampleRate: 24000 }); context.current = audio;
+      const audio = new AudioContext({ sampleRate: speechRate.current }); context.current = audio;
       await audio.resume();
       if (!current()) return;
       const mic = await navigator.mediaDevices.getUserMedia({ audio: {
@@ -593,7 +606,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
           const result = await live.finish(samples, signal);
           profileMark('transcript_ready');
           // Empty text is what hands-free treats as noise: nothing is sent and an interrupted reply is spoken on.
-          return ignoredVoice(onlyOwnerNow.current, speakerNow.current) ? "" : result;
+          return ignoresUnknown(unknownVoicesNow.current, speakerNow.current) ? "" : result;
         },
         send: async text => {
           profileSeq.current=eventSeq.current;profileMark('send'); cue("sent");
@@ -602,12 +615,14 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
           const images = pending.get(sessionId);
           if (images.length) pending.set(sessionId, []);
           const steer = steering.current && latest.current.running;
+          // Whose voice it was, for the agent to greet by name or to ask who they are: see server/src/pi/voice-speaker.ts.
+          const verdict = speakerForPrompt(speakerNow.current);
           // What is said next answers this, so Repeat is for that — from now, as
           // its first words may be spoken before the send returns.
           const before = replyAudio.current;
           replyAudio.current = []; setCanRepeat(false);
           try {
-            await latest.current.onSend(text, { voice: true, ...(images.length ? { images } : {}), ...(steer ? { steer: true } : {}) });
+            await latest.current.onSend(text, { voice: true, ...(verdict ? { speaker: verdict } : {}), ...(images.length ? { images } : {}), ...(steer ? { steer: true } : {}) });
           } catch (e) {
             if (images.length) pending.set(sessionId, [...images, ...pending.get(sessionId)]);
             if (!replyAudio.current.length) { replyAudio.current = before; setCanRepeat(before.length > 0); }
@@ -804,7 +819,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         canRepeat={canRepeat} onRepeat={() => { repeatReply(); }}
         rate={rate} onRate={value => { local.set('voiceRate', String(value)); setRate(value); }}
         steer={steer} onSteer={value => { local.set('voiceSteer', value ? 'on' : 'off'); setSteer(value); }}
-        onlyOwner={onlyOwner} onOnlyOwner={value => { local.set('voiceOnlyOwner', value ? 'on' : 'off'); setOnlyOwner(value); }}
+        unknownVoices={unknownVoices} onUnknownVoices={mode => { local.set('voiceOnlyOwner', mode === 'all' ? 'off' : mode === 'enrolled' ? 'on' : 'ask'); setUnknownVoices(mode); }}
         ptt={ptt} onPtt={value => { void choosePtt(value); }} holding={holding} onHold={hold} />, stageTarget,
     )}
     <div className="relative flex items-center gap-1">

@@ -76,6 +76,12 @@ export interface ImageGenerationConfig {
    * and editing: either address moving to another server takes it off again.
    */
   sdExtras: boolean;
+  /**
+   * The agent's edits start from noise, the first picture being a reference like the others (`"init_image": null`), which
+   * is what a reference-editing model such as Qwen-Image 2.1 needs: given the picture as the start, stable-diffusion.cpp's
+   * OpenAI edit route hands it back almost unchanged (measured 2026-10-18). Only with sdExtras; said of the edit endpoint.
+   */
+  editFromNoise: boolean;
 }
 
 const text = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -113,6 +119,7 @@ export function imageGenerationConfig(): ImageGenerationConfig {
     timeoutSeconds: validTimeout(raw.timeoutSeconds) ? raw.timeoutSeconds : TIMEOUT_SECONDS.default,
     // A setup saved before there was the switch has it off.
     sdExtras: raw.sdExtras === true,
+    editFromNoise: raw.editFromNoise === true,
   };
 }
 
@@ -142,6 +149,8 @@ export interface ImageEditingTarget {
   timeoutSeconds: number;
   /** Whether what only stable-diffusion.cpp reads may be sent with an edit; see ImageGenerationConfig.sdExtras. */
   sdExtras: boolean;
+  /** The agent's edits start from noise; see ImageGenerationConfig.editFromNoise. */
+  fromNoise: boolean;
 }
 
 /**
@@ -152,7 +161,7 @@ export interface ImageEditingTarget {
 export function imageEditingTarget(config: ImageGenerationConfig = imageGenerationConfig()): ImageEditingTarget {
   const baseUrl = config.editBaseUrl || config.baseUrl;
   const sameServer = baseUrl !== "" && originOf(baseUrl) === originOf(config.baseUrl);
-  return { baseUrl, model: config.editModel, apiKey: config.editApiKey || (sameServer ? config.apiKey : ""), multiple: config.editMultiple, maxSize: config.editMaxSize, timeoutSeconds: config.timeoutSeconds, sdExtras: config.sdExtras };
+  return { baseUrl, model: config.editModel, apiKey: config.editApiKey || (sameServer ? config.apiKey : ""), multiple: config.editMultiple, maxSize: config.editMaxSize, timeoutSeconds: config.timeoutSeconds, sdExtras: config.sdExtras, fromNoise: config.sdExtras && config.editFromNoise };
 }
 
 /** What the page is told of the settings: never a key itself. */
@@ -181,6 +190,7 @@ export interface ImageGenerationPatch {
   /** Whole seconds, from TIMEOUT_SECONDS.min to its max; null takes the saved one away, which is the default again. */
   timeoutSeconds?: number | null;
   sdExtras?: boolean;
+  editFromNoise?: boolean;
 }
 
 /** An API address as the settings keep it, or the reason it is not one. */
@@ -203,7 +213,7 @@ function parseBase(value: unknown): { base: string } | { error: string } {
 export function parseImageGenerationPatch(body: unknown): ImageGenerationPatch | string {
   const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const patch: ImageGenerationPatch = {};
-  for (const field of ["enabled", "editEnabled", "editMultiple", "sdExtras"] as const) {
+  for (const field of ["enabled", "editEnabled", "editMultiple", "sdExtras", "editFromNoise"] as const) {
     if (b[field] === undefined) continue;
     if (typeof b[field] !== "boolean") return `${field} must be true or false`;
     patch[field] = b[field];
@@ -276,6 +286,7 @@ export function saveImageGeneration(patch: ImageGenerationPatch): ImageGeneratio
   if (patch.editMultiple === undefined && movedEdits) next.editMultiple = false;
   // One switch for both addresses: it is not known of a server that either one moved to.
   if (patch.sdExtras === undefined && (movedGeneration || movedEdits)) next.sdExtras = false;
+  if (patch.editFromNoise === undefined && movedEdits) next.editFromNoise = false;
   if (next.enabled && !next.baseUrl) throw new ImageGenerationError("Set the address of the image endpoint before switching it on");
   if (next.editEnabled && !(next.editBaseUrl || next.baseUrl)) throw new ImageGenerationError("Set the address of the image endpoint before switching editing on");
   // The default stays unsaved until a limit is chosen, so that it is the default of the day for every setup that never chose one.

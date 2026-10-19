@@ -17,6 +17,7 @@ export const CONTEXT_BLOCKS: { tag: string; label: string }[] = [
   { tag: "answer-from-primary", label: msg("Answer") },
   { tag: "channel-instructions", label: msg("Channel instructions") },
   { tag: "routine", label: msg("Routine") },
+  { tag: "attachments", label: msg("Attached pictures") },
 ];
 
 const TAGS = CONTEXT_BLOCKS.map((b) => b.tag).join("|");

@@ -109,6 +109,27 @@ test("a model that calls edit_image gets a new picture in the chat's folder, sho
   }
 });
 
+test("with stable-diffusion.cpp and editFromNoise on, the agent's edit starts from noise; with either off it does not", async () => {
+  const base = `http://127.0.0.1:${endpoint.address().port}/v1`;
+  const block = (body) => /<sd_cpp_extra_args>(.*?)<\/sd_cpp_extra_args>/s.exec(body.toString("latin1"))?.[1];
+  try {
+    for (const [settings, expected] of [
+      [{ sdExtras: true, editFromNoise: true }, '{"init_image":null}'],
+      [{ sdExtras: true, editFromNoise: false }, undefined],
+      [{ sdExtras: false, editFromNoise: true }, undefined],
+    ]) {
+      saveImageGeneration({ baseUrl: base, apiKey: "", editEnabled: true, ...settings });
+      asked.length = 0;
+      call = { path: "photo.png", prompt: "change the sign", title: "Sign" };
+      const [result] = await run(chat());
+      assert.equal(result.isError, false);
+      assert.equal(block(asked[0].body), expected, JSON.stringify(settings));
+    }
+  } finally {
+    saveImageGeneration({ baseUrl: "", apiKey: "", editEnabled: false, sdExtras: false, editFromNoise: false });
+  }
+});
+
 test("an edit that fails is an error the model sees, and leaves nothing in the chat's folder", async () => {
   const folder = chat();
   saveImageGeneration({ baseUrl: `http://127.0.0.1:${endpoint.address().port}/v1`, editEnabled: true });

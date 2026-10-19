@@ -35,6 +35,8 @@ export function samplesWav(samples: Float32Array): Blob {
 /** Consume stable raw-text boundaries once, including while a reply is streaming. */
 export class StreamingSpeech {
   private offsets = new Map<string, number>();
+  /** The last "[style: ...]" marker of each reply: a phrase cut off mid-sentence (at a dash, a line break) keeps it. */
+  private styles = new Map<string, string>();
   private ignored = new Set<string>();
   constructor(private afterSeq: number) {}
   ignore(items: Item[]) {
@@ -49,7 +51,13 @@ export class StreamingSpeech {
         const tail = item.text.slice(offset);
         const end = phraseBoundary(tail, item.done);
         if (!end) break;
-        result.push(...speechChunks(tail.slice(0, end).replace(/—$/, '').replace(/—/g, ', ')));
+        for (let chunk of speechChunks(tail.slice(0, end).replace(/—$/, '').replace(/—/g, ', '))) {
+          const marks = chunk.match(STYLE_MARKER);
+          const last = this.styles.get(item.id);
+          if (last && !/^\s*\[\s*style\s*:/i.test(chunk)) chunk = `${last} ${chunk}`;
+          if (marks) this.styles.set(item.id, marks[marks.length - 1].trim());
+          result.push(chunk);
+        }
         offset += end;
       }
       this.offsets.set(item.id, offset);
@@ -73,7 +81,9 @@ function speechBoundary(text: string): number {
     const punctuation = /[.!?。！？]/.test(text[i]);
     const boundary = punctuation && (/[。！？]/.test(text[i]) || /\s/.test(text[i + 1] || ''));
     // Avoid common title/initial/decimal breaks; the next sentence or completion flushes them.
-    const abbreviation = text[i] === '.' && /(?:\b(?:Mr|Mrs|Ms|Dr|Prof|St|vs|etc)|\b[A-Za-z])\.$/i.test(text.slice(0, i + 1));
+    const abbreviation = text[i] === '.' && (/(?:\b(?:Mr|Mrs|Ms|Dr|Prof|St|vs|etc)|\b[A-Za-z])\.$/i.test(text.slice(0, i + 1))
+      // A Turkish ordinal is a dot after digits ("90. persentil", "3. sınıf"): no sentence ends there when a lower-case word follows.
+      || (/\d\.$/.test(text.slice(0, i + 1)) && /^\s+\p{Ll}/u.test(text.slice(i + 1))));
     if ((boundary && !abbreviation) || text[i] === '\n' || text[i] === '—' || (i >= 240 && /\s/.test(text[i]))) return i + 1;
   }
   return end;
@@ -94,10 +104,15 @@ function phraseBoundary(text: string, done: boolean): number {
 }
 
 
+/** A per-sentence delivery marker for the speech engine, "[style: whispering]" (ForgeLoop audio, 2026-10-19). */
+export const STYLE_MARKER = /[ \t]*\[\s*style\s*:[^\]\n]{0,80}\][ \t]*/gi;
+
 /** Display-only: synthesis always receives the original speech cues. */
 export function displaySpeechText(text: string, done: boolean): string {
-  let visible = text.replace(/[ \t]*\((?:laugh|cough|clears throat|sigh)\)[ \t]*/gi, ' ');
+  let visible = text.replace(STYLE_MARKER, ' ').replace(/[ \t]*\((?:laugh|cough|clears throat|sigh)\)[ \t]*/gi, ' ');
   if (!done) {
+    // a style marker still streaming in ("[sty", "[style: whis") is not shown half-written either
+    visible = visible.replace(/[ \t]*\[\s*(?:s(?:t(?:y(?:l(?:e(?:\s*:[^\]\n]{0,80})?)?)?)?)?)?$/i, '');
     const start = visible.lastIndexOf('(');
     if (start >= 0) {
       const tail = visible.slice(start).toLowerCase();
