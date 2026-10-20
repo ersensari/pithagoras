@@ -25,6 +25,19 @@ const CRITERIA = {
   chat: "casual conversation, a greeting, thanks, an opinion, or a simple question that can be answered from general knowledge without looking anything up",
 };
 
+/**
+ * Deterministic fallback for when laya is down or answers without a verdict:
+ * a request that asks for a search, a lookup, a file or browser action, or names
+ * the web, needs tools; greetings, thanks and short acknowledgements do not.
+ * Lower-cased with the Turkish locale first, so "İ"/"I" match the Turkish forms.
+ * Word boundaries are Unicode-aware, since \b would split on "ç" and "ş".
+ */
+const TOOL_WORDS = /(?<!\p{L})(?:ara\p{L}*|arar m[ıi]s[ıi]n|araştır\p{L}*|bul(?:ur musun)?|bak(?:ar m[ıi]s[ıi]n)?|kontrol et\p{L}*|getir\p{L}*|göster\p{L}*|aç|çalıştır\p{L}*|oku\p{L}*|yaz\p{L}*|düzenle\p{L}*|ekle\p{L}*|sil\p{L}*|hatırla\p{L}*|indir\p{L}*|search|look ?up|google|find|check|open|run|read|write|edit|create|remember|fetch|download|browse|web|internet|haber\p{L}*|hava durumu|fiyat\p{L}*|news|weather|price)(?!\p{L})|https?:\/\//u;
+
+export function looksLikeToolRequest(text: string): boolean {
+  return TOOL_WORDS.test(text.toLocaleLowerCase("tr"));
+}
+
 export async function needsTools(text: string): Promise<boolean> {
   try {
     const upstream = await fetch(LAYA_URL, {
@@ -33,14 +46,15 @@ export async function needsTools(text: string): Promise<boolean> {
       body: JSON.stringify({ text, criteria: CRITERIA }),
       signal: AbortSignal.timeout(LAYA_TIMEOUT_MS),
     });
-    if (!upstream.ok) return true;
+    if (!upstream.ok) return looksLikeToolRequest(text);
     const body = await upstream.json() as { choice?: unknown; labels?: unknown; scores?: unknown };
     if (Array.isArray(body.labels) && Array.isArray(body.scores)) {
       const score = body.scores[body.labels.indexOf("tools")];
       if (typeof score === "number") return score >= TOOLS_THRESHOLD;
     }
-    return body.choice !== "chat";
+    if (typeof body.choice === "string") return body.choice !== "chat";
+    return looksLikeToolRequest(text);
   } catch {
-    return true;
+    return looksLikeToolRequest(text);
   }
 }

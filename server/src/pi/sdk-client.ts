@@ -27,7 +27,7 @@ import { askPrimaryTool } from "./ask-primary.js";
 import { enrollVoiceOn, enrollVoiceTool } from "./enroll-voice.js";
 import { proxyBaseUrl } from "../llama-progress.js";
 import { bridgeSubagents, SUBAGENT_INPUT, SUBAGENT_STOP, type Bridge } from "../subagent-protocol.js";
-import { contextWindowFor, getSkipThinkingProviders, getVoiceInstructions, portalBrowserOn, voiceSpeaks } from "../db.js";
+import { contextWindowFor, getSession, getSkipThinkingProviders, getVoiceInstructions, portalBrowserOn, voiceSpeaks } from "../db.js";
 import { configStamp, isLlamaProvider } from "../providers.js";
 import { rereadConfig } from "./model-runtime.js";
 import { UNDERSTORY_RULE, understoryOn } from "../features.js";
@@ -375,7 +375,11 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     // Without an explicit loader the SDK starts with no extensions, skills or
     // prompt templates — so installed packages contribute no commands at all.
     // The CLI wires this up for you; here it has to be asked for.
-    const voiceFirst = new VoiceFirstTurn(getSkipThinkingProviders, needsTools);
+    const voiceFirst = new VoiceFirstTurn(
+      getSkipThinkingProviders,
+      needsTools,
+      () => (opts.sessionId ? getSession(opts.sessionId)?.thinking_level === "off" : false),
+    );
     let resourceLoader: any;
     // What the conversation has switched off: the client's, once there is one.
     let switchedOff: () => ReadonlySet<string> = () => new Set(opts.toolsOff ?? []);
@@ -754,10 +758,11 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     message: string,
     options?: { voice?: boolean; images?: ImageContent[]; steer?: boolean },
   ): Promise<PromptTaken> {
+    // A typed turn is armed too, only for the tool-need raise: see VoiceFirstTurn.
     if (options?.voice) {
       this.voiceFirst?.arm(this.isIdle());
     } else {
-      this.voiceFirst?.reset();
+      this.voiceFirst?.arm(this.isIdle(), true);
     }
     const ruleFromThis = this.sayAudioRule(options?.voice === true);
     const promptOptions = {

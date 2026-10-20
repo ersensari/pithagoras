@@ -142,6 +142,23 @@ export function spokenRequest(messages: unknown): string {
 }
 
 /**
+ * The text of a typed request being answered: the last user message of the
+ * payload, without the <acp ...> tags, the <now> line and the <speaker> block
+ * the portal puts in front of it. Typed text carries no [Audio mode] marker.
+ */
+export function typedRequest(messages: unknown): string {
+  if (!Array.isArray(messages)) return '';
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role !== 'user') continue;
+    return textOf(messages[i].content)
+      .replace(/<acp\b[^>]*>.*?<\/acp>\s*/gs, '')
+      .replace(/<(now|speaker)\b[^>]*>.*?<\/\1>\s*/gs, '')
+      .trim();
+  }
+  return '';
+}
+
+/**
  * First-call thinking is transient; formatting is governed by AudioRule.
  *
  * With `needsTools`, thinking is spent only where a spoken request needs tools:
@@ -155,12 +172,16 @@ export class VoiceFirstTurn {
   private first = false;
   /** Whether this spoken turn was judged to need tools; decided once, at its first call. */
   private tools: boolean | undefined;
+  /** Whether this turn was typed rather than spoken: it gets no first-call thinking switch-off and no audio formatting, only the tool-need raise. */
+  private typed = false;
   /** `providers`: the list saved in the voice settings, read at each call; none saved means every llama.cpp server, as the portal knows them. */
   constructor(
     private readonly providers: () => readonly string[] | undefined = () => undefined,
     private readonly needsTools?: (text: string) => Promise<boolean>,
+    /** Whether this chat's saved thinking level is "off": a person's own choice, which the tool-need raise must not undo. */
+    private readonly explicitOff?: () => boolean,
   ) {}
-  arm(first = true) { this.active = true; this.first = first; this.tools = undefined; }
+  arm(first = true, typed = false) { this.active = true; this.first = first; this.typed = typed; this.tools = undefined; }
   reset() { this.active = false; this.first = false; this.tools = undefined; }
   extension = (pi: any) => {
     pi.on('before_provider_request', (event: any, ctx: any) => {
@@ -170,21 +191,22 @@ export class VoiceFirstTurn {
       const apply = () => {
         if (this.tools) {
           // The chat's own level wins when it is set: "none" is a person's explicit off, and thinking they
-          // switched off must not come back. Only a request with no level at all is raised, since the chat
-          // template reads thinking from the effort.
-          if (event.payload.reasoning_effort) return;
+          // switched off must not come back. A chat that never chose a level also sends "none" (pi maps the
+          // default "off"), so that "none" is raised unless the saved level really is off.
+          const effort = event.payload.reasoning_effort;
+          if (effort && (effort !== 'none' || this.explicitOff?.())) return;
           const payload = { ...event.payload, reasoning_effort: 'medium' };
           if (payload.chat_template_kwargs?.enable_thinking === false) payload.chat_template_kwargs = { ...payload.chat_template_kwargs, enable_thinking: true };
           return payload;
         }
-        if (!this.first) return;
-        const payload = { ...event.payload, chat_template_kwargs: { ...event.payload.chat_template_kwargs, enable_thinking: false } };
+        if (this.typed || !this.first) return;
+        const payload = { ...event.payload, chat_template_kwargs:{ ...event.payload.chat_template_kwargs, enable_thinking: false } };
         delete payload.thinking_budget_tokens;
         return payload;
       };
       // Only the first call of a turn asks, and only where a classifier was given: the rest stays synchronous.
       if (!this.needsTools || this.tools !== undefined || !this.first) return apply();
-      const text = spokenRequest(event.payload?.messages);
+      const text = this.typed ? typedRequest(event.payload?.messages) : spokenRequest(event.payload?.messages);
       return (text ? this.needsTools(text) : Promise.resolve(false)).then((needs) => { this.tools = needs; return apply(); });
     });
     pi.on('turn_end', () => { this.first = false; });
