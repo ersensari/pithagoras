@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { inTurnWithSettings, piSetting, readPiSettings, readProjectPiSettings } from "./pi-settings.js";
 import { packageIndex, packageKey, packageLabel, toolAvailability } from "./extension-switch.js";
 import { EDIT_IMAGE_SOURCE, EDIT_IMAGE_TOOL, GENERATE_IMAGE_SOURCE, GENERATE_IMAGE_TOOL, SHOW_IMAGE_SOURCE, imageEditingReady, imageGenerationReady } from "./image-generation.js";
-import { BACKGROUND_SOURCE, BACKGROUND_TOOL } from "./pi/background-tool.js";
+import { BACKGROUND_SOURCE, BACKGROUND_TOOL } from "./pi/background-names.js";
 import { PORTAL_BROWSER_TOOLS, browserTool, defaultsFor, mcpServerOf, toolEnabled } from "./tool-policy.js";
 import { projectOf } from "./workspaces.js";
 import { browserServers, dropMcpCache, mcpServerNames, readMcpFile, serversAndBrowsers } from "./api/mcp.js";

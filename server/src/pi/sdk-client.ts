@@ -384,6 +384,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     let resourceLoader: any;
     // What the conversation has switched off: the client's, once there is one.
     let switchedOff: () => ReadonlySet<string> = () => new Set(opts.toolsOff ?? []);
+    // The session exists only after the factories have run: the background tool resolves its tools through it, once it is set.
+    const sessionRef: { current?: any } = {};
     // Whether the model has the tool is settled when pi loads it and by the tool switches: the rule says
     // so only while it has — and it is the portal's, not an extension's of the same name that pi keeps.
     const imageTool = opts.sessionId ? new GenerateImageTool(opts.cwd, () => resourceLoader?.getExtensions?.().extensions ?? [], opts.sessionId) : undefined;
@@ -420,7 +422,15 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       // Beside the canvases: both are how the agent puts something on the screen.
       if (opts.sessionId) factories.push({ name: SHOW_IMAGE_SOURCE, factory: showImageTool(opts.cwd) });
       // Slow tools run beside the conversation: their result comes back as a follow-up message, see background-tool.ts.
-      if (opts.sessionId) factories.push({ name: BACKGROUND_SOURCE, factory: backgroundTool({ spoken: () => voiceFirst.spokenTurn }) });
+      // Only tools the model has right now: an inactive or unknown name is refused by the tool itself.
+      if (opts.sessionId) factories.push({ name: BACKGROUND_SOURCE, factory: backgroundTool({
+        spoken: () => voiceFirst.spokenTurn,
+        sessionId: opts.sessionId,
+        getTool: (name) => {
+          const s = sessionRef.current;
+          return s?.getActiveToolNames?.().includes(name) ? s.getToolDefinition?.(name) : undefined;
+        },
+      }) });
       // Registers nothing while the add-on is off or has no address: see GenerateImageTool.
       if (imageTool) factories.push({ name: GENERATE_IMAGE_SOURCE, factory: imageTool.extension });
       // The same for editing, with its own switch.
@@ -528,6 +538,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       ...(model ? { model } : {}),
       ...(opts.thinkingLevel ? { thinkingLevel: opts.thinkingLevel } : {}),
     });
+    sessionRef.current = session;
 
     const client = new SdkPiClient(session, modelRuntime, () => {});
     switchedOff = () => client.switchedOff;
