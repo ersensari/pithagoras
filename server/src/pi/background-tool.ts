@@ -21,6 +21,12 @@ export { BACKGROUND_SOURCE, BACKGROUND_TOOL };
 
 /** The only tools that may run in the background: slow, and either web or picture. */
 export const BACKGROUND_ALLOWED = new Set(["web_search", "fetch_content", "get_search_content", "generate_image", "edit_image"]);
+/**
+ * The slow ones of those: in a SPOKEN turn they may not be called directly, since the reply would stop mid-sentence while pi waits for them.
+ * The model was told so in its instructions and still called them (2026-10-21: generate_image blocked a spoken turn for 40 s), so the call is
+ * refused with the exact call to make instead: code enforces, the prompt only guides. get_search_content reads what a search stored, quickly.
+ */
+export const BACKGROUND_FORCED = new Set(["web_search", "fetch_content", "generate_image", "edit_image"]);
 /** Those that bring text from outside the portal: their result taints the session, as the guard does for them. */
 const BRINGS_OUTSIDE_TEXT = new Set(["web_search", "fetch_content", "get_search_content"]);
 
@@ -53,6 +59,17 @@ const refused = (text: string) => ({ content: [{ type: "text" as const, text }],
 export function backgroundTool(opts: BackgroundToolOptions) {
   return (pi: any) => {
     let counter = 0;
+    pi.on?.("tool_call", (event: any) => {
+      if (!opts.spoken() || !BACKGROUND_FORCED.has(String(event?.toolName))) return undefined;
+      const args = JSON.stringify(event.input ?? {});
+      return {
+        block: true,
+        reason:
+          `Refused here: in a spoken turn ${event.toolName} must run in the background so the conversation does not stop. ` +
+          `Call run_in_background with tool="${event.toolName}", args=${args} and a short title in the person's language, say one short sentence ` +
+          `about what you started, and end your turn. Its result arrives by itself.`,
+      };
+    });
     // Stop aborts these; a job leaves the registry once it settles.
     const running = new Map<number, AbortController>();
 

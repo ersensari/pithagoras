@@ -18,11 +18,13 @@ function deferred() {
 function fakePi() {
   const sent = [];
   let tool;
+  const handlers = {};
   const pi = {
+    on(name, fn) { handlers[name] = fn; },
     registerTool(def) { tool = def; },
     sendUserMessage(text, options) { sent.push({ text, options }); },
   };
-  return { pi, sent, get tool() { return tool; } };
+  return { pi, sent, handlers, get tool() { return tool; } };
 }
 
 /**
@@ -310,4 +312,21 @@ test("a finished job frees its slot for the next one", async () => {
     assert.equal(r.details.status, "started", `job ${i + 1} starts`);
     await flush();
   }
+});
+
+test("in a spoken turn the slow tools cannot be called directly: the call is refused with the exact run_in_background call", () => {
+  const spoken = setup({}, () => true);
+  const out = spoken.handlers.tool_call({ toolName: "generate_image", input: { prompt: "a boat", size: "512x512" } });
+  assert.equal(out.block, true);
+  assert.match(out.reason, /run_in_background with tool="generate_image"/);
+  assert.match(out.reason, /"prompt":"a boat"/);
+  for (const name of ["web_search", "fetch_content", "edit_image"]) assert.equal(spoken.handlers.tool_call({ toolName: name, input: {} }).block, true);
+  // Quick tools, the search reader and everything else go through.
+  for (const name of ["get_search_content", "read", "bash", "show_image", "run_in_background"]) assert.equal(spoken.handlers.tool_call({ toolName: name, input: {} }), undefined);
+});
+
+test("in a typed turn the slow tools are called directly as before", () => {
+  const typed = setup({}, () => false);
+  assert.equal(typed.handlers.tool_call({ toolName: "generate_image", input: {} }), undefined);
+  assert.equal(typed.handlers.tool_call({ toolName: "web_search", input: {} }), undefined);
 });
