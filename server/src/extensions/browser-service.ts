@@ -15,6 +15,12 @@ import * as local from "./browser-local.js";
  * and removing it leaves no trace but the profile.
  */
 
+/**
+ * No Docker and not an externally managed browser: the browser is a Chrome on
+ * this machine, which the portal may start itself (see tools.ts connect()).
+ */
+export const localMode = (): boolean => !dockerAvailable() && process.env.BROWSER_EXTERNAL !== "true";
+
 export const IMAGE = "lscr.io/linuxserver/chromium:latest";
 export const CONTAINER = "pithagoras-browser";
 /** The name compose used, so an existing profile — and its logins — carries over. */

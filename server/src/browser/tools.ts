@@ -1,6 +1,8 @@
 import { Type } from "typebox";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { BROWSER_CDP } from "../api/mcp.js";
+import * as local from "../extensions/browser-local.js";
+import { localMode } from "../extensions/browser-service.js";
 import { bareRef, REF_TOKEN } from "./ref.js";
 import { pointAt, pointTo, press, typing } from "./cursor.js";
 import { diffViews, findNodes, findRef, pinned, renderView, sectionText, textPage, type AxChild, type View, type Viewport } from "./view.js";
@@ -19,9 +21,8 @@ import { diffViews, findNodes, findRef, pinned, renderView, sectionText, textPag
 let browser: Browser | null = null;
 let connecting: Promise<Browser> | null = null;
 
-async function connect(): Promise<Browser> {
-  if (browser?.isConnected()) return browser;
-  connecting ??= chromium
+async function attach(): Promise<Browser> {
+  return chromium
     .connectOverCDP(BROWSER_CDP, { timeout: 10_000 })
     .then((b) => {
       browser = b;
@@ -32,12 +33,51 @@ async function connect(): Promise<Browser> {
     })
     .catch((e: Error) => {
       throw new Error(`The browser is not reachable at ${BROWSER_CDP} (${e.message.split("\n")[0]}). Is it running? See Settings → Browser.`);
-    })
-    .finally(() => {
-      connecting = null;
     });
+}
+
+/** Waits up to `ms` for the local Chrome's debugging port to answer. */
+async function waitForDebugPort(ms: number): Promise<void> {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    try {
+      const v = await fetch(`${BROWSER_CDP}/json/version`, { signal: AbortSignal.timeout(1000) });
+      if (v.ok) return;
+    } catch {
+      // Not listening yet: keep waiting.
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+/**
+ * Local mode only (no Docker): an unreachable browser is started here, so "open
+ * this site" works without a click. Container mode keeps the error as it was.
+ */
+async function attachOrStartLocal(): Promise<Browser> {
+  try {
+    return await attach();
+  } catch (e) {
+    if (!localMode()) throw e;
+    try {
+      local.start();
+    } catch (startError) {
+      throw new Error(`${(e as Error).message} ${(startError as Error).message}.`);
+    }
+    await waitForDebugPort(8000);
+    return attach();
+  }
+}
+
+async function connect(): Promise<Browser> {
+  if (browser?.isConnected()) return browser;
+  connecting ??= attachOrStartLocal().finally(() => {
+    connecting = null;
+  });
   return connecting;
 }
+
+export { connect as connectBrowser };
 
 /** What each chat was last shown, and on which tab: diffs and scrolls are told against it. */
 interface Seen {
@@ -56,6 +96,19 @@ const seen = new Map<string, Seen>();
  */
 export function forgetBrowserSession(sessionId: string): boolean {
   return seen.delete(sessionId);
+}
+
+/**
+ * The tab the browser panel shows: the one the chat last used while it is still
+ * open, else the most recent page of the first context. Never opens a tab.
+ * Undefined when the browser has no page. Throws when the browser is unreachable.
+ */
+export async function browserPage(sessionId?: string): Promise<Page | undefined> {
+  const known = sessionId ? seen.get(sessionId) : undefined;
+  if (known && !known.page.isClosed()) return known.page;
+  const b = await connect();
+  const pages = b.contexts()[0]?.pages() ?? [];
+  return pages[pages.length - 1];
 }
 
 /** The tab a chat works in: the one it last used, else the most recent. */

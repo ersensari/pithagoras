@@ -25,6 +25,8 @@ import { EXECUTOR_KIND } from "../executor-kind.js";
 import { PORTAL_BROWSER_TOOLS, browserTool } from "../tool-policy.js";
 import { BROWSER_CDP, browserServers, findConnection, mcpServerNames, readMcpFile, writeMcpFile } from "./mcp.js";
 import * as service from "../extensions/browser-service.js";
+import * as viewer from "../browser/viewer.js";
+import { hostAllowed } from "../pi/guard.js";
 
 /**
  * The agent's browser: whether it is up, who may drive it, and where to.
@@ -295,6 +297,51 @@ export function browserRouter(): Router {
       res.json({ ok: true });
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
+  /** Answers a viewer error with its own status; anything unexpected is a 500. */
+  const viewerError = (res: express.Response, e: unknown) => {
+    const status = e instanceof viewer.BrowserViewError ? e.status : 500;
+    res.status(status).json({ error: (e as Error).message });
+  };
+
+  /** The side panel's picture of the chat's tab: a JPEG, with the page's address and size in headers. */
+  router.get("/browser/frame", async (req, res) => {
+    const session = typeof req.query.session === "string" ? req.query.session : undefined;
+    const w = Number(req.query.w);
+    try {
+      const f = await viewer.frame(session, Number.isFinite(w) && w > 0 ? Math.min(w, 4000) : undefined);
+      res.set("Cache-Control", "no-store");
+      if (!f) return res.status(204).end();
+      res.set({
+        "X-Page-Url": encodeURIComponent(f.url),
+        "X-Page-Title": encodeURIComponent(f.title),
+        "X-Page-Width": String(f.width),
+        "X-Page-Height": String(f.height),
+      });
+      res.type("image/jpeg").send(f.jpeg);
+    } catch (e) {
+      viewerError(res, e);
+    }
+  });
+
+  /** One click, scroll, typing, key or navigation on the chat's tab, answered with where the tab is now. */
+  router.post("/browser/input", async (req, res) => {
+    let input: viewer.ViewerInput;
+    try {
+      input = viewer.parseInput(req.body);
+    } catch (e) {
+      return viewerError(res, e);
+    }
+    // The same allowlist the agent's guard applies to a navigation: the panel is no way round it.
+    if (input.action.action === "navigate" && !hostAllowed(input.action.url, browserAllowlist())) {
+      return res.status(403).json({ error: `${input.action.url} is not on the browser allowlist` });
+    }
+    try {
+      res.json(await viewer.performAction(input.session, input.action));
+    } catch (e) {
+      viewerError(res, e);
     }
   });
 

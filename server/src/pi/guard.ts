@@ -329,7 +329,7 @@ function browserCall(
 }
 
 /** Does a host match one of the allowlist globs? `*.example.com` covers a sub. */
-function hostAllowed(url: string, allow: string[]): boolean {
+export function hostAllowed(url: string, allow: string[]): boolean {
   if (!allow.length) return true;
   let host: string;
   try {

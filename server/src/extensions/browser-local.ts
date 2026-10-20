@@ -46,16 +46,26 @@ let child: ChildProcess | null = null;
 
 export const running = () => Boolean(child && child.exitCode === null);
 
+/**
+ * BROWSER_HEADLESS=0|false opens a window even with no display, for signing in
+ * by hand; any other value, or none, keeps the rule below.
+ */
+export function headless(): boolean {
+  const forced = process.env.BROWSER_HEADLESS?.toLowerCase();
+  if (forced === "0" || forced === "false") return false;
+  // Headful when there is a display to put it on, which is the case worth
+  // having: a headless browser is frequently refused by sign-in pages, and
+  // signing in is the entire point of this.
+  return !process.env.DISPLAY;
+}
+
 export function status() {
   const binary = findBinary();
   return {
     available: Boolean(binary),
     binary,
     running: running(),
-    // Headful when there is a display to put it on, which is the case worth
-    // having: a headless browser is frequently refused by sign-in pages, and
-    // signing in is the entire point of this.
-    headless: !process.env.DISPLAY,
+    headless: headless(),
     profile: PROFILE,
   };
 }
@@ -74,7 +84,7 @@ export function start(): void {
     "--no-first-run",
     "--no-default-browser-check",
   ];
-  if (!process.env.DISPLAY) args.push("--headless=new");
+  if (headless()) args.push("--headless=new");
 
   child = spawn(binary, args, { detached: false, stdio: "ignore" });
   child.on("exit", () => (child = null));
