@@ -102,3 +102,44 @@ test("the tool answers with the path the page fetches the picture by", async () 
   assert.deepEqual(result.details, { path: "plots/chart.png", title: "Sales" });
   await assert.rejects(tool.execute("call", { path: "missing.png" }));
 });
+
+test("show_image with a query finds a picture on the web, saves it in the chat's folder and shows it", async () => {
+  const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(20000, 7)]);
+  const asked = [];
+  const fake = async (url) => {
+    asked.push(String(url));
+    if (String(url).includes("/search?")) {
+      return new Response(JSON.stringify({ results: [
+        { img_src: "https://example.com/page.html" },
+        { img_src: "https://example.com/tiny.jpg" },
+        { img_src: "https://upload.wikimedia.org/samurai.jpg" },
+        { img_src: "https://example.com/second.jpg" },
+      ] }), { status: 200 });
+    }
+    if (String(url).endsWith("page.html")) return new Response("<html></html>", { status: 200 });
+    if (String(url).endsWith("tiny.jpg")) return new Response(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]), { status: 200 });
+    return new Response(JPEG, { status: 200 });
+  };
+  let tool;
+  showImageTool(work, fake)({ registerTool: (t) => (tool = t) });
+  const first = await tool.execute("call", { query: "Samurai warrior" });
+  assert.match(first.details.path, /^photos\/samurai-warrior\/[0-9a-f]{12}\.jpg$/);
+  assert.equal(first.details.title, "Samurai warrior");
+  // In the search's order: the page and the tiny one are skipped, the first real picture is shown.
+  assert.ok(asked[3].includes("upload.wikimedia.org"));
+  // Asked again: another picture, not the same one.
+  const second = await tool.execute("call", { query: "Samurai warrior" });
+  assert.notEqual(second.details.path, first.details.path);
+  await assert.rejects(tool.execute("call", {}));
+  const flag = await tool.execute("call", { query: "Göktürk bayrağı" });
+  assert.match(flag.details.path, /^photos\/gokturk-bayragi\//);
+});
+
+test("Wikimedia SVGs are asked for as PNG renderings", async () => {
+  const { rasterUrl } = await import("../dist/pi/show-image-tool.js");
+  assert.equal(
+    rasterUrl("https://upload.wikimedia.org/wikipedia/commons/b/bb/G%C3%B6kt%C3%BCrk_Bayra%C4%9F%C4%B1.svg?utm_source=commons"),
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/G%C3%B6kt%C3%BCrk_Bayra%C4%9F%C4%B1.svg/800px-G%C3%B6kt%C3%BCrk_Bayra%C4%9F%C4%B1.svg.png",
+  );
+  assert.equal(rasterUrl("https://example.com/a.jpg"), "https://example.com/a.jpg");
+});
