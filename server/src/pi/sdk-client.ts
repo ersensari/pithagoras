@@ -1,5 +1,6 @@
 import { CanvasTools } from "./canvas-tools.js";
 import { showImageTool } from "./show-image-tool.js";
+import { BACKGROUND_SOURCE, backgroundTool } from "./background-tool.js";
 import { GENERATE_IMAGE_VOICE_LINE, GenerateImageTool } from "./generate-image-tool.js";
 import { EDIT_IMAGE_VOICE_LINE, EditImageTool } from "./edit-image-tool.js";
 import { EDIT_IMAGE_SOURCE, EDIT_IMAGE_TOOL, GENERATE_IMAGE_SOURCE, GENERATE_IMAGE_TOOL, SHOW_IMAGE_SOURCE } from "../image-generation.js";
@@ -418,6 +419,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       if (canvases) factories.push({ name: "canvases", factory: canvases.extension });
       // Beside the canvases: both are how the agent puts something on the screen.
       if (opts.sessionId) factories.push({ name: SHOW_IMAGE_SOURCE, factory: showImageTool(opts.cwd) });
+      // Slow tools run beside the conversation: their result comes back as a follow-up message, see background-tool.ts.
+      if (opts.sessionId) factories.push({ name: BACKGROUND_SOURCE, factory: backgroundTool({ spoken: () => voiceFirst.spokenTurn }) });
       // Registers nothing while the add-on is off or has no address: see GenerateImageTool.
       if (imageTool) factories.push({ name: GENERATE_IMAGE_SOURCE, factory: imageTool.extension });
       // The same for editing, with its own switch.

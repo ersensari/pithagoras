@@ -182,6 +182,8 @@ export class VoiceFirstTurn {
     private readonly explicitOff?: () => boolean,
   ) {}
   arm(first = true, typed = false) { this.active = true; this.first = first; this.typed = typed; this.tools = undefined; }
+  /** Whether the turn now running is spoken: read when a background job starts, so its result is read out the same way. */
+  get spokenTurn(): boolean { return this.active && !this.typed; }
   reset() { this.active = false; this.first = false; this.tools = undefined; }
   extension = (pi: any) => {
     pi.on('before_provider_request', (event: any, ctx: any) => {
