@@ -1,3 +1,4 @@
+import { replyLanguage } from "../pi/reply-language.js";
 import { addVoice, listVoices, readVoice, updateVoice, deleteVoice, VoiceNotFound } from '../voice-presets.js';
 import { spokenNumbers } from '../voice-numbers.js';
 import { INPUT_LANGUAGES, CHATTERBOX_LANGUAGES } from '../voice-languages.js';
@@ -88,12 +89,21 @@ let rateProbe: { url: string; rate: number; at: number } | undefined;
  * browser opens its audio context at it so streamed speech is not resampled.
  * Cached a minute; anything unreadable means 24000, the rate every other engine sends.
  */
+/**
+ * Another endpoint of the engine that serves `breezeUrl`, kept under the same prefix: on the Mac the engine is reached
+ * through `https://.../speech-playground/v1/audio/speech`, where `new URL("/health", ...)` dropped the prefix and asked
+ * another service (so the Mac always read 24000 for the rate).
+ */
+export function engineUrl(breezeUrl: string, path: string): string {
+  return /\/v1\/audio\/speech\/?$/.test(breezeUrl) ? breezeUrl.replace(/\/v1\/audio\/speech\/?$/, path) : new URL(path, breezeUrl).toString();
+}
+
 async function speechSampleRate(c: VoiceConfig): Promise<number> {
   if (c.runtime !== "audio-cpp" || !c.breezeUrl) return 24000;
   if (rateProbe?.url === c.breezeUrl && Date.now() - rateProbe.at < 60000) return rateProbe.rate;
   let rate = 24000;
   try {
-    const r = await fetch(new URL("/health", c.breezeUrl), { headers: voiceHeaders(), redirect: "error", signal: AbortSignal.timeout(2000) });
+    const r = await fetch(engineUrl(c.breezeUrl, "/health"), { headers: voiceHeaders(), redirect: "error", signal: AbortSignal.timeout(2000) });
     const body = r.ok ? await r.json() as { output_rate?: unknown } : {};
     if (body.output_rate === 48000) rate = 48000;
   } catch { /* the engine is down or answers otherwise: speech then fails on its own, with its own message */ }
@@ -590,6 +600,10 @@ export function voiceRouter(): Router {
           options: { instruction, guidance_scale: String(settings.cfgScale), seed: "42", stream_frames_per_event: "8", stream_lookahead_margin: "4" } };
         const voiceName = settings.voice === "design" ? undefined : omnivoiceVoice(settings.voice, libraryVoice(settings.voice)?.name ?? settings.voice);
         if (voiceName) json.voice = voiceName;
+        // The language the reply is expected in, from the person's message (pi/reply-language.ts): the engine reads short
+        // or mixed phrases in it, so "Rica ederim" is not read with the English voice prompt.
+        const lang = replyLanguage(req.params.id);
+        if (lang) json.language = lang;
       } else {
         form = new FormData();
         form.set("text", text); form.set("instruction", instruction); form.set("cfg_scale", String(settings.cfgScale));

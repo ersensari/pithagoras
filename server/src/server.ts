@@ -77,7 +77,8 @@ import { memoryRouter } from "./api/memory.js";
 import { memoryLlmRouter } from "./memory-llm.js";
 import { modelLevels, modelRuntime, providersRouter } from "./api/providers.js";
 import { peopleRouter } from "./api/people.js";
-import { voiceRouter } from "./api/voice.js";
+import { voiceRouter, config as voiceConfig, engineUrl } from "./api/voice.js";
+import { noteMessage } from "./pi/reply-language.js";
 import { meetingNotesRouter } from "./api/meeting-notes.js";
 import { speechRouter } from "./api/speech.js";
 import { mem0Router } from "./api/mem0.js";
@@ -874,6 +875,9 @@ app.post("/api/sessions/:id/prompt", promptJson, async (req, res) => {
   try {
     const images = saveImages(IMAGE_ROOT, session.id, parsed);
     await applySeriousDelegation(session.id, message);
+    // The language the reply is to be spoken in, from these words (pi/reply-language.ts); an audio-cpp engine also guesses it.
+    const voiceNow = voiceConfig();
+    await noteMessage(session.id, message, voiceNow.runtime === "audio-cpp" ? engineUrl(voiceNow.breezeUrl, "/v1/normalize") : undefined);
     // Returns as soon as pi accepts the prompt. The run continues server-side
     // regardless of what this browser does next.
     // A spoken message says whose voice it was, ahead of the words.
