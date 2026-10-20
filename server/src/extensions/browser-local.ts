@@ -56,6 +56,8 @@ export function headless(): boolean {
   // Headful when there is a display to put it on, which is the case worth
   // having: a headless browser is frequently refused by sign-in pages, and
   // signing in is the entire point of this.
+  // macOS has a window server without DISPLAY, so it is always headful there.
+  if (process.platform === "darwin") return false;
   return !process.env.DISPLAY;
 }
 
