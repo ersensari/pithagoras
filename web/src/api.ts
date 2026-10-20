@@ -461,6 +461,15 @@ export const api = {
     if (!res.ok) throw new ApiError(body.error || t("Live recognition failed"), res.status, body);
     return { type: "answer", sdp: String(body.sdp ?? "") };
   },
+  /** The language this chat's replies are expected in ('tr' or 'en'), or null when not known. Never throws. */
+  voiceLanguage: async (sessionId: string): Promise<'tr' | 'en' | null> => {
+    try {
+      const body = await json<{ language?: unknown }>(`/api/sessions/${sessionId}/voice/language`);
+      return body.language === 'tr' || body.language === 'en' ? body.language : null;
+    } catch {
+      return null;
+    }
+  },
   startMeeting: (sessionId: string) => json<{ ok: boolean }>(`/api/sessions/${sessionId}/meeting/start`, { method: "POST" }),
   /** Fire-and-forget from the recorder's point of view, but awaited by the caller so chunks never overlap in flight and land on disk out of order. */
   sendMeetingChunk: async (sessionId: string, samples: Float32Array, signal?: AbortSignal): Promise<void> => {

@@ -2,6 +2,7 @@ import { SpeechPipeline, type PreparedSpeech } from "./speech-pipeline";
 import type { Item } from "./transcript";
 import { StreamingSpeech } from "./voice";
 import { msg, t } from "./i18n";
+import { statusPhrase } from "./status-phrases";
 
 /** What is said while a reply takes long, in the portal's language: each goes through `t` when it is spoken. */
 export const THINKING_PHRASES = [
@@ -38,6 +39,8 @@ export interface VoiceIO {
   mergeReplies?: boolean;
   ttsPrefetch?: boolean;
   statusSpeech?: boolean;
+  /** The language this conversation's replies are in, for the status phrases; null/undefined keeps the portal's own text. */
+  language?: () => 'tr' | 'en' | null;
   transcribe: (samples: Float32Array, signal: AbortSignal) => Promise<string>;
   send: (text: string) => Promise<void>;
   abort: () => Promise<void>;
@@ -131,7 +134,7 @@ export class HandsFreeVoice {
         this.thinkingAnnounced = true; this.lastThinkingAt = Date.now();
         const candidates = THINKING_PHRASES.map((_, i) => i).filter(i => i !== this.lastThinkingPhrase);
         this.lastThinkingPhrase = candidates[Math.floor(Math.random() * candidates.length)];
-        this.thinkingPipeline.enqueue([t(THINKING_PHRASES[this.lastThinkingPhrase])],'status');
+        this.thinkingPipeline.enqueue([statusPhrase('thinking', this.io.language?.(), t(THINKING_PHRASES[this.lastThinkingPhrase]), this.lastThinkingPhrase)],'status');
       }, 1800);
     }
   }
@@ -143,8 +146,11 @@ export class HandsFreeVoice {
     if (active) {
       this.lastCompactionWaitAt = -Infinity;
       this.thinkingPipeline.cancel();
-      if (!this.hearing && this.acceptingReplies) this.pipeline.enqueue([t(COMPACTION_PHRASES[Math.floor(Math.random() * COMPACTION_PHRASES.length)])],'status');
-    } else this.pipeline.enqueue([completed ? t("Context compaction is done. I'm ready to continue.") : t("Context compaction stopped before it finished.")],'status');
+      if (!this.hearing && this.acceptingReplies) {
+        const i = Math.floor(Math.random() * COMPACTION_PHRASES.length);
+        this.pipeline.enqueue([statusPhrase('compaction-start', this.io.language?.(), t(COMPACTION_PHRASES[i]), i)],'status');
+      }
+    } else this.pipeline.enqueue([completed ? statusPhrase('compaction-done', this.io.language?.(), t("Context compaction is done. I'm ready to continue.")) : statusPhrase('compaction-stopped', this.io.language?.(), t("Context compaction stopped before it finished."))],'status');
     this.state();
   }
   observe(items: Item[]) {
@@ -162,7 +168,7 @@ export class HandsFreeVoice {
       this.compactionSpeech = true;
       if (this.io.statusSpeech !== false && !this.io.sequential && Date.now() - this.lastCompactionWaitAt >= 8000) {
         this.lastCompactionWaitAt = Date.now();
-        this.pipeline.enqueue([t("I'm still compacting our conversation. Please wait a moment; I'll let you know when I'm ready.")],'status');
+        this.pipeline.enqueue([statusPhrase('compaction-wait', this.io.language?.(), t("I'm still compacting our conversation. Please wait a moment; I'll let you know when I'm ready."))],'status');
       }
       return;
     }

@@ -189,6 +189,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const vadSettings = useRef(DEFAULT_VAD);
   const sequential = useRef(false);
   const statusSpeech = useRef(true);
+  /** The language this chat's replies are in (GET /api/sessions/:id/voice/language), for the spoken status phrases; null = not known. */
+  const spokenLanguage = useRef<'tr' | 'en' | null>(null);
   const [comparison, setComparison] = useState(false);
   const sentenceChunks = useRef(false);
   /** The rate the speech engine streams at (GET /api/voice): the audio context runs at it, so streamed speech is never resampled. */
@@ -597,6 +599,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       transcription.current = live;
       const controller = new HandsFreeVoice({
         statusSpeech: statusSpeech.current,
+        language: () => spokenLanguage.current,
         sequential: sequential.current,
         sentenceChunks: sentenceChunks.current,
         mergeReplies: mergeReplies.current,
@@ -623,6 +626,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
           replyAudio.current = []; setCanRepeat(false);
           try {
             await latest.current.onSend(text, { voice: true, ...(verdict ? { speaker: verdict } : {}), ...(images.length ? { images } : {}), ...(steer ? { steer: true } : {}) });
+            // The prompt has set the conversation's language now: ask for it, without waiting for the answer.
+            void api.voiceLanguage(sessionId).then(lang => { spokenLanguage.current = lang; });
           } catch (e) {
             if (images.length) pending.set(sessionId, [...images, ...pending.get(sessionId)]);
             if (!replyAudio.current.length) { replyAudio.current = before; setCanRepeat(before.length > 0); }
@@ -640,6 +645,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         error: message => { if (current()) {setError(message);profiler.current?.close('error');} },
       }, latest.current.items);
       voice.current = controller;
+      void api.voiceLanguage(sessionId).then(lang => { spokenLanguage.current = lang; });
       controller.setCompacting(latest.current.compacting);
       // Speech that is for the assistant: what it is told stops the reply, and is recorded as a request.
       const confirmSpeech = () => {

@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { inProcessHome } from "./server-harness.mjs";
+
+inProcessHome("pithagoras-replylang-");
 
 const { noteMessage, replyLanguage, forgetReplyLanguage } = await import("../dist/pi/reply-language.js");
 const { engineUrl } = await import("../dist/api/voice.js");
@@ -58,4 +61,24 @@ test("engine endpoints keep the prefix the engine is reached under", () => {
   assert.equal(engineUrl("https://h/speech-playground/v1/audio/speech", "/health"), "https://h/speech-playground/health");
   assert.equal(engineUrl("http://127.0.0.1:10108/v1/audio/speech", "/v1/normalize"), "http://127.0.0.1:10108/v1/normalize");
   assert.equal(engineUrl("http://127.0.0.1:10108/", "/health"), "http://127.0.0.1:10108/health");
+});
+
+test("the voice language endpoint answers with the chat's language, or null", async () => {
+  const { default: express } = await import("express");
+  const { voiceRouter } = await import("../dist/api/voice.js");
+  const { putSetting, createSession } = await import("../dist/db.js");
+  putSetting("voice", JSON.stringify({ enabled: true }));
+  createSession({ id: "rl-9", title: "rl", workspace: "/tmp", executor: "host" });
+  const app = express();
+  app.use("/api", voiceRouter());
+  const server = app.listen(0);
+  try {
+    const url = (id) => `http://127.0.0.1:${server.address().port}/api/sessions/${id}/voice/language`;
+    forgetReplyLanguage("rl-9");
+    assert.deepEqual(await (await fetch(url("rl-9"))).json(), { language: null });
+    await noteMessage("rl-9", "Bana İngilizce cevap ver", undefined, fakes());
+    assert.deepEqual(await (await fetch(url("rl-9"))).json(), { language: "en" });
+  } finally {
+    server.close();
+  }
 });

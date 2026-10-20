@@ -518,6 +518,14 @@ export function voiceRouter(): Router {
       res.json({ type: "answer", sdp: peer.answer });
     } catch (e) { res.status(502).json({ error: (e as Error).message }); }
   });
+  /**
+   * The language this chat's replies are expected in (pi/reply-language.ts), for what a client says by itself while it
+   * waits (the "let me think" and context-compaction phrases): null until a message has been seen.
+   */
+  router.get("/sessions/:id/voice/language", (req, res) => {
+    res.json({ language: replyLanguage(req.params.id) ?? null });
+  });
+
   router.post("/sessions/:id/voice/speech", async (req, res) => {
     // Recognition alone has nothing to speak with: say so, rather than send the text to an address that is not there.
     if (config().runtime === "none") return res.status(409).json({ error: "Speech synthesis is not installed: replies are not spoken" });
