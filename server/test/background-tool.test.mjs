@@ -330,3 +330,28 @@ test("in a typed turn the slow tools are called directly as before", () => {
   assert.equal(typed.handlers.tool_call({ toolName: "generate_image", input: {} }), undefined);
   assert.equal(typed.handlers.tool_call({ toolName: "web_search", input: {} }), undefined);
 });
+
+test("a picture job asks for show_image outside the data markers and arms the follow-up turn first", async () => {
+  const armed = [];
+  const gen = deferred();
+  const s = setup({ generate_image: () => gen.promise }, () => true, { beforeFollowUp: (spoken) => armed.push(spoken) });
+  await s.tool.execute("c1", { tool: "generate_image", args: { prompt: "a boat" }, title: "boat" }, undefined, undefined, {});
+  gen.resolve({ content: [{ type: "text", text: "Generated and shown to the user: generated-images/boat.png" }], details: { path: "generated-images/boat.png", portalImage: true } });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(armed, [true]);
+  assert.equal(s.sent.length, 1);
+  const msg = s.sent[0].text;
+  const closeAt = msg.indexOf("<<</untrusted:");
+  const instr = msg.indexOf('call the show_image tool now');
+  assert.ok(closeAt > 0 && instr > closeAt, "the instruction sits after the closing marker");
+  assert.match(msg, /path="generated-images\/boat\.png"/);
+});
+
+test("a search job gets no show_image instruction", async () => {
+  const d = deferred();
+  const s = setup({ web_search: () => d.promise }, () => false, { beforeFollowUp: () => {} });
+  await s.tool.execute("c1", { tool: "web_search", args: { queries: ["x"] }, title: "x" }, undefined, undefined, {});
+  d.resolve({ content: [{ type: "text", text: "results" }] });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.doesNotMatch(s.sent[0].text, /show_image/);
+});

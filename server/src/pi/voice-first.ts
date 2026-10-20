@@ -181,6 +181,8 @@ export class VoiceFirstTurn {
     /** Whether this chat's saved thinking level is "off": a person's own choice, which the tool-need raise must not undo. */
     private readonly explicitOff?: () => boolean,
   ) {}
+  /** A turn started by a background result that needs a tool call (show_image): judged as needing tools without asking, so thinking is raised. */
+  armForced(spoken: boolean) { this.active = true; this.first = true; this.typed = !spoken; this.tools = true; }
   arm(first = true, typed = false) { this.active = true; this.first = first; this.typed = typed; this.tools = undefined; }
   /** Whether the turn now running is spoken: read when a background job starts, so its result is read out the same way. */
   get spokenTurn(): boolean { return this.active && !this.typed; }

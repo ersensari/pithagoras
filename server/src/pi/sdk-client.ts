@@ -425,6 +425,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       // Only tools the model has right now: an inactive or unknown name is refused by the tool itself.
       if (opts.sessionId) factories.push({ name: BACKGROUND_SOURCE, factory: backgroundTool({
         spoken: () => voiceFirst.spokenTurn,
+        beforeFollowUp: (spoken) => voiceFirst.armForced(spoken),
         sessionId: opts.sessionId,
         getTool: (name) => {
           const s = sessionRef.current;
