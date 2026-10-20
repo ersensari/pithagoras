@@ -62,8 +62,8 @@ export function backgroundTool(opts: BackgroundToolOptions) {
       description:
         "Run a SLOW web or picture tool in the background so the conversation does not stop: web_search, fetch_content, " +
         "get_search_content, generate_image, edit_image. Give the tool name and its exact arguments. It returns at once; tell the " +
-        "person in one short sentence what you started, then keep talking. When the tool is done its result arrives as a message " +
-        "and you tell the person the outcome, briefly. Only these five tools run in the background; call every other tool " +
+        "person in one short sentence what you started and END YOUR TURN (do not call tools to wait for it or to look for the " +
+        "result). When the tool is done its result arrives by itself as a message and you tell the person the outcome, briefly. Only these five tools run in the background; call every other tool " +
         "directly. Do not use it for quick tools either (read, write, edit, ls, canvas, show_image).",
       parameters: Type.Object({
         tool: Type.String({ description: "The name of the tool to run: web_search, fetch_content, get_search_content, generate_image or edit_image." }),
@@ -161,7 +161,7 @@ export function backgroundTool(opts: BackgroundToolOptions) {
         return {
           content: [{
             type: "text" as const,
-            text: `Started in the background as job ${n}: ${title}. Keep talking with the person; the result arrives in a later message.`,
+            text: `Started in the background as job ${n}: ${title}. Now say ONE short sentence to the person about what you started and END YOUR TURN: do not call any tool to wait for it, look it up or search again for the same thing. Its result arrives by itself as a later message, and you tell the outcome then.`,
           }],
           details: { job: n, tool, title, status: "started" },
         };
