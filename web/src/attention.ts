@@ -1,7 +1,7 @@
 import type { SessionStatus } from "./api";
 import { t } from "./i18n";
 
-export const APP_NAME = "Pithagoras";
+export const APP_NAME = "Yulify";
 
 /**
  * What the browser tab says, for someone who is looking at another one.

@@ -68,7 +68,7 @@ export function VoiceEngines({ installed, fresh, busy, hardware, picked: pickedN
     ];
   const suggest = suggestion && !sameChoice(suggestion, shown) && <> <button type="button" className={btnCls} onClick={() => onPick(installed && sameChoice(suggestion, installed) ? null : suggestion)}>{t("Use the suggestion")}</button></>;
   return <div className="space-y-3 rounded-lg border border-line p-3">
-    <div><p className="text-xs font-medium">{t("Speech engines")}</p><p className="mt-1 text-xs text-fg-faint">{t("Pick how the voice speaks and listens. Pithagoras checks your GPU and tells you what fits.")}</p></div>
+    <div><p className="text-xs font-medium">{t("Speech engines")}</p><p className="mt-1 text-xs text-fg-faint">{t("Pick how the voice speaks and listens. Yulify checks your GPU and tells you what fits.")}</p></div>
     {cpuOnly && <p role="alert" className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">{hardware?.unusable?.length
       ? t("GPU detected: {name}, but Docker cannot use it. Install the NVIDIA Container Toolkit and restart Docker. Until then everything runs on the CPU: Kokoro can speak, the other speech engines need the GPU.", { name: hardware.unusable[0] })
       : t("No GPU detected. Everything runs on the CPU: Kokoro can speak, the other speech engines need a GPU.")}</p>}

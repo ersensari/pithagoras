@@ -109,7 +109,7 @@ export function SetupAssistant({ onClose, onStartChat }: { onClose: () => void; 
 
   return (
     <Modal
-      title={t("Set up Pithagoras")}
+      title={t("Set up Yulify")}
       subtitle={t("Three steps. Everything here can be changed later in Settings.")}
       onClose={later}
       footer={

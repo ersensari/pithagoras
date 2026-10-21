@@ -1410,7 +1410,7 @@ const de: Locale = {
     // components/SetupAssistant.tsx
     "What new chats start with": "Womit neue Chats beginnen",
     "What it can do besides": "Was er sonst noch kann",
-    "Set up Pithagoras": "Pithagoras einrichten",
+    "Set up Yulify": "Yulify einrichten",
     "Three steps. Everything here can be changed later in Settings.": "Drei Schritte. Alles hier lässt sich später in den Einstellungen ändern.",
     "{settings} → {providers} opens this assistant again.": "{settings} → {providers} öffnet diesen Assistenten wieder.",
     "Set up later": "Später einrichten",
@@ -1680,7 +1680,7 @@ const de: Locale = {
     "This installation has no speech synthesis: replies are not spoken and voice mode is off. Dictation, which only listens, works.": "Diese Installation hat keine Sprachsynthese: Antworten werden nicht vorgelesen, und der Sprachmodus ist aus. Diktieren, das nur zuhört, funktioniert.",
     "Dictation only": "Nur Diktieren",
     "Speech engines": "Sprach-Engines",
-    "Pick how the voice speaks and listens. Pithagoras checks your GPU and tells you what fits.": "Wähle, wie die Stimme spricht und zuhört. Pithagoras prüft deine GPU und sagt dir, was passt.",
+    "Pick how the voice speaks and listens. Yulify checks your GPU and tells you what fits.": "Wähle, wie die Stimme spricht und zuhört. Yulify prüft deine GPU und sagt dir, was passt.",
     "Choose for me, based on my GPU": "Für mich wählen, passend zu meiner GPU",
     "Speech synthesis engine": "Engine der Sprachsynthese",
     "English and Chinese, streams while it speaks": "Englisch und Chinesisch, streamt beim Sprechen",

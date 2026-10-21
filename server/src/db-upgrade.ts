@@ -86,7 +86,7 @@ function page(state: { message: string; failed?: string; damaged?: boolean; titl
     ? `<h1>${esc(state.title ?? "The database could not be upgraded")}</h1><p>${esc(state.failed)}</p><p>Nothing was changed: the portal is still on the database as it was.</p>` +
       (state.damaged ? `<h2>To repair it</h2><ol>${repairSteps().map((s) => `<li><pre>${esc(s)}</pre></li>`).join("")}</ol>` : "")
     : `<h1>Upgrading</h1><p>${esc(state.message)}</p><p>This page reloads by itself, and the portal opens when the upgrade is done.</p>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Pithagoras: upgrading</title>${state.failed ? "" : '<meta http-equiv="refresh" content="3">'}` +
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Yulify: upgrading</title>${state.failed ? "" : '<meta http-equiv="refresh" content="3">'}` +
     `<meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font:15px/1.5 system-ui,sans-serif;background:#0b0b0d;color:#e8e8ec;max-width:46rem;margin:12vh auto;padding:0 1.25rem}` +
     `h1{font-size:1.3rem}h2{font-size:1rem;margin-top:2rem}pre{white-space:pre-wrap;background:#18181c;border:1px solid #2c2c32;border-radius:8px;padding:.6rem .8rem;font-size:.82rem}p{color:#a3a3ad}</style></head><body>${body}</body></html>`;
 }

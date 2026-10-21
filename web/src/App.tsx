@@ -707,7 +707,7 @@ function Shell({
             would only repeat its title; in voice mode that header is gone. */}
         <header className="app-mobile-bar flex shrink-0 items-center gap-3 border-b border-line px-3 py-2 md:hidden">
           <button type="button" aria-label={t("Open navigation")} aria-expanded={mobileNav} aria-controls="mobile-navigation" onClick={() => setMobileNav(true)} className="rounded-lg p-2 text-fg hover:bg-fg/10"><LuMenu size={20}/></button>
-          <span className="truncate text-sm text-fg">{active?.title || "Pithagoras"}</span>
+          <span className="truncate text-sm text-fg">{active?.title || "Yulify"}</span>
         </header>
         {error && <ErrorBanner className="mx-4 mt-2" onClose={() => setError(null)}>{error}</ErrorBanner>}
         {/* Not for the first miss: a server restarting, or a wifi that blinked,
