@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
@@ -70,30 +71,55 @@ export function ownChromeReady(dir: string = ownProfileDir()): boolean {
   return existsSync(path.join(dir, "DevToolsActivePort"));
 }
 
+/** Whether something listens on the port (the file outlives Chrome, so its port alone proves nothing). */
+export function portOpen(port: number, timeoutMs = 800): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: "127.0.0.1", port });
+    const done = (ok: boolean) => {
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(timeoutMs, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
+/** Whether Chrome is running at all (macOS). */
+function chromeRunning(): boolean {
+  try {
+    return spawnSync("pgrep", ["-x", "Google Chrome"], { stdio: "ignore" }).status === 0;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * The endpoint, if Chrome has one. When the file is missing on macOS, Chrome is
- * opened once (never with a debugging flag) and this waits up to `timeoutMs`
- * for the file. Null when it still is not there.
+ * The endpoint of the owner's Chrome, once something answers on it. A file with a dead port is
+ * stale (Chrome was closed): on macOS Chrome is opened once and the new endpoint awaited. A running
+ * Chrome that publishes nothing has the toggle off: null, and the caller says how to turn it on.
  */
 export async function waitForOwnEndpoint(
   dir: string = ownProfileDir(),
-  { platform = process.platform, timeoutMs = 8000 }: { platform?: NodeJS.Platform; timeoutMs?: number } = {},
+  { platform = process.platform, timeoutMs = 15000 }: { platform?: NodeJS.Platform; timeoutMs?: number } = {},
 ): Promise<DebugEndpoint | null> {
   const found = readDebugEndpoint(dir);
-  if (found) return found;
-  if (platform !== "darwin" || ownChromeReady(dir)) return null;
-  try {
-    const child = spawn("open", ["-a", "Google Chrome"], { detached: true, stdio: "ignore" });
-    child.on("error", () => {});
-    child.unref();
-  } catch {
-    return null;
+  if (found && (await portOpen(found.port))) return found;
+  if (platform !== "darwin") return null;
+  if (!chromeRunning()) {
+    try {
+      const child = spawn("open", ["-a", "Google Chrome"], { detached: true, stdio: "ignore" });
+      child.on("error", () => {});
+      child.unref();
+    } catch {
+      return null;
+    }
   }
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, 400));
     const endpoint = readDebugEndpoint(dir);
-    if (endpoint) return endpoint;
+    if (endpoint && (await portOpen(endpoint.port))) return endpoint;
   }
   return null;
 }
