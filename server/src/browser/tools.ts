@@ -30,15 +30,26 @@ let connecting: Promise<Browser> | null = null;
 async function attachOwnChrome(): Promise<Browser> {
   const endpoint = await waitForOwnEndpoint();
   if (!endpoint) throw new Error(OWN_CHROME_NOT_OPEN);
-  try {
-    const b = await chromium.connectOverCDP(endpoint.ws, { timeout: 15_000 });
-    browser = b;
-    b.on("disconnected", () => {
-      if (browser === b) browser = null;
-    });
-    return b;
-  } catch (e) {
-    throw new Error(`${OWN_CHROME_NOT_OPEN} (${(e as Error).message.split("\n")[0]})`);
+  // Chrome answers 403 until the owner clicks "Allow" on its remote-debugging prompt (asked again after each
+  // Chrome start): keep trying for a while, so the click completes the request instead of failing it.
+  const until = Date.now() + 40_000;
+  for (;;) {
+    try {
+      const b = await chromium.connectOverCDP(endpoint.ws, { timeout: 15_000 });
+      browser = b;
+      b.on("disconnected", () => {
+        if (browser === b) browser = null;
+      });
+      return b;
+    } catch (e) {
+      const message = (e as Error).message.split("\n")[0];
+      if (/403/.test(message) && Date.now() < until) {
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
+      const hint = /403/.test(message) ? "Chrome is waiting for you to click Allow on its remote-debugging prompt. " : OWN_CHROME_NOT_OPEN + " ";
+      throw new Error(`${hint}(${message})`);
+    }
   }
 }
 
