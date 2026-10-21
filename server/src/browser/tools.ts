@@ -111,6 +111,9 @@ export async function browserPage(sessionId?: string): Promise<Page | undefined>
   return pages[pages.length - 1];
 }
 
+/** The tab a chat works in, opening one when the browser has none (the side panel's address bar needs that). */
+export const browserTab = (sessionId: string) => pageFor(sessionId);
+
 /** The tab a chat works in: the one it last used, else the most recent. */
 async function pageFor(sessionId: string): Promise<Page> {
   const known = seen.get(sessionId);

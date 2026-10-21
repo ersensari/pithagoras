@@ -1,5 +1,5 @@
 import type { Page } from "playwright-core";
-import { browserPage } from "./tools.js";
+import { browserPage, browserTab } from "./tools.js";
 
 /**
  * A live view of the agent's browser tab, and a way to act on it, for the native
@@ -41,8 +41,11 @@ export type PageProvider = (sessionId?: string) => Promise<Page | undefined>;
 
 /** Replaceable for tests; the default is the tab the agent's tools use. */
 let provider: PageProvider = browserPage;
+/** Opens a tab when there is none; off while a test provider is set. */
+let opener: PageProvider | undefined = (id) => browserTab(id ?? "viewer");
 export function setPageProvider(next?: PageProvider): void {
   provider = next ?? browserPage;
+  opener = next ? undefined : (id) => browserTab(id ?? "viewer");
 }
 
 /** An unreachable browser is a 503 for the caller, whatever the transport error said. */
@@ -160,7 +163,14 @@ async function settle(page: Page): Promise<void> {
 
 /** Performs one validated action on the chat's tab and answers with where it ended up. */
 export async function performAction(sessionId: string | undefined, input: ViewerAction): Promise<{ ok: true; url: string; title: string }> {
-  const page = await providePage(sessionId);
+  let page = await providePage(sessionId);
+  if (!page && input.action === "navigate" && opener) {
+    try {
+      page = await opener(sessionId);
+    } catch (e) {
+      throw new BrowserViewError(503, (e as Error).message);
+    }
+  }
   if (!page) throw new BrowserViewError(409, "The browser has no tab open");
   switch (input.action) {
     case "click":
