@@ -2,6 +2,7 @@ import { Type } from "typebox";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { BROWSER_CDP } from "../api/mcp.js";
 import * as local from "../extensions/browser-local.js";
+import { OWN_CHROME_NOT_OPEN, ownChromeEnabled, waitForOwnEndpoint } from "../extensions/browser-own.js";
 import { localMode } from "../extensions/browser-service.js";
 import { bareRef, REF_TOKEN } from "./ref.js";
 import { pointAt, pointTo, press, typing } from "./cursor.js";
@@ -21,7 +22,28 @@ import { diffViews, findNodes, findRef, pinned, renderView, sectionText, textPag
 let browser: Browser | null = null;
 let connecting: Promise<Browser> | null = null;
 
+/**
+ * BROWSER_OWN_CHROME: the owner's own Chrome, through the endpoint Chrome publishes
+ * for remote debugging. No fallback: a silent switch to the isolated browser would
+ * hide that the owner's logins are not in use.
+ */
+async function attachOwnChrome(): Promise<Browser> {
+  const endpoint = await waitForOwnEndpoint();
+  if (!endpoint) throw new Error(OWN_CHROME_NOT_OPEN);
+  try {
+    const b = await chromium.connectOverCDP(endpoint.ws, { timeout: 15_000 });
+    browser = b;
+    b.on("disconnected", () => {
+      if (browser === b) browser = null;
+    });
+    return b;
+  } catch (e) {
+    throw new Error(`${OWN_CHROME_NOT_OPEN} (${(e as Error).message.split("\n")[0]})`);
+  }
+}
+
 async function attach(): Promise<Browser> {
+  if (ownChromeEnabled()) return attachOwnChrome();
   return chromium
     .connectOverCDP(BROWSER_CDP, { timeout: 10_000 })
     .then((b) => {
@@ -55,6 +77,8 @@ async function waitForDebugPort(ms: number): Promise<void> {
  * this site" works without a click. Container mode keeps the error as it was.
  */
 async function attachOrStartLocal(): Promise<Browser> {
+  // The owner's Chrome is never replaced by the portal's own: see attachOwnChrome.
+  if (ownChromeEnabled()) return attach();
   try {
     return await attach();
   } catch (e) {
@@ -106,6 +130,11 @@ export function forgetBrowserSession(sessionId: string): boolean {
 export async function browserPage(sessionId?: string): Promise<Page | undefined> {
   const known = sessionId ? seen.get(sessionId) : undefined;
   if (known && !known.page.isClosed()) return known.page;
+  if (ownChromeEnabled()) {
+    // The owner's own tabs (their mail, their bank) are never the panel's: only the ones this portal opened.
+    const opened = [...seen.values()].map((s) => s.page).filter((p) => !p.isClosed());
+    return opened[opened.length - 1];
+  }
   const b = await connect();
   const pages = b.contexts()[0]?.pages() ?? [];
   return pages[pages.length - 1];
@@ -122,6 +151,12 @@ async function pageFor(sessionId: string): Promise<Page> {
   seen.delete(sessionId);
   const b = await connect();
   const context = b.contexts()[0] ?? (await b.newContext());
+  if (ownChromeEnabled()) {
+    // A tab of its own, never the owner's current one (it may be their mail).
+    const page = await context.newPage();
+    seen.set(sessionId, { page });
+    return page;
+  }
   const pages = context.pages();
   const page = pages.length ? pages[pages.length - 1] : await context.newPage();
   seen.set(sessionId, { page });

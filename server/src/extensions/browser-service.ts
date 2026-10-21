@@ -3,6 +3,12 @@ import { browserCdp } from "../api/mcp.js";
 import { getSetting, putSetting } from "../db.js";
 import { containerAction, containerState, dockerAvailable, ensureImage, imagePresent, request, type PullState } from "./docker.js";
 import * as local from "./browser-local.js";
+import { OWN_CHROME_NOT_OPEN, ownChromeEnabled, waitForOwnEndpoint } from "./browser-own.js";
+
+/** The owner's own Chrome: starting means opening it for the agent (never the isolated one), stopping never closes it. */
+async function startOwn(): Promise<void> {
+  if (!(await waitForOwnEndpoint())) throw new Error(OWN_CHROME_NOT_OPEN);
+}
 
 /**
  * The agent's browser, as something the portal installs rather than something
@@ -164,7 +170,7 @@ export async function install(): Promise<void> {
 async function installNow(): Promise<void> {
   // Nothing to install without Docker: the local runner uses a browser that is
   // already there, so installing is just starting it.
-  if (!dockerAvailable()) return local.start();
+  if (!dockerAvailable()) return ownChromeEnabled() ? startOwn() : local.start();
 
   const cfg = config();
   if (!cfg.password) {
@@ -191,20 +197,20 @@ async function installNow(): Promise<void> {
 
 export async function start(): Promise<void> {
   if (process.env.BROWSER_EXTERNAL === 'true') throw new Error('This browser is managed outside the portal');
-  if (!dockerAvailable()) return local.start();
+  if (!dockerAvailable()) return ownChromeEnabled() ? startOwn() : local.start();
   await containerAction(CONTAINER, "start");
 }
 
 export async function stop(): Promise<void> {
   if (process.env.BROWSER_EXTERNAL === 'true') throw new Error('This browser is managed outside the portal');
-  if (!dockerAvailable()) return local.stop();
+  if (!dockerAvailable()) return ownChromeEnabled() ? undefined : local.stop();
   await containerAction(CONTAINER, "stop");
 }
 
 /** Removes the container. The profile volume is left alone — that is the logins. */
 export async function remove(): Promise<void> {
   if (process.env.BROWSER_EXTERNAL === 'true') throw new Error('This browser is managed outside the portal');
-  if (!dockerAvailable()) return local.stop();
+  if (!dockerAvailable()) return ownChromeEnabled() ? undefined : local.stop();
   await containerAction(CONTAINER, "remove");
 }
 
