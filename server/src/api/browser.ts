@@ -26,6 +26,7 @@ import { PORTAL_BROWSER_TOOLS, browserTool } from "../tool-policy.js";
 import { BROWSER_CDP, browserServers, findConnection, mcpServerNames, readMcpFile, writeMcpFile } from "./mcp.js";
 import * as service from "../extensions/browser-service.js";
 import { ownChromeEnabled, ownChromeReady } from "../extensions/browser-own.js";
+import { ownChromeWaiting } from "../browser/tools.js";
 import * as viewer from "../browser/viewer.js";
 import { hostAllowed } from "../pi/guard.js";
 
@@ -225,7 +226,7 @@ export function browserRouter(): Router {
       install: await service.status(),
       // spec-25: the owner's own Chrome instead of the portal's; ready = Chrome has published its debugging endpoint.
       ownChrome: ownChromeEnabled(),
-      ...(ownChromeEnabled() ? { ownChromeReady: ownChromeReady() } : {}),
+      ...(ownChromeEnabled() ? { ownChromeReady: ownChromeReady(), ownChromeWaiting: ownChromeWaiting() } : {}),
       config: { user: service.config().user, hasPassword: Boolean(service.config().password) },
       // Whether a conversation that has never said anything about it has it,
       // and the ones that said otherwise.

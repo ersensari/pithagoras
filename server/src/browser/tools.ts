@@ -27,6 +27,10 @@ let connecting: Promise<Browser> | null = null;
  * for remote debugging. No fallback: a silent switch to the isolated browser would
  * hide that the owner's logins are not in use.
  */
+/** True while the owner's Chrome answers 403 (its Allow prompt is waiting); shown in GET /api/browser. */
+let waitingForAllow = false;
+export const ownChromeWaiting = (): boolean => waitingForAllow;
+
 async function attachOwnChrome(): Promise<Browser> {
   const endpoint = await waitForOwnEndpoint();
   if (!endpoint) throw new Error(OWN_CHROME_NOT_OPEN);
@@ -36,6 +40,7 @@ async function attachOwnChrome(): Promise<Browser> {
   for (;;) {
     try {
       const b = await chromium.connectOverCDP(endpoint.ws, { timeout: 15_000 });
+      waitingForAllow = false;
       browser = b;
       b.on("disconnected", () => {
         if (browser === b) browser = null;
@@ -44,9 +49,11 @@ async function attachOwnChrome(): Promise<Browser> {
     } catch (e) {
       const message = (e as Error).message.split("\n")[0];
       if (/403/.test(message) && Date.now() < until) {
+        waitingForAllow = true;
         await new Promise((r) => setTimeout(r, 1000));
         continue;
       }
+      waitingForAllow = false;
       const hint = /403/.test(message) ? "Chrome is waiting for you to click Allow on its remote-debugging prompt. " : OWN_CHROME_NOT_OPEN + " ";
       throw new Error(`${hint}(${message})`);
     }
