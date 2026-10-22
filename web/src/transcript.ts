@@ -400,6 +400,11 @@ export function buildTranscript(events: PortalEvent[], options: { ended?: boolea
         }
         break;
 
+      // A background completion is its own message; it must not close or replace a streaming reply.
+      case "portal_music_ready":
+        items.push({ kind: "assistant", id: `a${ev.seq}`, text: String(p.text ?? ""), thinking: "", done: true });
+        break;
+
       case "message_update": {
         const inner = p.assistantMessageEvent ?? {};
         const delta = typeof inner.delta === "string" ? inner.delta : "";

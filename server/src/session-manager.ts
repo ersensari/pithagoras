@@ -1,3 +1,4 @@
+import { MusicCompletion } from "./music-completion.js";
 import { createHash } from "node:crypto";
 import { LiveEvents } from "./live-events.js";
 import type { Timings } from "./llama-progress.js";
@@ -32,6 +33,7 @@ import { buildExecutor, type Executor } from "./executors/index.js";
 import { EXECUTOR_KIND } from "./executor-kind.js";
 import { describeToolCall } from "./tool-summary.js";
 import {
+  getDb,
   appendEvent,
   deleteEvent,
   deleteEventsAfter,
@@ -347,6 +349,7 @@ class SessionManager extends EventEmitter {
    * that: the channel acknowledged their messages, and will not send them again.
    */
   recoverOrphans(): string[] {
+    this.musicCompletion.resume();
     const orphaned = markOrphanedSessionsInterrupted();
     if (orphaned.length > 0) {
       console.log(`[portal] marked ${orphaned.length} session(s) interrupted (server restarted mid-run)`);
@@ -837,6 +840,16 @@ class SessionManager extends EventEmitter {
    * process pi started for one and one an extension started look the same
    * from outside; only while a call is running can a process be one.
    */
+  private musicCompletion = new MusicCompletion((sessionId, jobId, error) => {
+    if (!getSession(sessionId)) return;
+    // The persisted notice also guards a restart between delivery and removing the pending job.
+    if (getDb().prepare("SELECT 1 FROM events WHERE session_id = ? AND type = 'portal_music_ready' AND json_extract(payload, '$.jobId') = ? LIMIT 1").get(sessionId, jobId)) return;
+    this.record(sessionId, "portal_music_ready", {
+      jobId, error: !!error,
+      text: error ? `Müzik üretilemedi: ${error}` : "Müzik hazır. Oynat düğmesine basarak dinleyebilirsin.",
+    });
+  });
+
   private calls = new Map<string, Set<string>>();
 
   /**
@@ -864,6 +877,7 @@ class SessionManager extends EventEmitter {
       if (BACKGROUND_SUPPORTED) this.openWindow(sessionId, id);
     }
     if (event.type === "tool_execution_end") {
+      if (!event.isError) this.musicCompletion.watch(sessionId, event.result);
       calls?.delete(id);
       this.closeWindows(sessionId, (open) => open === id);
     }

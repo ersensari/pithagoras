@@ -23,6 +23,7 @@ import type { VoiceCue } from "../voice-cues";
 import type { VoicePhase } from "../hands-free";
 import { t } from "../i18n";
 import { VoiceOrb, useOrbStyle, type VoiceLevels } from "./VoiceOrb";
+import { MusicPlayer, musicJobId } from "./MusicPlayer";
 
 export type { VoiceLevels } from "./VoiceOrb";
 type OrbMode = "input" | "output" | "idle" | "muted";
@@ -49,12 +50,12 @@ const watchWide = (changed: () => void) => {
 /** Where focus is typing, so Space and a paste belong to that and not to voice mode. */
 const editing = (target: EventTarget | null) => !!(target as Element | null)?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
 
-export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasMinimize, onCanvasToggle, title, phase, starting, muted, speaking, levels, error, transcript, speaker, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue,
+export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasMinimize, onCanvasToggle, title, phase, starting, muted, speaking, musicPlaying, levels, error, transcript, speaker, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue,
   waitingForTap, items, running, onStop, attachments, onAddPictures, onRemovePicture, canRepeat, onRepeat, rate, onRate, steer, onSteer, unknownVoices, onUnknownVoices, ptt, onPtt, holding, onHold }: {
   sessionId: string; folder: string;
   workPhase?: Activity | null;
   canvasOpen: boolean; onCanvasMinimize: () => void; onCanvasToggle: () => void;
-  title: string; phase: VoicePhase; starting: boolean; muted: boolean; speaking: boolean;
+  title: string; phase: VoicePhase; starting: boolean; muted: boolean; speaking: boolean; musicPlaying?: boolean;
   levels: MutableRefObject<VoiceLevels>; transcript: string; /** Who spoke it, when the portal could tell (reliable verdicts only are shown). */ speaker?: RtcSpeaker; error: string; onMute: () => void; onEnd: () => void;
   browserAvailable: boolean; browserActivity: number; terminalActivity: number; toolEvents: PortalEvent[]; sounds: boolean; onSounds: () => void; onCue: (kind: VoiceCue) => void;
   /** Back after a reload, and waiting for a tap before audio may start. */
@@ -295,7 +296,7 @@ export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasM
     } catch { /* not the portal's page: its keys stay its own */ }
   };
   const input = !muted && phase === "Hearing you";
-  const mode: OrbMode = input ? "input" : speaking ? "output" : muted ? "muted" : "idle";
+  const mode: OrbMode = musicPlaying ? "output" : input ? "input" : speaking ? "output" : muted ? "muted" : "idle";
   const orbStyle = useOrbStyle(sessionId);
   const touch = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
   const status = waitingForTap ? (touch ? t("Tap to continue voice mode") : t("Click or press a key to continue voice mode")) : starting ? t("Connecting") : input || holding ? t("Hearing you") : speaking ? t("Speaking") : phase === "Speaking" ? t("Preparing your reply") : phase === "Thinking" ? t("Thinking") : phase === "Transcribing" ? t("Transcribing") : muted ? t("Microphone muted") : ptt ? (touch || !bindings["voice.hold"] ? t("Hold the microphone to talk") : t("Hold {keys} to talk", { keys: describe(bindings["voice.hold"], layout) })) : t("Listening");
@@ -450,6 +451,7 @@ export function VoiceStage({ sessionId, folder, workPhase, canvasOpen, onCanvasM
       <div className="voice-dock-center">
         {workPhase && (workPhase.label === 'processing the prompt' || workPhase.label === 'compacting the conversation') ? <ActivityProgress phase={workPhase} /> : <>
         <div className="voice-status" role="status"><span />{phase === 'Compacting context' ? t('Compacting context') : thought && anyPanel ? t("Thinking") : status}</div>
+        {musicPlaying && (() => { const item = [...items].reverse().find(item => item.kind === "tool" && musicJobId(item.output)); const id = item?.kind === "tool" ? musicJobId(item.output) : undefined; return id ? <MusicPlayer key={id} sessionId={sessionId} jobId={id} compact controlsOnly /> : null; })()}
         {anyPanel && thought && phase !== 'Compacting context' && <div ref={thoughtViewport} className="voice-thought-stream" role="group" aria-label={t("Live model thinking")}>{thought.slice(-1200)}</div>}
         </>}
       </div>

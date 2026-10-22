@@ -129,6 +129,9 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const noiseModel = useRef<NoiseModel>('off');
   const cleaned = useRef<Suppressed | undefined>(undefined);
   const [speaking, setSpeaking] = useState(false);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const musicPlayingRef = useRef(false);
+  const musicRestoreMuted = useRef(false);
   const mutedRef = useRef(false);
   const muteBusy = useRef(false);
   const startButton = useRef<HTMLButtonElement>(null);
@@ -303,6 +306,34 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       if (epoch.current === version) { setError((e as Error).message); stop(); }
     } finally { muteBusy.current = false; }
   };
+  const setMusicMicPaused = async (paused: boolean) => {
+    const audioPlaying = paused;
+    if (paused && !musicPlayingRef.current) musicRestoreMuted.current = mutedRef.current;
+    if (!paused && musicPlayingRef.current) paused = musicRestoreMuted.current;
+    if (!vad.current || paused === mutedRef.current) { musicPlayingRef.current = audioPlaying; setMusicPlaying(audioPlaying); return; }
+    const version = epoch.current;
+    const detector = vad.current;
+    mutedRef.current = paused;
+    setMuted(paused);
+    voice.current?.setMuted(paused);
+    if (paused) transcription.current?.reset();
+    try {
+      stream.current?.getTracks().forEach(track => { track.enabled = !paused; });
+      detector.setOptions({ submitUserSpeechOnPause: !paused });
+      if (paused) await detector.pause(); else await detector.start();
+      if (epoch.current === version) { musicPlayingRef.current = audioPlaying; setMusicPlaying(audioPlaying); }
+    } catch (e) {
+      if (epoch.current === version) { setError((e as Error).message); stop(); }
+    }
+  };
+  useEffect(() => {
+    const playback = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId: string; playing: boolean }>).detail;
+      if (detail?.sessionId === sessionId && session.get('voiceActive') === sessionId) void setMusicMicPaused(detail.playing);
+    };
+    window.addEventListener("pithagoras:music-playback", playback);
+    return () => window.removeEventListener("pithagoras:music-playback", playback);
+  }, [sessionId]);
   /** Push-to-talk pressed or let go. A press too short to hold a word is not sent. */
   const hold = (down: boolean) => {
     const controller = voice.current, live = transcription.current;
@@ -817,7 +848,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     {profileOpen&&createPortal(<VoiceProfile profiler={profiler.current!} onClose={()=>{setProfileOpen(false);profiler.current!.close('disabled');}}/>,document.body)}
 
     {(starting || enabled) && stageTarget && createPortal(
-      <VoiceStage sessionId={sessionId} folder={folder} workPhase={work} canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={sequentialMode ? `${title} · ${sentenceMode ? (prefetchMode ? t("Sentence pipeline · buffered audio") : t("Sentence chunks · buffered audio")) : t("Sequential baseline")}` : comparison ? `${title} · ${t("Streaming pipeline")}` : title} phase={phase} starting={starting} muted={muted} speaking={speaking}
+      <VoiceStage sessionId={sessionId} folder={folder} workPhase={work} canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={sequentialMode ? `${title} · ${sentenceMode ? (prefetchMode ? t("Sentence pipeline · buffered audio") : t("Sentence chunks · buffered audio")) : t("Sequential baseline")}` : comparison ? `${title} · ${t("Streaming pipeline")}` : title} phase={phase} starting={starting} muted={muted} speaking={speaking} musicPlaying={musicPlaying}
         browserAvailable={browserAvailable} browserActivity={browserActivity} terminalActivity={terminalActivity} toolEvents={toolEvents} sounds={sounds} onSounds={toggleSounds} onCue={cue}
         levels={levels} transcript={transcript} speaker={speaker} error={error} onMute={toggleMute} onEnd={endMode} waitingForTap={waitingForTap}
         items={items} running={running} onStop={() => { void latest.current.onAbort().catch(e => setError((e as Error).message)); }}

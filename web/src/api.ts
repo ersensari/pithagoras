@@ -553,6 +553,9 @@ export const api = {
    */
   pictureUrl: (id: string, path: string, version?: string | number) =>
     `/api/sessions/${id}/picture?path=${encodeURIComponent(path)}${version === undefined ? "" : `&v=${encodeURIComponent(String(version))}`}`,
+  musicScoreCanvas: (id: string, jobId: string) => `/api/sessions/${id}/music/jobs/${encodeURIComponent(jobId)}/score/canvas`,
+  musicJob: (id: string, jobId: string) => `/api/sessions/${id}/music/jobs/${encodeURIComponent(jobId)}`,
+  musicAudio: (id: string, jobId: string, download = false) => `/api/sessions/${id}/music/jobs/${encodeURIComponent(jobId)}/audio${download ? "?download=1" : ""}`,
   /** Removes a message and the agent's answer to it — from the agent's memory too. */
   deleteMessage: (id: string, seq: number) =>
     json<{ ok: true }>(`/api/sessions/${id}/messages/${seq}`, { method: "DELETE" }),

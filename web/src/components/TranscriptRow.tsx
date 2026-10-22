@@ -16,6 +16,7 @@ import { CompactionMarker, ThinkingBlock, ToolCall } from "./ChatActivity";
 import { Markdown, type MarkdownProps } from "./Markdown";
 import { PictureCall } from "./PictureCall";
 import { ReplyStatsLine } from "./ReplyStats";
+import { MusicPlayer, musicJobId } from "./MusicPlayer";
 
 function ContextChip({ label, body }: { label: string; body: string }) {
   const [open, setOpen] = useState(false);
@@ -338,6 +339,7 @@ export const TranscriptRow = memo(function TranscriptRow({
     return (
       <div data-key={item.id} className={`tool-row${enter}`}>
       <ToolCall item={item} onOpenTerminal={act.showInTerminal} onOpenAgent={agent ? () => act.openAgent(agent) : undefined} />
+      {musicJobId(item.output) && <MusicPlayer sessionId={sessionId} jobId={musicJobId(item.output)!} />}
       {item.picture && (
         // In the middle of the column, with as much room above as below. Contained, never cropped: a wide or tall picture is smaller here, and whole in the viewer.
         <div className="chat-picture my-3 flex justify-center">
