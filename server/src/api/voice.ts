@@ -620,7 +620,8 @@ export function voiceRouter(): Router {
           form.set("ref_text", reference.transcript);
         }
       }
-      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]);
+      const songRequest = /\[\s*style\s*:\s*song\b/i.test(text);
+      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(songRequest ? 15 * 60_000 : 120000)]);
       let upstream: Response;
       // Cancellation may leave Breeze finishing its current GPU operation.
       // Keep one browser request pending instead of exposing normal contention.
@@ -634,6 +635,14 @@ export function voiceRouter(): Router {
       } while (true);
       const runtimeName = settings.runtime === "chatterbox" ? "Chatterbox" : settings.runtime === "kokoro" ? "Kokoro" : "Breeze";
       if (!upstream.ok) throw new Error(`${runtimeName} returned HTTP ${upstream.status}`);
+      // Yue2 returns a complete WAV rather than a streaming TTS/PCM response.
+      // Keep the existing voice route and let the browser's normal audio decoder play it.
+      if (upstream.headers.get("content-type")?.startsWith("audio/wav")) {
+        const wav = Buffer.from(await upstream.arrayBuffer());
+        if (wav.length < 44 || wav.toString("ascii", 0, 4) !== "RIFF" || wav.toString("ascii", 8, 12) !== "WAVE")
+          throw new Error("Yue2 returned an invalid WAV file");
+        return res.set({ "Content-Type": "audio/wav", "Cache-Control": "no-store" }).send(wav);
+      }
       if (settings.runtime === "chatterbox" || settings.runtime === "kokoro") {
         if (!/^audio\/(wav|x-wav|wave|vnd\.wave)\b/.test(upstream.headers.get("content-type") ?? "")) throw new Error(`Expected WAV audio from the ${runtimeName} API`);
         const wav = Buffer.from(await upstream.arrayBuffer());
