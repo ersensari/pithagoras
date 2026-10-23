@@ -1,3 +1,4 @@
+import { handleClientControl } from "./client-controls";
 import { LuMenu, LuX } from "react-icons/lu";
 import { appendLiveEvents, resetLiveEvents } from "./live-events";
 import { fillFrom } from "./editor-fills";
@@ -371,6 +372,7 @@ function Shell({
         drain();
         setEvents(resetLiveEvents);
       });
+      es.addEventListener("control", m => { void handleClientControl(sessionId, JSON.parse((m as MessageEvent).data)).catch(() => {}); });
       es.addEventListener("canvas", (m) => canvasMessage(sessionId, JSON.parse((m as MessageEvent).data)));
       // Until it has caught up, what arrives is history being replayed. It is
       // gathered and applied in one go: drawing the conversation once per event

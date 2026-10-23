@@ -1,3 +1,4 @@
+import { clientControlTools } from "./client-control-tools.js";
 import { CanvasTools } from "./canvas-tools.js";
 import { showImageTool } from "./show-image-tool.js";
 import { BACKGROUND_SOURCE, backgroundTool } from "./background-tool.js";
@@ -418,6 +419,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
             [path.join(pi.getAgentDir(), "skills"), ...(builtinSkills ? [builtinSkills] : [])],
           ) },
       ];
+      if (opts.sessionId) factories.push({ name: "client-controls", factory: clientControlTools(opts.sessionId) });
       if (canvases) factories.push({ name: "canvases", factory: canvases.extension });
       // Beside the canvases: both are how the agent puts something on the screen.
       if (opts.sessionId) factories.push({ name: SHOW_IMAGE_SOURCE, factory: showImageTool(opts.cwd) });

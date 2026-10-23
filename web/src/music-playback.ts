@@ -1,6 +1,6 @@
 import { api } from "./api";
 
-type Track = { audio: HTMLAudioElement; listeners: Set<() => void>; release: () => void };
+type Track = { audio: HTMLAudioElement; listeners: Set<() => void>; release: () => void; touched: number };
 const tracks = new Map<string, Track>();
 const keyOf = (sessionId: string, jobId: string) => `${sessionId}:${jobId}`;
 
@@ -21,6 +21,7 @@ export function subscribeMusic(sessionId: string, jobId: string, changed: () => 
     let wasPlaying = false;
     const update = () => {
       const playing = !audio.paused && !audio.ended;
+      if (playing) { const track = tracks.get(key); if (track) track.touched = Date.now(); }
       if (playing !== wasPlaying) {
         wasPlaying = playing;
         if (playing) for (const other of tracks.values()) if (other.audio !== audio) other.audio.pause();
@@ -37,7 +38,7 @@ export function subscribeMusic(sessionId: string, jobId: string, changed: () => 
       else if (detail.action === "pause" || detail.action === "toggle") audio.pause();
     };
     window.addEventListener("yulify:music-control", control);
-    track = { audio, listeners, release: () => {
+    track = { audio, listeners, touched: Date.now(), release: () => {
       audio.pause(); update();
       events.forEach(type => audio.removeEventListener(type, update));
       window.removeEventListener("yulify:music-control", control);
@@ -52,4 +53,33 @@ export function subscribeMusic(sessionId: string, jobId: string, changed: () => 
     subscribed.listeners.delete(changed);
     if (!subscribed.listeners.size) { subscribed.release(); tracks.delete(key); }
   };
+}
+
+/** The agent and visible buttons use the same audio source and preserve microphone playback events. */
+export async function controlMusicPlayer(sessionId: string, action: string, jobId?: string, seconds?: number, expiresAt = Date.now() + 8000) {
+  const available = [...tracks.entries()].filter(([key]) => key.startsWith(`${sessionId}:`)).map(([, track]) => track)
+    .sort((a, b) => Number(!b.audio.paused) - Number(!a.audio.paused) || b.touched - a.touched);
+  const track = jobId ? available.find(track => track.audio.dataset.musicJob === jobId) : available[0];
+  if (!track) return { ok: false, status: "no_player", message: "No matching ready music player is loaded in this chat." };
+  const audio = track.audio;
+  const play = async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([audio.play(), new Promise<never>((_, reject) => {
+        timer = setTimeout(() => { audio.pause(); reject(new Error("Playback did not start before the control expired.")); }, Math.max(0, expiresAt - Date.now() - 500));
+      })]);
+    } finally { clearTimeout(timer); }
+  };
+  track.touched = Date.now();
+  if (action === "pause") audio.pause();
+  else if (action === "stop") { audio.pause(); audio.currentTime = 0; }
+  else if (action === "replay") { audio.currentTime = 0; await play(); }
+  else if (action === "play") await play();
+  else if (action === "seek") {
+    if (seconds === undefined || !Number.isFinite(seconds) || seconds < 0) throw new Error("Invalid seek position");
+    audio.currentTime = Number.isFinite(audio.duration) ? Math.min(seconds, audio.duration) : seconds;
+  } else if (action !== "status") throw new Error("Unsupported music control");
+  return { ok: true, status: "applied", action, jobId: audio.dataset.musicJob, playing: !audio.paused && !audio.ended,
+    seconds: audio.currentTime, duration: Number.isFinite(audio.duration) ? audio.duration : null,
+    availableJobs: available.map(track => track.audio.dataset.musicJob) };
 }

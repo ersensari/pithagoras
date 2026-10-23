@@ -397,6 +397,14 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     requestAnimationFrame(() => startButton.current?.focus({ preventScroll: true }));
   };
 
+  useEffect(() => {
+    const end = (event: Event) => {
+      if ((event as CustomEvent).detail?.sessionId === sessionId && session.get("voiceActive") === sessionId) endMode();
+    };
+    window.addEventListener("yulify:end-voice", end);
+    return () => window.removeEventListener("yulify:end-voice", end);
+  }, [sessionId]);
+
   /** Plays one prepared phrase through the orb's meter. Shared by replies and Repeat. */
   const playThrough = async (audio: AudioContext, signal: AbortSignal, start: (analyser: AnalyserNode, started: (scheduledAt?: number) => void) => Promise<void>, onStarted?: (scheduledAt: number) => void) => {
     signal.throwIfAborted();

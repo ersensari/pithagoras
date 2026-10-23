@@ -1,3 +1,4 @@
+import { clientControlEvents, claimClientControl, finishClientControl } from "../client-controls.js";
 import express, { type Router } from "express";
 import { canvasEvents, listCanvases } from "../canvases.js";
 import { eventsBefore, getSession, replayStart, type EventRow } from "../db.js";
@@ -26,6 +27,19 @@ const IN_SNAPSHOT = new Set(["message_update", "tool_execution_update", "portal_
 
 export function eventsRouter(): Router {
   const router = express.Router();
+
+  router.post("/sessions/:id/client-controls/:command/:operation", (req, res) => {
+    if (!getSession(String(req.params.id))) return res.status(404).json({ error: "Session not found" });
+    const { client, result } = req.body ?? {};
+    if (typeof client !== "string" || !client || client.length > 128) return res.status(400).json({ error: "client required" });
+    const sessionId = String(req.params.id), id = String(req.params.command);
+    if (req.params.operation === "claim") return res.json({ claimed: claimClientControl(sessionId, id, client) });
+    if (req.params.operation === "result") {
+      if (!result || typeof result !== "object" || typeof result.ok !== "boolean" || JSON.stringify(result).length > 8000) return res.status(400).json({ error: "Invalid control result" });
+      return res.json({ accepted: finishClientControl(sessionId, id, client, result) });
+    }
+    return res.sendStatus(404);
+  });
 
   /** What came before a cursor: the transcript scrolling back rather than forward. */
   router.get("/sessions/:id/events/before", (req, res) => {
@@ -117,6 +131,8 @@ export function eventsRouter(): Router {
       sendHeld();
       writeCanvas(message);
     };
+    const onControl = (command: unknown) => { if (!left()) res.write(`event: control\ndata: ${JSON.stringify(command)}\n\n`); };
+    clientControlEvents.on(session.id, onControl);
     canvasEvents.on(session.id, onCanvas);
     writeCanvas({ type: "snapshot", canvases: listCanvases(session.id) });
 
@@ -154,6 +170,7 @@ export function eventsRouter(): Router {
       clearInterval(heartbeat);
       sessions.off(`session:${session.id}`, onEvent);
       canvasEvents.off(session.id, onCanvas);
+      clientControlEvents.off(session.id, onControl);
       clearTimeout(heldTimer);
     });
 
