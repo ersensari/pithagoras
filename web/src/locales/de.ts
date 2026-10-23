@@ -22,6 +22,7 @@ const de: Locale = {
     "Waiting for GPU": "Warte auf GPU",
     "Loading music model": "Musikmodell wird geladen",
     "Composing music": "Musik wird komponiert",
+    "Playback position": "Wiedergabeposition",
     "Music playing": "Musik läuft",
     "Play": "Abspielen",
     "Pause": "Pausieren",

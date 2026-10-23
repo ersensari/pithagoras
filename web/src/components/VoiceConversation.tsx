@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
+import { MusicPlayer, musicJobId } from "./MusicPlayer";
 import { Markdown } from "./Markdown";
 import { api } from "../api";
 import type { Item } from "../transcript";
@@ -21,7 +22,7 @@ const SHOWN = 30;
  * string beside the orb, and sits in a speech bubble like what you said.
  */
 export function VoiceConversation({ sessionId, items }: { sessionId: string; items: Item[] }) {
-  const list = items.filter(item => item.kind === "user" || (item.kind === "assistant" && item.text.trim())).slice(-SHOWN);
+  const list = items.filter(item => item.kind === "user" || (item.kind === "assistant" && item.text.trim()) || (item.kind === "tool" && musicJobId(item.output))).slice(-SHOWN);
   const viewport = useRef<HTMLDivElement>(null);
   const last = list.at(-1);
   const lastLength = last?.kind === "assistant" ? last.text.length : 0;
@@ -43,6 +44,10 @@ export function VoiceConversation({ sessionId, items }: { sessionId: string; ite
                   render as what it is about to be, not flicker. */}
               <Markdown parseIncompleteMarkdown isAnimating={!item.done}>{assistantText(item)}</Markdown>
             </div>
-          : null)}
+          : item.kind === "tool" && musicJobId(item.output)
+            ? <div key={item.id} className="w-full min-w-0" data-voice-music-job={musicJobId(item.output)}>
+                <MusicPlayer sessionId={sessionId} jobId={musicJobId(item.output)!} controlsOnly />
+              </div>
+            : null)}
   </div>;
 }

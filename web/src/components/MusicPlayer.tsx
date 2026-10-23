@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LuDownload, LuLoaderCircle, LuPause, LuPlay, LuShare2, LuMusic2 } from "react-icons/lu";
 import { api, json } from "../api";
+import { musicAudioElement, subscribeMusic } from "../music-playback";
 import { canvasMessage } from "../canvas-feed";
 import { t } from "../i18n";
 
@@ -15,10 +16,12 @@ export function MusicPlayer({ sessionId, jobId, compact = false, controlsOnly = 
 }) {
   const [job, setJob] = useState<Job>({ id: jobId, status: "queued" });
   const [playing, setPlaying] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const sourceAudio = () => musicAudioElement(sessionId, jobId);
   const [openingScore, setOpeningScore] = useState(false);
   const [scoreError, setScoreError] = useState("");
-  const audio = useRef<HTMLAudioElement>(null);
-  const previousPlaying = useRef(false);
+  const audioHost = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let live = true;
     let timer: number | undefined;
@@ -38,33 +41,26 @@ export function MusicPlayer({ sessionId, jobId, compact = false, controlsOnly = 
     return () => { live = false; if (timer) clearTimeout(timer); };
   }, [sessionId, jobId]);
   useEffect(() => {
-    if (!controlsOnly) return;
-    const playback = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      if (detail?.sessionId === sessionId && detail?.jobId === jobId) setPlaying(!!detail.playing);
+    if (job.status !== "done") return;
+    const release = subscribeMusic(sessionId, jobId, () => {
+      const element = musicAudioElement(sessionId, jobId);
+      if (!element) return;
+      setPlaying(!element.paused && !element.ended);
+      setPosition(element.currentTime);
+      setDuration(Number.isFinite(element.duration) ? element.duration : 0);
+    });
+    const element = musicAudioElement(sessionId, jobId)!;
+    const host = audioHost.current;
+    if (!controlsOnly && host) host.appendChild(element);
+    return () => {
+      if (element.parentNode === host) element.remove();
+      release();
     };
-    window.addEventListener("pithagoras:music-playback", playback);
-    return () => window.removeEventListener("pithagoras:music-playback", playback);
-  }, [controlsOnly, sessionId, jobId]);
-  useEffect(() => {
-    if (controlsOnly) return;
-    const control = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      if (detail?.sessionId !== sessionId || detail?.jobId !== jobId) return;
-      if (detail.action === "play" || (detail.action === "toggle" && audio.current?.paused)) void audio.current?.play().catch(() => {});
-      else if (detail.action === "pause" || detail.action === "toggle") audio.current?.pause();
-    };
-    window.addEventListener("pithagoras:music-control", control);
-    return () => window.removeEventListener("pithagoras:music-control", control);
-  }, [controlsOnly, sessionId, jobId]);
+  }, [controlsOnly, sessionId, jobId, job.status]);
   useEffect(() => {
     onPlay?.(playing);
-    if (previousPlaying.current !== playing) {
-      previousPlaying.current = playing;
-      window.dispatchEvent(new CustomEvent("pithagoras:music-playback", { detail: { sessionId, jobId, playing } }));
-    }
     return () => { onPlay?.(false); };
-  }, [playing, onPlay, sessionId, jobId]);
+  }, [playing, onPlay]);
   const openScore = async () => {
     setOpeningScore(true); setScoreError("");
     try {
@@ -87,12 +83,18 @@ export function MusicPlayer({ sessionId, jobId, compact = false, controlsOnly = 
       : job.status === "waiting_for_gpu" ? t("Waiting for GPU") : t("Music queued");
     return <div className={`my-2 flex items-center gap-2 rounded-xl border border-line bg-raised/60 p-3 text-sm text-fg-muted${compact ? " max-w-sm" : ""}`}><LuLoaderCircle className="animate-spin" aria-hidden />{label}</div>;
   }
-  if (controlsOnly) return <div className="my-2 flex max-w-sm items-center gap-2 rounded-xl border border-line bg-raised/60 p-2 text-xs text-fg-muted">
+  const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+  const remoteControls = <div className="flex min-w-0 items-center gap-2 text-xs text-fg-muted">
     <button type="button" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent hover:bg-accent/20" aria-label={t(playing ? "Pause" : "Play")} title={t(playing ? "Pause" : "Play")} onClick={() => window.dispatchEvent(new CustomEvent("pithagoras:music-control", { detail: { sessionId, jobId, action: "toggle" } }))}>{playing ? <LuPause aria-hidden /> : <LuPlay aria-hidden />}</button>
-    <span className="min-w-0 flex-1 truncate">{t("Music playing")}</span>
+    {compact ? <span className="min-w-0 flex-1 truncate">{t(playing ? "Music playing" : "Play")}</span> : <>
+      <span className="shrink-0 tabular-nums">{clock(position)}</span>
+      <input type="range" className="min-w-0 flex-1 accent-accent" aria-label={t("Playback position")} min={0} max={duration || 0} step={0.1} value={Math.min(position, duration)} disabled={!duration} onChange={event => { const element = sourceAudio(); if (element) { element.currentTime = Number(event.target.value); setPosition(element.currentTime); } }} />
+      <span className="shrink-0 tabular-nums">{clock(duration)}</span>
+    </>}
   </div>;
+  if (controlsOnly && compact) return <div className="my-2 max-w-sm rounded-xl border border-line bg-raised/60 p-2">{remoteControls}</div>;
   return <div className={`my-2 rounded-xl border border-line bg-raised/60 p-3${compact ? " max-w-sm" : ""}`}>
-    <audio ref={audio} data-music-job={jobId} className="w-full" controls preload="metadata" src={api.musicAudio(sessionId, jobId)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />
+    {controlsOnly ? remoteControls : <div ref={audioHost} />}
     {scoreError && <p role="alert" className="mt-2 text-xs text-danger">{scoreError}</p>}
     <div className="mt-2 flex flex-wrap justify-end gap-2">
       <button type="button" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 disabled:opacity-50" disabled={openingScore || !(job.abc || job.request?.abc)} title={job.abc || job.request?.abc ? t("View score in canvas") : t("No score available for this song")} onClick={() => void openScore()}>{openingScore ? <LuLoaderCircle className="animate-spin" aria-hidden /> : <LuMusic2 aria-hidden />}{t("View score in canvas")}</button>
