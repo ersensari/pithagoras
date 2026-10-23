@@ -62,12 +62,8 @@ services:
       # defaultModel) decides. Baking values in here made those unreachable.
       PI_PROVIDER: ${PI_PROVIDER:-}
       PI_MODEL: ${PI_MODEL:-}
-      # forgeloop-provider's resolveApiKey() checks this (or LITELLM_API_KEY,
-      # or auth.json's .litellm.key) to authenticate against Strata - without
-      # it the bundled Pi has no credential at all, even though
-      # defaultProvider/defaultModel are pre-wired in settings.json. Reads
-      # from whatever the invoking shell already has set (source
-      # forgeloop-ai's .env first if this is empty on a fresh shell).
+      # Client token minted by forgeloop-provider.
+      PORTAL_ALLOWED_PROVIDERS: ${PORTAL_ALLOWED_PROVIDERS:-}
       FORGELOOP_SERVER_BEARER_TOKEN: ${FORGELOOP_SERVER_BEARER_TOKEN:-}
       PI_THINKING_LEVEL: ${PI_THINKING_LEVEL:-}
       # Provider keys, passed on to pi. For another provider, add its variable

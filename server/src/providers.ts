@@ -291,6 +291,11 @@ const isPlaceholder = (key: unknown) => typeof key === "string" && ["none", "oll
  * ones pi finds a key for elsewhere — the environment — which are shown too,
  * as set up, since they are.
  */
+export function providerAllowed(id: string): boolean {
+  const allowed = process.env.PORTAL_ALLOWED_PROVIDERS?.split(",").map((v) => v.trim()).filter(Boolean);
+  return !allowed?.length || allowed.includes(id);
+}
+
 export function listProviders(names: Record<string, string> = {}, envKeyed: Record<string, string> = {}): ProviderInfo[] {
   const models = readModelsJson().providers ?? {};
   const auth = readAuthJson();
@@ -327,7 +332,7 @@ export function listProviders(names: Record<string, string> = {}, envKeyed: Reco
     if (listed.has(id)) continue;
     out.push({ id, kind: id === "openrouter" ? "openrouter" : "hosted", label: names[id] ?? id, models: [], endpoint: false, key: { set: true, source } });
   }
-  return out;
+  return out.filter((p) => providerAllowed(p.id));
 }
 
 // --- finding a server's models ---
@@ -609,6 +614,7 @@ export function mergeModels(existing: ModelEntry[], wanted: ModelEntry[]): Model
 export class TakenError extends Error {}
 
 export function saveProvider(id: string, body: SaveProvider): Promise<Changed> {
+  if (!providerAllowed(id)) return Promise.reject(new Error("This deployment uses only its configured provider."));
   if (!ID_RE.test(id)) return Promise.reject(new Error("A provider's name is letters, digits and - _ . : = — and starts with a letter or digit."));
   const preset = PRESETS.find((p) => p.kind === body.kind);
   if (!preset) return Promise.reject(new Error(`Unknown kind of provider: ${body.kind}`));

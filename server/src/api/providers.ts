@@ -3,7 +3,7 @@ import { agentHome } from "../agent-home.js";
 import { addExtensionProviders, rereadConfig, thinkingLevelsOf } from "../pi/model-runtime.js";
 import { readPiSettings } from "../pi-settings.js";
 import {
-  APIS, PRESETS, ProbeError, TakenError, checkProviders, configStamp, listProviders, probeModels, removeProvider, saveProvider, savedServer,
+  APIS, PRESETS, ProbeError, TakenError, checkProviders, configStamp, listProviders, providerAllowed, probeModels, removeProvider, saveProvider, savedServer,
   type ProviderKind,
 } from "../providers.js";
 
@@ -104,7 +104,7 @@ async function services(): Promise<{ names: Record<string, string>; envKeyed: Re
     const envKeyed: Record<string, string> = {};
     const hosted: { id: string; name: string }[] = [];
     for (const p of rt.getProviders() as { id: string; name?: string }[]) {
-      names[p.id] = p.name ?? p.id;
+      if (providerAllowed(p.id)) names[p.id] = p.name ?? p.id;
       hosted.push({ id: p.id, name: p.name ?? p.id });
       const status = rt.getProviderAuthStatus?.(p.id);
       if (status?.configured && status.source === "environment") envKeyed[p.id] = "environment";
@@ -126,7 +126,7 @@ export function providersRouter(): Router {
 
   router.get("/providers", async (_req, res) => {
     const { names, envKeyed, hosted } = await services();
-    res.json({ presets: PRESETS, apis: APIS, providers: listProviders(names, envKeyed), hosted });
+    res.json({ presets: process.env.PORTAL_ALLOWED_PROVIDERS ? PRESETS.filter((p) => p.endpoint) : PRESETS, apis: APIS, providers: listProviders(names, envKeyed), hosted: hosted.filter((p) => providerAllowed(p.id)) });
   });
 
   /** Whether each server answers now: for the dot beside it. */
@@ -179,9 +179,9 @@ export function providersRouter(): Router {
   router.get("/models", async (_req, res) => {
     try {
       const rt = await modelRuntime();
-      const available = (await rt.getAvailable()) as any[];
+      const available = ((await rt.getAvailable()) as any[]).filter((m) => providerAllowed(m.provider));
       const names: Record<string, string> = {};
-      for (const p of rt.getProviders() as { id: string; name?: string }[]) names[p.id] = p.name ?? p.id;
+      for (const p of rt.getProviders() as { id: string; name?: string }[]) if (providerAllowed(p.id)) names[p.id] = p.name ?? p.id;
       res.json({
         models: available.map((m) => ({
           provider: m.provider, id: m.id, name: m.name ?? m.id, contextWindow: m.contextWindow,

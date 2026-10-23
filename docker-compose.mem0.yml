@@ -26,13 +26,10 @@ services:
       MEM0_TELEMETRY: "False"
       MEM0_BEARER_TOKEN: ${MEM0_BEARER_TOKEN:?set this in .env}
       MEM0_EMBEDDER_BASE_URL: http://127.0.0.1:8089/v1
-      # 2026-10-20: the LLM went from the old strata-swift (127.0.0.1:10084, swift-1.5-iq3_xxs) to LiteLLM's
-      # minicpm-mem0 alias - that port died with the 2026-10-17 PolyStrata migration and every memory_add
-      # failed with "LLM extraction failed: Connection error". The alias forces thinking off (mem0 reads
-      # message.content, null on MiniCPM when thinking is on) and rides GPU 1's resident model - no swap.
-      MEM0_LLM_BASE_URL: http://127.0.0.1:10080/v1
+      # Fact extraction uses its own scoped token through the local provider.
+      MEM0_LLM_BASE_URL: http://127.0.0.1:10115/v1
       MEM0_LLM_MODEL: minicpm-mem0
-      MEM0_LLM_API_KEY: ${LITELLM_MASTER_KEY:?set this in .env}
+      MEM0_LLM_API_KEY: ${MEM0_PROVIDER_API_KEY:?mint a provider token with llm scope}
 
 volumes:
   mem0-data:
