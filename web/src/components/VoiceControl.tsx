@@ -1,3 +1,4 @@
+import { musicPlayingInSession } from "../music-playback";
 import { DEFAULT_VAD } from '../api';
 import { EchoProbe, settleFor } from '../echo-guard';
 import { local, session } from '../safe-storage';
@@ -215,6 +216,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
 
   const stop = () => {
     profiler.current?.close('stopped');
+    musicPlayingRef.current = false; musicRestoreMuted.current = false;
+    if (mounted.current) setMusicPlaying(false);
     // Ended, or left for another chat: a reload after this does not bring it back.
     if (session.get('voiceActive') === sessionId) session.remove('voiceActive');
     releaseLock.current?.(); releaseLock.current = undefined;
@@ -326,6 +329,9 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       if (epoch.current === version) { setError((e as Error).message); stop(); }
     }
   };
+  useEffect(() => {
+    if (enabled) void setMusicMicPaused(musicPlayingInSession(sessionId));
+  }, [enabled, sessionId]);
   useEffect(() => {
     const playback = (event: Event) => {
       const detail = (event as CustomEvent<{ sessionId: string; playing: boolean }>).detail;

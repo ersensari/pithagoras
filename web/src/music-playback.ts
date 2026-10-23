@@ -7,6 +7,9 @@ const keyOf = (sessionId: string, jobId: string) => `${sessionId}:${jobId}`;
 /** Chat, orb and its conversation window all control one audio source per song. */
 export const musicAudioElement = (sessionId: string, jobId: string) => tracks.get(keyOf(sessionId, jobId))?.audio;
 
+export const musicPlayingInSession = (sessionId: string) => [...tracks.entries()]
+  .some(([key, track]) => key.startsWith(`${sessionId}:`) && !track.audio.paused && !track.audio.ended);
+
 export function subscribeMusic(sessionId: string, jobId: string, changed: () => void): () => void {
   const key = keyOf(sessionId, jobId);
   let track = tracks.get(key);
