@@ -8,7 +8,12 @@ name: forgeloop-ai
 # mem0-server/server.py's docstring for why.
 services:
   mem0:
-    build: ./mem0-server
+    build:
+      context: ./mem0-server
+      labels:
+        forgeloop.managed: "true"
+        forgeloop.project: "forgeloop-ai"
+        forgeloop.resource: "mem0-image"
     image: forgeloop-ai-yulify-mem0:latest
     labels:
       forgeloop.managed: "true"
