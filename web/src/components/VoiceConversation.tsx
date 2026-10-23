@@ -5,6 +5,7 @@ import { api } from "../api";
 import type { Item } from "../transcript";
 import { t } from "../i18n";
 import { assistantText } from "../voice";
+import { splitContext } from "../context-blocks";
 
 /** How much of the conversation the window shows: enough to find what was just said. */
 const SHOWN = 30;
@@ -22,7 +23,11 @@ const SHOWN = 30;
  * string beside the orb, and sits in a speech bubble like what you said.
  */
 export function VoiceConversation({ sessionId, items }: { sessionId: string; items: Item[] }) {
-  const list = items.filter(item => item.kind === "user" || (item.kind === "assistant" && item.text.trim()) || (item.kind === "tool" && musicJobId(item.output))).slice(-SHOWN);
+  // Reuse the main chat's framing parser, showing only the person's words here.
+  const list = items
+    .map(item => item.kind === "user" ? { ...item, text: splitContext(item.text).text } : item)
+    .filter(item => (item.kind === "user" && (item.text || item.images?.length)) || (item.kind === "assistant" && item.text.trim()) || (item.kind === "tool" && musicJobId(item.output)))
+    .slice(-SHOWN);
   const viewport = useRef<HTMLDivElement>(null);
   const last = list.at(-1);
   const lastLength = last?.kind === "assistant" ? last.text.length : 0;
