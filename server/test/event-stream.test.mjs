@@ -8,7 +8,7 @@ import { inProcessHome } from "./server-harness.mjs";
 // the stored text as it is, every event once and in order however long the
 // catching up, and nothing piled up in the server for a reader that is slow.
 
-const home = inProcessHome("pithagoras-events-");
+const home = inProcessHome("yulify-events-");
 
 const { default: express } = await import("express");
 const { appendEvent, atomically, createSession, eventsSince, getDb } = await import("../dist/db.js");

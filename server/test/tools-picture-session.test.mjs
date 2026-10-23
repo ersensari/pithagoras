@@ -9,7 +9,7 @@ import { inProcessHome } from "./server-harness.mjs";
  * registered, one that has not lists what was remembered. Either way the
  * portal's own are marked `inline` and an extension's of the same name is not.
  */
-const home = inProcessHome("pithagoras-tools-picture-session-");
+const home = inProcessHome("yulify-tools-picture-session-");
 
 const db = await import("../dist/db.js");
 const { sessions } = await import("../dist/session-manager.js");

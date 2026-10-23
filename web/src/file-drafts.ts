@@ -14,7 +14,7 @@ export interface FileDraft {
 }
 
 /** Held in memory and mirrored to session storage, so a reload does not lose an edit either. */
-const store = createDrafts(session, undefined, "pithagoras.file-draft.");
+const store = createDrafts(session, undefined, "yulify.file-draft.");
 /** The latest edit of each chat that is not written yet: a file can be a megabyte, and a keystroke is not worth writing one. */
 const waiting = new Map<string, { draft: FileDraft; timer: ReturnType<typeof setTimeout> }>();
 const WAIT_MS = 400;

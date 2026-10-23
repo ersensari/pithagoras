@@ -72,7 +72,7 @@ const reset = () => { boxes = new Map(); images = new Set(); docker.reset(); ref
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const until = async (done: () => boolean | Promise<boolean>) => { for (let n = 0; n < 300 && !(await done()); n++) await sleep(10); };
 // A container as each add-on makes it: the labels they check for, and the voice service's own network, so that it is as it wants it.
-const LABELS: Record<string, Record<string, string>> = { 'pithagoras-browser': {}, 'pithagoras-understory': { 'pithagoras.addon': 'understory' }, 'pithagoras-voice': { 'pithagoras.addon': 'voice', 'pithagoras.voice-network': 'shared-v1' } };
+const LABELS: Record<string, Record<string, string>> = { 'forgeloop-ai-yulify-browser': {}, 'forgeloop-ai-yulify-understory': { 'yulify.addon': 'understory' }, 'forgeloop-ai-yulify-voice': { 'yulify.addon': 'voice', 'yulify.voice-network': 'shared-v1' } };
 const seed = (name: string, running: boolean) => boxes.set(name, { running, labels: LABELS[name] });
 const gate = () => { let open!: () => void; pullGate = new Promise<void>(r => (open = r)); return open; };
 

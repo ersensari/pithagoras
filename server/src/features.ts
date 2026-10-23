@@ -19,7 +19,7 @@ import { mcpAdapter, mcpConfigPath, readMcpFile, type McpFile } from "./api/mcp.
 // --- the subagent tool ---
 
 /** The package name of the bundled subagent tool, which also finds a copy installed from elsewhere. */
-export const SUBAGENT_PACKAGE = "pithagoras-subagent";
+export const SUBAGENT_PACKAGE = "yulify-subagent";
 
 export type SubagentMode = "interrupt" | "background";
 
@@ -59,7 +59,7 @@ export function findSubagent(
     const source = sourceOf(entry);
     if (!source || /^(npm|git|https?):/.test(source)) continue;
     const dir = localPackagePath(source, agentDir);
-    if ((bundled && real(dir) === real(bundled)) || nameOf(dir) === SUBAGENT_PACKAGE) {
+    if ((bundled && real(dir) === real(bundled)) || [SUBAGENT_PACKAGE, "pithagoras-subagent"].includes(nameOf(dir) ?? "")) {
       return { source, enabled: !isSwitchedOff(entry) };
     }
   }

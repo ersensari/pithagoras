@@ -1,14 +1,20 @@
+name: forgeloop-ai
+
 # Standalone add-on, separate compose file on purpose (same reasoning as
 # docker-compose.chatterbox.yml): rebuilding/recreating the portal must not
 # touch this, and vice versa.
 #
-# Local replacement for Pithagoras's Understory memory add-on - see
+# Local replacement for Yulify's Understory memory add-on - see
 # mem0-server/server.py's docstring for why.
 services:
   mem0:
     build: ./mem0-server
-    image: pithagoras-mem0:latest
-    container_name: pithagoras-mem0
+    image: forgeloop-ai-yulify-mem0:latest
+    labels:
+      forgeloop.managed: "true"
+      forgeloop.project: forgeloop-ai
+      forgeloop.resource: mem0
+    container_name: forgeloop-ai-yulify-mem0
     restart: unless-stopped
     network_mode: host
     volumes:
@@ -30,3 +36,8 @@ services:
 
 volumes:
   mem0-data:
+    name: forgeloop-ai-yulify-mem0-data
+    labels:
+      forgeloop.managed: "true"
+      forgeloop.project: forgeloop-ai
+      forgeloop.resource: volume

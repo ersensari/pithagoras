@@ -1511,7 +1511,7 @@ const server = (tls ? createHttpsServer(tls, app) : createHttpServer(app)).liste
   PORT,
   host,
   () => {
-  console.log(`pithagoras listening on :${PORT}${tls ? " (https)" : ""}`);
+  console.log(`yulify listening on :${PORT}${tls ? " (https)" : ""}`);
   console.log(`  local bin: ${BIN_DIR}`);
   console.log(`  executor: ${EXECUTOR_KIND}`);
   console.log(`  workspaces: ${WORKSPACE_ROOT}`);
@@ -1545,7 +1545,7 @@ const server = (tls ? createHttpsServer(tls, app) : createHttpServer(app)).liste
 // right, an address this machine does not have. Only while it is starting; what
 // goes wrong once it is up is not about where it listens.
 const cannotListen = (e: Error) => {
-  console.error(`pithagoras could not listen on ${host}:${PORT}: ${e.message}`);
+  console.error(`yulify could not listen on ${host}:${PORT}: ${e.message}`);
   process.exit(1);
 };
 server.once("error", cannotListen);

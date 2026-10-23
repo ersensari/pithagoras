@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-commands-");
+const home = inProcessHome("yulify-commands-");
 
 const { appendEvent, createSession, deleteEventsAfter, deleteEventsBetween, eventsSince, getDb, getSession, UNANSWERED_COMMANDS } = await import("../dist/db.js");
 const { SdkPiClient } = await import("../dist/pi/sdk-client.js");

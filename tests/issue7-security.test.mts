@@ -15,7 +15,7 @@ test.after(()=>getDb().close());
 test('reject traversal and npm flags before package removal; permit scoped names',async()=>{
  const sentinel=join(temp,'keep');writeFileSync(sentinel,'safe');
  for(const name of ['../..','../../..','@scope/../..','--force','%2e%2e','a/b/c'])await assert.rejects(removeChannelPackage(name),/Invalid/);
- assert.equal(readFileSync(sentinel,'utf8'),'safe');assert.ok(isPackageName('@scope/channel-name'));assert.ok(isPackageName('pithagoras-channel-demo'));
+ assert.equal(readFileSync(sentinel,'utf8'),'safe');assert.ok(isPackageName('@scope/channel-name'));assert.ok(isPackageName('yulify-channel-demo'));
  const outside=join(temp,'outside');mkdirSync(outside);mkdirSync(join(process.env.CHANNELS_DIR!,'node_modules'),{recursive:true});symlinkSync(outside,join(process.env.CHANNELS_DIR!,'node_modules','@escape'));
  assert.throws(()=>channelPackageTarget('@escape/package'),/escapes/);
 });

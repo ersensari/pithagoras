@@ -1,10 +1,10 @@
 # SUPERSEDED 2026-10-07: relocated to forgeloop-ai/docker/forgeloop-ai-tts/
 # (service name forgeloop-ai-tts, container name forgeloop-ai-tts, same
 # source files copied verbatim) - it's now a shared, forgeloop-ai-managed
-# service used by both forgeloop-ai-provider (LiteLLM) and Pithagoras's own
+# service used by both forgeloop-ai-provider (LiteLLM) and Yulify's own
 # voice loop (see server/src/api/voice.ts's breezeUrl, repointed at
 # http://127.0.0.1:8099/v1/audio/speech - forgeloop-ai-tts publishes the
-# same port on loopback for exactly this). The pithagoras-chatterbox-nano
+# same port on loopback for exactly this). The forgeloop-ai-yulify-chatterbox-nano
 # container this file used to define was stopped and removed the same day.
 #
 # This file is kept only as history/rollback reference - do not `docker
@@ -17,8 +17,8 @@
 # services:
 #   chatterbox-nano:
 #     build: ./chatterbox-nano
-#     image: pithagoras-chatterbox-nano:latest
-#     container_name: pithagoras-chatterbox-nano
+#     image: forgeloop-ai-yulify-chatterbox-nano:latest
+#     container_name: forgeloop-ai-yulify-chatterbox-nano
 #     restart: unless-stopped
 #     ports:
 #       - "8099:8099"

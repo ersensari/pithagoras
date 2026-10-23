@@ -6,7 +6,7 @@ import { inProcessHome } from './server-harness.mjs';
 
 // A database from before chats could wait for a name: the column has to appear
 // without giving those chats one to be overwritten.
-const dataDir = inProcessHome('pithagoras-title-');
+const dataDir = inProcessHome('yulify-title-');
 const old = new Database(join(dataDir, 'portal.db'));
 old.exec(`CREATE TABLE sessions (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, workspace TEXT NOT NULL,

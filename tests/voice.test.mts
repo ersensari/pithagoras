@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import express from 'express';
 import { speechChunks, samplesWav } from '../web/src/voice.js';
 import { inProcessHome } from "./helpers.mts";
-const dir = inProcessHome('pithagoras-voice-');
+const dir = inProcessHome('forgeloop-ai-yulify-voice-');
 // No Docker here, whatever this machine has: the managed service is tested on its own.
 process.env.DOCKER_SOCKET = join(dir, 'no-docker.sock');
 const { voiceRouter, pcmWav, wavPcm, validateConfig, connectManagedVoice } = await import('../server/src/api/voice.js');

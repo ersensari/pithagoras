@@ -1,7 +1,7 @@
 import { api } from "./api";
 import { session, type SafeStorage } from "./safe-storage";
 
-const PREFIX = "pithagoras.draft.";
+const PREFIX = "yulify.draft.";
 
 /**
  * What has been typed into each chat's message box and not yet sent.
@@ -76,7 +76,7 @@ export const drafts = createDrafts(session, tellPortal());
  * request being opened, a comment. Kept apart from the message box's drafts, and
  * never told to the portal: no extension reads them.
  */
-export const gitDrafts = createDrafts(session, undefined, "pithagoras.git-draft.");
+export const gitDrafts = createDrafts(session, undefined, "yulify.git-draft.");
 
 /** Whether a chat's pi is up. Once it is, what is in the box is told at once: it may have been typed before. */
 export function piRunning(id: string, up: boolean): void {

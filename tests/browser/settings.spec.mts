@@ -100,7 +100,7 @@ async function portal(page: Page, { models = true, slow = 0, slowSettings = 0, s
 
 test('search finds a setting on another page and lights it up', async ({ page }) => {
   await portal(page);
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/general');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await expect(dialog.getByLabel('Default model')).toBeVisible();
@@ -128,7 +128,7 @@ test('search finds a setting on another page and lights it up', async ({ page })
 
 test('Defaults draws once, whole: nothing moves after it appears', async ({ page }) => {
   await portal(page, { slow: 250 });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/general');
   const context = page.locator('[data-setting="Context"]');
   await expect(context).toBeVisible();
@@ -148,8 +148,8 @@ test('Defaults draws once, whole: nothing moves after it appears', async ({ page
 test('the rail keeps its extension pages from last time, and a provider says it is online', async ({ page }) => {
   await portal(page, { slow: 400 });
   await page.addInitScript(() => {
-    localStorage.setItem('pithagoras.setup', 'done');
-    localStorage.setItem('pithagoras.settings.extension-rail', JSON.stringify([{ spec: 'npm:pi-web-access', name: 'pi-web-access' }]));
+    localStorage.setItem('yulify.setup', 'done');
+    localStorage.setItem('yulify.settings.extension-rail', JSON.stringify([{ spec: 'npm:pi-web-access', name: 'pi-web-access' }]));
   });
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
@@ -163,7 +163,7 @@ test('the rail keeps its extension pages from last time, and a provider says it 
 test('with no model yet, the setup assistant walks through provider, model and packages', async ({ page }) => {
   const api = await portal(page, { models: false });
   await page.goto('/');
-  const setup = page.getByRole('dialog', { name: 'Set up Pithagoras' });
+  const setup = page.getByRole('dialog', { name: 'Set up Yulify' });
   await expect(setup).toBeVisible({ timeout: 5000 });
   await expect(setup.getByLabel('Kind of provider')).toBeVisible();
   await expect(setup.getByRole('button', { name: 'Next' })).toBeDisabled();
@@ -186,7 +186,7 @@ test('with models, the assistant saves the model and effort, then offers package
   const api = await portal(page);
   await page.goto('/settings/models');
   await page.getByRole('button', { name: 'Setup assistant' }).click();
-  const setup = page.getByRole('dialog', { name: 'Set up Pithagoras' });
+  const setup = page.getByRole('dialog', { name: 'Set up Yulify' });
   await expect(setup.getByText('llama-swap').first()).toBeVisible();
   await setup.getByRole('button', { name: 'Next' }).click();
   await expect(setup.getByLabel('Model for new chats')).toContainText('Model A');
@@ -206,7 +206,7 @@ test('Back leads to the step before on every step after the first, and leaving s
   await portal(page);
   await page.goto('/settings/models');
   await page.getByRole('button', { name: 'Setup assistant' }).click();
-  const setup = page.getByRole('dialog', { name: 'Set up Pithagoras' });
+  const setup = page.getByRole('dialog', { name: 'Set up Yulify' });
   const current = setup.locator('.setup-step[aria-current="step"]');
   // Said where every device shows it, whichever way the assistant is left.
   await expect(setup.getByText('Settings → Providers opens this assistant again.')).toBeInViewport({ ratio: 1 });
@@ -229,7 +229,7 @@ test('on a phone the way forward stays at the right of the assistant, away from 
   await portal(page);
   await page.goto('/settings/models');
   await page.getByRole('button', { name: 'Setup assistant' }).click();
-  const setup = page.getByRole('dialog', { name: 'Set up Pithagoras' });
+  const setup = page.getByRole('dialog', { name: 'Set up Yulify' });
   const later = (await setup.getByRole('button', { name: 'Set up later' }).boundingBox())!;
   const next = (await setup.getByRole('button', { name: 'Next' }).boundingBox())!;
   const later2next = next.x - (later.x + later.width);
@@ -244,7 +244,7 @@ test('while the model saves, Back and the choice wait: the save would land on th
   const api = await portal(page, { settingsSaveDelay: () => 800 });
   await page.goto('/settings/models');
   await page.getByRole('button', { name: 'Setup assistant' }).click();
-  const setup = page.getByRole('dialog', { name: 'Set up Pithagoras' });
+  const setup = page.getByRole('dialog', { name: 'Set up Yulify' });
   await setup.getByRole('button', { name: 'Next' }).click();
   await expect(setup.getByLabel('Model for new chats')).toContainText('Model A');
   await setup.getByRole('button', { name: 'Next' }).click();
@@ -259,7 +259,7 @@ test('a stored model no one offers any more is not kept: the assistant offers on
   const api = await portal(page, { stored: { provider: 'gone', model: 'foo' } });
   await page.goto('/settings/models');
   await page.getByRole('button', { name: 'Setup assistant' }).click();
-  const setup = page.getByRole('dialog', { name: 'Set up Pithagoras' });
+  const setup = page.getByRole('dialog', { name: 'Set up Yulify' });
   await setup.getByRole('button', { name: 'Next' }).click();
   await expect(setup.getByLabel('Model for new chats')).toContainText('Model A');
   await setup.getByRole('button', { name: 'Next' }).click();
@@ -268,7 +268,7 @@ test('a stored model no one offers any more is not kept: the assistant offers on
 
 test('a new provider keeps only the models its current address lists', async ({ page }) => {
   const api = await portal(page, { probe: (url) => (url.includes('9090') ? ['B'] : url.includes('8080') ? ['A'] : undefined) });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   // A model list cached by the chat's model menu, from before this provider.
   await page.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('modelCatalogue.v2', JSON.stringify({ at: Date.now(), models: [{ id: 'A', name: 'A', provider: 'x' }] })); sessionStorage.setItem('seeded', '1'); } });
   await page.goto('/settings/models');
@@ -293,7 +293,7 @@ test('a new provider keeps only the models its current address lists', async ({ 
 
 test("a package's link that is not a web page is not made a link", async ({ page }) => {
   await portal(page, { homepage: 'javascript:alert(1)' });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await dialog.getByRole('button', { name: 'Add a provider' }).click();
@@ -308,7 +308,7 @@ test("a package's link that is not a web page is not made a link", async ({ page
 
 test('a click on the word beside a dropdown, or on its hint, does not open it', async ({ page }) => {
   await portal(page, { probe: () => ['A'] });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await dialog.getByRole('button', { name: 'Add a provider' }).click();
@@ -325,7 +325,7 @@ test('a click on the word beside a dropdown, or on its hint, does not open it', 
 
 test('a new provider cannot take a name already set up', async ({ page }) => {
   await portal(page, { probe: () => ['A'] });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await dialog.getByRole('button', { name: 'Add a provider' }).click();
@@ -339,7 +339,7 @@ test('a new provider cannot take a name already set up', async ({ page }) => {
 
 test('OpenRouter keyed from the environment is given a stored key under its own name', async ({ page }) => {
   const api = await portal(page, { openRouterFromEnv: true });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await dialog.getByRole('button', { name: 'Add a provider' }).click();
@@ -354,7 +354,7 @@ test('OpenRouter keyed from the environment is given a stored key under its own 
 test('a provider package installed in the assistant brings its models, and Next with them', async ({ page }) => {
   await portal(page, { models: false, installBringsModels: true });
   await page.goto('/');
-  const setup = page.getByRole('dialog', { name: 'Set up Pithagoras' });
+  const setup = page.getByRole('dialog', { name: 'Set up Yulify' });
   await expect(setup.getByRole('button', { name: 'Next' })).toBeDisabled();
   await setup.getByLabel('Kind of provider').click();
   await page.getByRole('option', { name: /From a package/ }).click();
@@ -366,7 +366,7 @@ test('a provider package installed in the assistant brings its models, and Next 
 test('quick changes to the defaults are saved one at a time, ending on the last', async ({ page }) => {
   // The first save is slow: sent side by side, the second would land first and the first win.
   const api = await portal(page, { stored: { provider: 'llama-swap', model: 'model-a' }, settingsSaveDelay: (n) => (n === 0 ? 600 : 20) });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/general');
   const effort = page.getByRole('radiogroup', { name: 'Default effort' });
   await effort.getByRole('radio', { name: 'high', exact: true }).click();
@@ -380,7 +380,7 @@ test('the assistant keeps the effort stored for thinking models when the model p
   const api = await portal(page, { plainModel: true, stored: { provider: 'llama-swap', model: 'Plain', thinkingLevel: 'high' } });
   await page.goto('/settings/models');
   await page.getByRole('button', { name: 'Setup assistant' }).click();
-  const setup = page.getByRole('dialog', { name: 'Set up Pithagoras' });
+  const setup = page.getByRole('dialog', { name: 'Set up Yulify' });
   await setup.getByRole('button', { name: 'Next' }).click();
   await expect(setup.getByLabel('Model for new chats')).toContainText('Plain 1');
   await setup.getByRole('button', { name: 'Next' }).click();
@@ -391,7 +391,7 @@ test('the assistant waits for what is stored before it saves a model', async ({ 
   const api = await portal(page, { plainModel: true, slowSettings: 2500, stored: { provider: 'llama-swap', model: 'Plain', thinkingLevel: 'high' } });
   await page.goto('/settings/models');
   await page.getByRole('button', { name: 'Setup assistant' }).click();
-  const setup = page.getByRole('dialog', { name: 'Set up Pithagoras' });
+  const setup = page.getByRole('dialog', { name: 'Set up Yulify' });
   await setup.getByRole('button', { name: 'Next' }).click();
   // Clicked before the stored model is known: nothing is saved over it.
   await setup.getByRole('button', { name: 'Next' }).click({ force: true });
@@ -403,7 +403,7 @@ test('the assistant waits for what is stored before it saves a model', async ({ 
 
 test('a password the portal only keeps because it was in use is said in Settings, where the login is', async ({ page }) => {
   await portal(page, { login: { shortPassword: true } });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/browser');
   const signedIn = page.getByRole('dialog').locator('section', { hasText: 'Signed in' });
   await expect(signedIn.getByRole('button', { name: 'Sign out' })).toBeVisible();
@@ -412,7 +412,7 @@ test('a password the portal only keeps because it was in use is said in Settings
 
 test('a password of the right length says nothing about it', async ({ page }) => {
   await portal(page, { login: {} });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/browser');
   const signedIn = page.getByRole('dialog').locator('section', { hasText: 'Signed in' });
   await expect(signedIn.getByRole('button', { name: 'Sign out' })).toBeVisible();
@@ -421,7 +421,7 @@ test('a password of the right length says nothing about it', async ({ page }) =>
 
 test('About draws from what Settings already has', async ({ page }) => {
   const api = await portal(page);
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/general');
   await expect(page.getByLabel('Default model')).toBeVisible();
   const asked = api.calls.filter((c) => c === 'GET /api/settings').length;
@@ -432,7 +432,7 @@ test('About draws from what Settings already has', async ({ page }) => {
 
 test("an extension's setting not set before is stored as a switch or a number when it is one", async ({ page }) => {
   const api = await portal(page);
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await dialog.getByRole('button', { name: 'pi-web-access' }).click();
@@ -442,7 +442,7 @@ test("an extension's setting not set before is stored as a switch or a number wh
 });
 
 test('an answer from an address typed over is not taken', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await portal(page, { probe: (url) => (url.includes('host-a') ? ['FromA'] : url.includes('host-b') ? ['FromB'] : undefined), probeDelay: (url) => (url.includes('host-a') ? 400 : 0) });
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
@@ -459,7 +459,7 @@ test('an answer from an address typed over is not taken', async ({ page }) => {
 });
 
 test('an address is asked once it is whole, and not again when the server tidies it', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   const api = await portal(page, { probe: (url) => (url.includes('11434') ? ['llama3'] : undefined) });
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
@@ -480,7 +480,7 @@ test('an address is asked once it is whole, and not again when the server tidies
 });
 
 test('what a save did besides is said: a copy kept of a models.json whose comments it dropped', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await portal(page, { probe: () => ['A'], providerNote: 'models.json had comments, which saving here does not keep. It is kept as it was in models.json.before-x.bak, beside it.' });
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
@@ -493,7 +493,7 @@ test('what a save did besides is said: a copy kept of a models.json whose commen
 test("asking a saved provider's server again takes the names it gives now: a llama-swap alias once saved under its router's name", async ({ page }) => {
   // Saved as Model A; the server now lists it under no name of its own, as llama-swap's aliases are read.
   const api = await portal(page, { probe: () => [{ id: 'model-a' }, { id: 'model-c', name: 'Model C — Flash' }] });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await dialog.getByRole('button', { name: 'Edit llama-swap' }).click();
@@ -506,7 +506,7 @@ test("asking a saved provider's server again takes the names it gives now: a lla
 });
 
 test('Escape with a provider being added asks before Settings closes, and an untouched editor closes at once', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('pithagoras.setup', 'done'));
+  await page.addInitScript(() => localStorage.setItem('yulify.setup', 'done'));
   await portal(page, { probe: () => ['A'] });
   await page.goto('/settings/models');
   const dialog = page.getByRole('dialog', { name: 'Settings' });

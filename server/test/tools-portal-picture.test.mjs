@@ -10,7 +10,7 @@ import { inProcessHome } from "./server-harness.mjs";
  * without the lists hearing of it, so the lists know the portal's own tools
  * from the settings: the person who has just switched editing on sees it.
  */
-const home = inProcessHome("pithagoras-tools-portal-picture-");
+const home = inProcessHome("yulify-tools-portal-picture-");
 
 const db = await import("../dist/db.js");
 const gen = await import("../dist/image-generation.js");

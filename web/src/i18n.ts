@@ -83,7 +83,7 @@ export function languages(): { code: string; name: string }[] {
 /** A language, or whatever the browser is set to. */
 export type LanguageChoice = "system" | string;
 
-const KEY = "pithagoras.language";
+const KEY = "yulify.language";
 
 const browserLanguages = (): readonly string[] => {
   try {

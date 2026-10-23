@@ -112,7 +112,7 @@ export class ContainerExecutor implements Executor {
   ) {}
 
   async launch(opts: LaunchOptions): Promise<PiClient> {
-    const containerName = `pithagoras-${opts.sessionId}`;
+    const containerName = `forgeloop-ai-yulify-runner-${opts.sessionId}`;
     const sessionDir = path.join(this.sessionRoot, opts.sessionId);
     // Create it as the portal user, rather than letting Docker create a root-owned bind source.
     // Before the mount translation below, so the directory exists as ours either way.
@@ -155,9 +155,12 @@ export class ContainerExecutor implements Executor {
       "--name",
       containerName,
       "--label",
-      "pithagoras.session=" + opts.sessionId,
+      "yulify.session=" + opts.sessionId,
       "--label",
-      "pithagoras.managed=true",
+      "yulify.managed=true",
+      "--label", "forgeloop.managed=true",
+      "--label", "forgeloop.project=forgeloop-ai",
+      "--label", "forgeloop.resource=runner",
       "-w",
       "/workspace",
       "-v",
@@ -190,8 +193,11 @@ export class ContainerExecutor implements Executor {
   }
 
   async cleanup(sessionId: string): Promise<void> {
+    const { stdout } = await promisify(execFile)("docker", ["inspect", "--format", "{{json .Config.Labels}}", `forgeloop-ai-yulify-runner-${sessionId}`]).catch(() => ({ stdout: "{}" }));
+    const labels = JSON.parse(stdout);
+    if (labels?.["forgeloop.managed"] !== "true" || labels?.["forgeloop.project"] !== "forgeloop-ai" || labels?.["yulify.session"] !== sessionId) return;
     await new Promise<void>((resolve) => {
-      const rm = spawn("docker", ["rm", "-f", `pithagoras-${sessionId}`], { stdio: "ignore" });
+      const rm = spawn("docker", ["rm", "-f", `forgeloop-ai-yulify-runner-${sessionId}`], { stdio: "ignore" });
       rm.on("exit", () => resolve());
       rm.on("error", () => resolve());
     });
@@ -201,7 +207,7 @@ export class ContainerExecutor implements Executor {
 export function buildExecutor(kind: ExecutorKind, sessionRoot: string): Executor {
   if (kind === "container") {
     return new ContainerExecutor(
-      process.env.PI_IMAGE || "pithagoras-runner:latest",
+      process.env.PI_IMAGE || "forgeloop-ai-yulify-runner:latest",
       sessionRoot,
       executorLimits()
     );

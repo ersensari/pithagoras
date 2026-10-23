@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scratch } from "./server-harness.mjs";
 
-const home = realpathSync(scratch("pithagoras-bundled-"));
+const home = realpathSync(scratch("yulify-bundled-"));
 const started = process.cwd();
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const { bundledPath } = await import("../dist/bundled.js");

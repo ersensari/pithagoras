@@ -164,7 +164,7 @@ test('the Files window of voice mode leaves the edit of the chat\'s own Files pa
   await page.getByRole('button', { name: 'Files', exact: true }).click();
   await page.getByRole('button', { name: /^app\.ts/ }).click();
   await page.getByLabel('Contents of app.ts').fill('edited by hand');
-  const kept = () => page.evaluate(() => sessionStorage.getItem('pithagoras.file-draft.test') ?? '');
+  const kept = () => page.evaluate(() => sessionStorage.getItem('yulify.file-draft.test') ?? '');
   await expect.poll(kept).toContain('edited by hand');
   await page.getByRole('button', { name: 'Turn on hands-free voice' }).click();
   await expect(page.getByRole('button', { name: 'End voice mode' })).toBeVisible({ timeout: 25000 });

@@ -4,7 +4,7 @@ import test, { beforeEach } from 'node:test';
 // What the page's requests do when the portal does not answer, or no longer knows this browser.
 const heard: string[] = [];
 const events = new EventTarget();
-events.addEventListener('pithagoras:signed-out', () => heard.push('signed-out'));
+events.addEventListener('yulify:signed-out', () => heard.push('signed-out'));
 (globalThis as any).window = Object.assign(events, { localStorage: { getItem: () => null, setItem() {}, removeItem() {} } });
 const { api, json, ApiError, SIGNED_OUT } = await import('../web/src/api.ts');
 
@@ -62,5 +62,5 @@ test('a file sent from this computer is as much a request: a gone login is heard
   assert.equal(seen.at(-1)!.url, '/api/sessions/s1/upload?path=&name=notes.txt');
   answer(reply(200, '{"picture":{"id":"p"}}'));
   assert.deepEqual(await api.uploadPicture(file), { id: 'p' });
-  assert.equal(SIGNED_OUT, 'pithagoras:signed-out');
+  assert.equal(SIGNED_OUT, 'yulify:signed-out');
 });

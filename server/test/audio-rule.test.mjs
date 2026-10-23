@@ -9,7 +9,7 @@ import { inProcessHome } from "./server-harness.mjs";
  * The rule for spoken replies, against pi itself: which conversations have it
  * in the system prompt the model is sent.
  */
-const home = inProcessHome("pithagoras-audio-rule-");
+const home = inProcessHome("yulify-audio-rule-");
 
 /** Each request's system prompt, in the order they came. */
 const sent = [];

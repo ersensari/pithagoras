@@ -4,7 +4,7 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-routines-");
+const home = inProcessHome("yulify-routines-");
 
 const { default: express } = await import("express");
 const { parseCron, nextRun } = await import("../dist/routines/cron.js");

@@ -127,7 +127,7 @@ export async function startServer(env, tries = 5) {
     const child = spawn(process.execPath, [ENTRY], { env: run, stdio: ["ignore", "pipe", "pipe"] });
     started.push(child);
     let log = "";
-    const listening = new RegExp(`pithagoras listening on :${run.PORT}\\b`);
+    const listening = new RegExp(`yulify listening on :${run.PORT}\\b`);
     const outcome = await new Promise((resolve) => {
       const seen = () => { if (listening.test(log)) resolve("listening"); };
       child.stdout.on("data", (d) => { log += d; seen(); });

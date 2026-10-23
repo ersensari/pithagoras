@@ -1,9 +1,9 @@
 {
-  "name": "pithagoras-channel-slack",
+  "name": "yulify-channel-slack",
   "version": "0.1.0",
   "description": "Reach the agent from Slack over Socket Mode",
   "type": "module",
   "main": "index.js",
   "license": "Apache-2.0",
-  "pithagoras": { "channel": true }
+  "yulify": { "channel": true }
 }

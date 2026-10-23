@@ -196,7 +196,7 @@ test('the setup assistant offers to read the providers again', async ({ page }) 
   // No model can be used, so it opens by itself.
   const { up } = await portal(page, ['/api/providers'], { fresh: true, replies: { '/api/models': { models: [], providers: {} } } });
   await page.goto('/');
-  const assistant = page.getByRole('dialog', { name: 'Set up Pithagoras' });
+  const assistant = page.getByRole('dialog', { name: 'Set up Yulify' });
   await expect(assistant.getByRole('alert')).toContainText(FAILED);
   up('/api/providers');
   await assistant.getByRole('button', { name: 'Try again' }).click();

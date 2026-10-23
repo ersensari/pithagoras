@@ -1,16 +1,17 @@
+import { managedLabels } from "./docker.js";
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { checked, containerAction, containerState, dockerAvailable, ensureImage, PULL_STARTING, request } from './docker.js';
 import { asrDevice, ttsDevice, choiceFromKey, choiceKey, cpuServerConfig, cpuThreads, DEFAULT_CHOICE, healthUrls, parseChoice, pickGpu, sameChoice, serverConfig, SPEECH_PORT, suggestChoice, suggestCpuChoice, ttsModel, usesGpu, type Gpu, type Host, type TtsEngine, type VoiceChoice } from '../voice-engines.js';
 import { NoGpu, askedCard, cardOf, decide, detectGpus, deviceId, explain, holds, hostProbe, isNoGpu, readHost, SMI_ARGS, type Card, type Detected, type Probe } from '../voice-gpu.js';
 
-export const CONTAINER = 'pithagoras-voice';
+export const CONTAINER = 'forgeloop-ai-yulify-voice';
 export const IMAGE = 'nvidia/cuda:12.4.1-devel-ubuntu22.04';
 /** What a choice with nothing on the GPU runs in, and what the GPU check asks nvidia-smi with: no CUDA toolchain, so no multi-GB download. */
 export const BASE_IMAGE = 'ubuntu:22.04';
 /** The image a choice runs in: the CUDA one wherever the GPU is used, else the small base. */
 export const imageFor = (choice: VoiceChoice) => usesGpu(choice) ? IMAGE : BASE_IMAGE;
-const VOLUME = 'pithagoras_voice-models';
+const VOLUME = 'forgeloop-ai-yulify-voice-models';
 let pending = false;
 let progress = '';
 let error = '';
@@ -31,9 +32,9 @@ export async function status(): Promise<ServiceStatus> {
   const state = await containerState(CONTAINER);
   if (state.running && !pending) {
     const detail = await request<{Config?: {Labels?: Record<string,string>}; HostConfig?: {NetworkMode?: string}}>('GET', `/containers/${CONTAINER}/json`);
-    if (detail.body?.Config?.Labels?.['pithagoras.addon'] === 'voice') {
+    if (detail.body?.Config?.Labels?.['yulify.addon'] === 'voice') {
       const target = await voiceNetworkMode();
-      if (detail.body.Config.Labels['pithagoras.voice-network'] !== 'shared-v1' || detail.body.HostConfig?.NetworkMode !== target) {
+      if (detail.body.Config.Labels['yulify.voice-network'] !== 'shared-v1' || detail.body.HostConfig?.NetworkMode !== target) {
         await install();
         return {available:true, state:'installing', busy:true, progress:'Updating managed voice networking; keeping downloaded models', error:''};
       }
@@ -48,7 +49,7 @@ export async function status(): Promise<ServiceStatus> {
   const detail = state.exists ? await request<{ Config?: { Labels?: Record<string, string> }; State?: { ExitCode?: number; Error?: string } }>('GET', `/containers/${CONTAINER}/json`) : null;
   // A container made before engines could be chosen has no recipe label, and is the original combination.
   const labels = detail?.body?.Config?.Labels;
-  const choice = labels?.['pithagoras.addon'] === 'voice' ? choiceFromKey(labels['pithagoras.voice-recipe']) : undefined;
+  const choice = labels?.['yulify.addon'] === 'voice' ? choiceFromKey(labels['yulify.voice-recipe']) : undefined;
   const ready = state.running && (await Promise.all(healthUrls(choice ?? DEFAULT_CHOICE).map(healthy))).every(Boolean);
   const failed = !state.running && Boolean(detail?.body?.State?.ExitCode);
   return { available: true, state: pending ? 'installing' : ready ? 'running' : state.running ? 'starting' : failed ? 'failed' : state.exists ? 'stopped' : 'absent', busy: pending, progress: pending ? progress : logs, error: error || (failed ? explain(detail?.body?.State?.Error || 'Voice setup or service exited. Review the log, then retry.') : ''), choice };
@@ -83,7 +84,7 @@ export function containerSpec(script: string, networkMode: string, choice: Voice
     Env: [`VOICE_TTS=${choice.tts}`, ...(ttsDevice(choice) ? [`VOICE_TTS_DEVICE=${ttsDevice(choice)}`] : []), `VOICE_ASR=${choice.asr}`, `VOICE_ASR_MODEL=${choice.asrModel}`, `VOICE_ASR_DEVICE=${asrDevice(choice)}`,
       ...(server ? [`VOICE_SERVER_CONFIG=${JSON.stringify(server)}`] : []), ...(cpuServer ? [`VOICE_CPU_CONFIG=${JSON.stringify(cpuServer)}`] : []),
       ...(plan.threads ? [`VOICE_THREADS=${plan.threads}`] : []), ...(plan.note ? [`VOICE_PLAN=${plan.note}`] : [])],
-    Labels: { 'pithagoras.addon': 'voice', 'pithagoras.voice-network': 'shared-v1', 'pithagoras.voice-recipe': choiceKey(choice) },
+    Labels: { ...managedLabels('voice'), 'yulify.addon': 'voice', 'yulify.voice-network': 'shared-v1', 'yulify.voice-recipe': choiceKey(choice) },
     HostConfig: { Binds: [`${VOLUME}:/voice`], NetworkMode: networkMode,
       // See dockerProbe.run()'s comment above: this host's nvidia-container-runtime is pinned to mode="cdi",
       // which refuses DeviceRequests-only containers under the default `runc` runtime.
@@ -100,18 +101,18 @@ async function ensureContainer(script: string, choice: VoiceChoice, plan: Plan) 
   const existing = await request<{Config?: {Labels?: Record<string,string>}; HostConfig?: {NetworkMode?: string; DeviceRequests?: { DeviceIDs?: string[] | null }[] | null}; State?: {Running?: boolean}}>('GET', `/containers/${CONTAINER}/json`);
   if (existing.status !== 404) {
     if (existing.status >= 400) throw new Error(`Cannot inspect voice container: Docker ${existing.status}`);
-    if (existing.body.Config?.Labels?.['pithagoras.addon'] !== 'voice') throw new Error('The pithagoras-voice container is not a managed voice add-on. Rename it before installing.');
+    if (existing.body.Config?.Labels?.['yulify.addon'] !== 'voice') throw new Error('The forgeloop-ai-yulify-voice container is not a managed voice add-on. Rename it before installing.');
     const labels = existing.body.Config.Labels;
     // A card that is asked for and is not the one it has makes it another container, so that Start moves it.
     const onCard = !usesGpu(choice) || !plan.card || holds(heldCard(existing.body.HostConfig?.DeviceRequests), plan.card);
-    const current = labels['pithagoras.voice-network'] === 'shared-v1' && existing.body.HostConfig?.NetworkMode === networkMode && sameChoice(choiceFromKey(labels['pithagoras.voice-recipe']), choice) && onCard;
+    const current = labels['yulify.voice-network'] === 'shared-v1' && existing.body.HostConfig?.NetworkMode === networkMode && sameChoice(choiceFromKey(labels['yulify.voice-recipe']), choice) && onCard;
     if (current) { await containerAction(CONTAINER, 'start'); return; }
     // Container config is immutable. Retain /voice and the cached model/build
     // files while replacing the old published-port container, a stale namespace
     // or one built for other engines.
     await containerAction(CONTAINER, 'remove');
   }
-  await checked('POST', '/volumes/create', { Name: VOLUME });
+  await checked('POST', '/volumes/create', { Name: VOLUME, Labels: managedLabels("volume") });
   await checked('POST', `/containers/create?name=${CONTAINER}`, containerSpec(script, networkMode, choice, plan));
   await containerAction(CONTAINER, 'start');
 }
@@ -120,8 +121,8 @@ async function ensureContainer(script: string, choice: VoiceChoice, plan: Plan) 
 async function installedContainer(): Promise<{ choice: VoiceChoice; card?: Card; running: boolean } | undefined> {
   const found = await request<{Config?: {Labels?: Record<string,string>}; HostConfig?: {DeviceRequests?: {DeviceIDs?: string[] | null}[] | null}; State?: {Running?: boolean}}>('GET', `/containers/${CONTAINER}/json`);
   const labels = found.status === 200 ? found.body?.Config?.Labels : undefined;
-  if (labels?.['pithagoras.addon'] !== 'voice') return undefined;
-  return { choice: choiceFromKey(labels['pithagoras.voice-recipe']), card: heldCard(found.body.HostConfig?.DeviceRequests), running: Boolean(found.body.State?.Running) };
+  if (labels?.['yulify.addon'] !== 'voice') return undefined;
+  return { choice: choiceFromKey(labels['yulify.voice-recipe']), card: heldCard(found.body.HostConfig?.DeviceRequests), running: Boolean(found.body.State?.Running) };
 }
 
 /** The image of a setup, with what the download says shown on the page; what is said before the first line comes is not worth showing over what was there. */
@@ -138,9 +139,9 @@ const dockerProbe: Probe = {
   async run() {
     if (!dockerAvailable()) throw new NoGpu('Docker is unavailable');
     await ensureImage(BASE_IMAGE, undefined, 120000).catch(unanswered);
-    const created = await checked<{ Id: string }>('POST', '/containers/create', { Image: BASE_IMAGE, Tty: true, Cmd: ['nvidia-smi', ...SMI_ARGS],
+    const created = await checked<{ Id: string }>('POST', `/containers/create?name=forgeloop-ai-yulify-voice-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`, { Image: BASE_IMAGE, Tty: true, Cmd: ['nvidia-smi', ...SMI_ARGS],
       // nvidia-smi is a utility of the driver: the image says nothing of it, so it is asked for.
-      Env: ['NVIDIA_DRIVER_CAPABILITIES=utility'], Labels: { 'pithagoras.addon': 'voice-probe' },
+      Env: ['NVIDIA_DRIVER_CAPABILITIES=utility'], Labels: { ...managedLabels('voice-probe'), 'yulify.addon': 'voice-probe' },
       // Runtime: 'nvidia' is required on hosts where nvidia-container-runtime's config.toml pins mode="cdi":
       // the default `runc` runtime's prestart hook then refuses DeviceRequests-only containers outright
       // ("invoking the NVIDIA Container Runtime Hook directly... is not supported"), even though Docker's
@@ -327,7 +328,7 @@ export async function uninstall(removeData = false) {
     const found = await request<{Config?: {Labels?: Record<string,string>}; State?: {Running?: boolean}}>('GET', `/containers/${CONTAINER}/json`);
     if (found.status !== 404) {
       if (found.status >= 400) throw new Error(`Cannot inspect voice container: Docker ${found.status}`);
-      if (found.body.Config?.Labels?.['pithagoras.addon'] !== 'voice') throw new Error('The pithagoras-voice container is not a managed voice add-on, so it is left alone.');
+      if (found.body.Config?.Labels?.['yulify.addon'] !== 'voice') throw new Error('The forgeloop-ai-yulify-voice container is not a managed voice add-on, so it is left alone.');
       await containerAction(CONTAINER, 'remove');
     }
     if (removeData) {

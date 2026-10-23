@@ -7,7 +7,7 @@ const docker: DockerCommand = async (args) => (await exec('docker', args)).stdou
 
 /** Reclaim an old session name without killing a live or unrelated container. */
 export async function removeStoppedRunner(sessionId: string, run: DockerCommand = docker): Promise<void> {
-  const name = `pithagoras-${sessionId}`;
+  const name = `forgeloop-ai-yulify-runner-${sessionId}`;
   let output: string;
   try {
     output = await run(['container', 'inspect', name]);
@@ -18,7 +18,7 @@ export async function removeStoppedRunner(sessionId: string, run: DockerCommand 
   }
   const [container] = JSON.parse(output);
   const labels = container?.Config?.Labels;
-  if (labels?.['pithagoras.managed'] !== 'true' || labels?.['pithagoras.session'] !== sessionId) {
+  if (labels?.['forgeloop.managed'] !== 'true' || labels?.['forgeloop.project'] !== 'forgeloop-ai' || labels?.['yulify.managed'] !== 'true' || labels?.['yulify.session'] !== sessionId) {
     throw new Error(`Container ${name} is not owned by this session; remove or rename it manually.`);
   }
   if (!['created', 'exited', 'dead'].includes(container.State?.Status)) {

@@ -312,7 +312,7 @@ async function withClone<T>(spec: string, use: (ctx: Cloned) => Promise<T>, pin?
     const resolved = await resolveTree(url, parsed.tree);
     if (resolved) ({ ref, subpath } = resolved);
   }
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "pithagoras-skill-"));
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "yulify-skill-"));
 
   try {
     // Links are checked out as small files holding the link text: where a

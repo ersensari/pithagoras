@@ -12,7 +12,7 @@ import { useEffect, useRef } from "react";
  * closes in any other way, its entry is taken off again by going back, unless
  * the page has moved on since (then it is left, as a step to the same place).
  */
-const MARK = "pithagorasOverlay";
+const MARK = "yulifyOverlay";
 
 interface Entry {
   token: string;

@@ -26,20 +26,20 @@ let container: any = null;
 let reading = SMI;
 const docker = await fakeDocker(process.env.DOCKER_SOCKET!, ({ method, url, path: p, body }) => {
   if (url === '/containers/portal-test/json') return { json: { Id: 'portal-one', State: { Running: true } } };
-  if (url === '/containers/pithagoras-voice/json') return { status: container ? 200 : 404, json: container };
-  if (url.startsWith('/containers/pithagoras-voice/logs')) return { json: 'services ready' };
+  if (url === '/containers/forgeloop-ai-yulify-voice/json') return { status: container ? 200 : 404, json: container };
+  if (url.startsWith('/containers/forgeloop-ai-yulify-voice/logs')) return { json: 'services ready' };
   if (url.startsWith('/images/')) return {};
   if (url === '/volumes/create') return {};
   // The throwaway container that reads nvidia-smi inside the image.
-  if (url === '/containers/create') return { json: { Id: 'probe-1' } };
+  if (url.startsWith('/containers/create?name=forgeloop-ai-yulify-voice-probe-')) return { json: { Id: 'probe-1' } };
   if (url === '/containers/probe-1/start') return {};
   if (url === '/containers/probe-1/wait') return { json: { StatusCode: 0 } };
   if (url.startsWith('/containers/probe-1/logs')) return { json: reading };
   if (method === 'DELETE' && p === '/containers/probe-1') return {};
-  if (method === 'POST' && p === '/containers/pithagoras-voice/stop') { container.State.Running = false; return {}; }
-  if (method === 'DELETE' && p === '/containers/pithagoras-voice') { container = null; return {}; }
-  if (method === 'POST' && url.startsWith('/containers/create?name=pithagoras-voice')) { container = { Config: body, HostConfig: body.HostConfig, State: { Running: false } }; return {}; }
-  if (method === 'POST' && url === '/containers/pithagoras-voice/start') { container.State.Running = true; return {}; }
+  if (method === 'POST' && p === '/containers/forgeloop-ai-yulify-voice/stop') { container.State.Running = false; return {}; }
+  if (method === 'DELETE' && p === '/containers/forgeloop-ai-yulify-voice') { container = null; return {}; }
+  if (method === 'POST' && url.startsWith('/containers/create?name=forgeloop-ai-yulify-voice')) { container = { Config: body, HostConfig: body.HostConfig, State: { Running: false } }; return {}; }
+  if (method === 'POST' && url === '/containers/forgeloop-ai-yulify-voice/start') { container.State.Running = true; return {}; }
   return undefined;
 });
 const { calls } = docker;
@@ -53,13 +53,13 @@ voice.hostReader.read = () => ({ totalMiB: 16384, freeMiB: 12000, threads: 8 });
 
 const reset = () => { container = null; reading = SMI; docker.reset(); voice.useGpu(''); delete process.env.VOICE_GPU; };
 const settle = async () => { for (let n = 0; n < 200 && (await voice.status()).busy; n++) await new Promise(r => setTimeout(r, 10)); };
-const created = () => calls.filter(c => c.url === '/containers/create?name=pithagoras-voice');
+const created = () => calls.filter(c => c.url === '/containers/create?name=forgeloop-ai-yulify-voice');
 const cardOfCreated = () => created()[0].body.HostConfig.DeviceRequests[0];
 /** The voice container was deleted, not the throwaway one that reads nvidia-smi, and the models volume was not touched. */
-const gone = () => calls.some(c => c.method === 'DELETE' && c.url === '/containers/pithagoras-voice?force=true');
+const gone = () => calls.some(c => c.method === 'DELETE' && c.url === '/containers/forgeloop-ai-yulify-voice?force=true');
 const volumeKept = () => !calls.some(c => c.method === 'DELETE' && c.url.startsWith('/volumes'));
 /** A managed container of the default engines, as an earlier portal made it: on a card by index, or on Docker's own pick without one. */
-const made = (devices: any, running = false, recipe = 'breeze+whisper:base') => ({ Config: { Labels: { 'pithagoras.addon': 'voice', 'pithagoras.voice-network': 'shared-v1', 'pithagoras.voice-recipe': recipe } },
+const made = (devices: any, running = false, recipe = 'breeze+whisper:base') => ({ Config: { Labels: { 'yulify.addon': 'voice', 'yulify.voice-network': 'shared-v1', 'yulify.voice-recipe': recipe } },
   HostConfig: { NetworkMode: 'container:portal-one', ...(devices ? { DeviceRequests: [devices] } : {}) }, State: { Running: running } });
 const byIndex = (index: number) => ({ Driver: 'nvidia', DeviceIDs: [String(index)], Capabilities: [['gpu']] });
 const anyGpu = { Driver: 'nvidia', Count: 1, Capabilities: [['gpu']] };
@@ -116,7 +116,7 @@ test('one check lists the cards with their UUID, and the page is told the choice
   const found = await voice.hardware();
   assert.deepEqual(found.gpus.map(g => [g.index, g.uuid]), [[0, A], [1, B]]);
   assert.equal(found.source, 'docker');
-  const probe = calls.find(c => c.url === '/containers/create')!.body;
+  const probe = calls.find(c => c.url.startsWith('/containers/create?name=forgeloop-ai-yulify-voice-probe-'))!.body;
   assert.equal(probe.Image, BASE, 'the small image, not the CUDA one');
   assert.match(probe.Cmd.join(' '), /--query-gpu=index,uuid,name,/);
   assert.ok(calls.some(c => c.method === 'DELETE' && c.url.startsWith('/containers/probe-1')), 'the probe container is removed again');
@@ -141,7 +141,7 @@ test('the engine check judges the chosen card, and the container is made for it'
   await settle();
   assert.equal((await voice.status()).error, '');
   assert.deepEqual(cardOfCreated(), { Driver: 'nvidia', DeviceIDs: [A], Capabilities: [['gpu']] });
-  assert.equal(created()[0].body.Labels['pithagoras.voice-recipe'], 'breeze+whisper:base');
+  assert.equal(created()[0].body.Labels['yulify.voice-recipe'], 'breeze+whisper:base');
   assert.match(created()[0].body.Env.find((e: string) => e.startsWith('VOICE_PLAN='))!, /Detected NVIDIA GeForce RTX 3060 \(12\.0 GiB, 4\.3 GiB free\)/, 'the setup log names the card it checked');
   // Without a choice it is the card with the most room, named by UUID too.
   reset();
@@ -152,13 +152,13 @@ test('the engine check judges the chosen card, and the container is made for it'
   reset();
   await voice.install();
   await settle();
-  const roomy = created()[0].body.Labels['pithagoras.voice-recipe'];
+  const roomy = created()[0].body.Labels['yulify.voice-recipe'];
   reset();
   voice.useGpu(A);
   await voice.install();
   await settle();
   assert.deepEqual(cardOfCreated().DeviceIDs, [A]);
-  assert.notEqual(created()[0].body.Labels['pithagoras.voice-recipe'], roomy);
+  assert.notEqual(created()[0].body.Labels['yulify.voice-recipe'], roomy);
 });
 
 test('the choice on the page wins over VOICE_GPU, and automatic hands the card back to it', async () => {
@@ -191,7 +191,7 @@ test('a new choice recreates a service on another card with its engines and mode
   await voice.install();
   await settle();
   assert.deepEqual(cardOfCreated(), { Driver: 'nvidia', DeviceIDs: [A], Capabilities: [['gpu']] });
-  assert.equal(container.Config.Labels['pithagoras.voice-recipe'], 'breeze+whisper:base');
+  assert.equal(container.Config.Labels['yulify.voice-recipe'], 'breeze+whisper:base');
   assert.ok(gone() && volumeKept());
   assert.equal(container.State.Running, true);
   // Chosen again: what is there is started as it is.
@@ -220,7 +220,7 @@ test('a stopped service moves on its next start, one that asked Docker for any G
   await voice.start();
   await settle();
   assert.deepEqual(cardOfCreated().DeviceIDs, [B]);
-  assert.equal(container.Config.Labels['pithagoras.voice-recipe'], 'breeze+whisper:base', 'the default engines, as every earlier installation has');
+  assert.equal(container.Config.Labels['yulify.voice-recipe'], 'breeze+whisper:base', 'the default engines, as every earlier installation has');
   // A card that was taken out: the service is not moved to something that is not there.
   reset();
   container = made(byIndex(0));
@@ -270,7 +270,7 @@ test('a service pinned to a card that was taken out is made again on one that is
   await settle();
   assert.equal((await voice.status()).error, '');
   assert.deepEqual(cardOfCreated().DeviceIDs, [B], 'the card with the most room, as an install takes it');
-  assert.equal(container.Config.Labels['pithagoras.voice-recipe'], 'breeze+whisper:base');
+  assert.equal(container.Config.Labels['yulify.voice-recipe'], 'breeze+whisper:base');
   assert.ok(gone() && volumeKept());
   // One card left, pinned by an index that is no longer there too: it is pinned to the card that is.
   reset();

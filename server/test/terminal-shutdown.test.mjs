@@ -10,7 +10,7 @@ const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { retu
 
 /** A portal of its own, with a terminal whose shell has started jobs, and the processes to look for. */
 async function portalWithShell(t) {
-  const home = testHome("pithagoras-term-stop-");
+  const home = testHome("yulify-term-stop-");
   // `script` runs its command through $SHELL, so it has to be a lone path.
   const { base, child } = await startServer(serverEnv(home, await freePort(), { SHELL: "/bin/sh" }));
   const post = (url, body) =>

@@ -115,7 +115,7 @@ const GROUPS: { label: string; tabs: TabDef[] }[] = [
 const TABS = GROUPS.flatMap((g) => g.tabs);
 
 /** The rail's extension pages as last seen, so a reload does not start without them. */
-const RAIL_KEY = "pithagoras.settings.extension-rail";
+const RAIL_KEY = "yulify.settings.extension-rail";
 function railSnapshot(): { spec: string; name: string }[] {
   try {
     const list = JSON.parse(local.get(RAIL_KEY) ?? "[]");

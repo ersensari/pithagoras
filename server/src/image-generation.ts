@@ -447,7 +447,7 @@ async function post(endpoint: URL, apiKey: string, body: string | FormData, sign
         method: "POST",
         signal,
         // fetch sent one, and some endpoints sit behind a firewall that refuses a request with none.
-        headers: { "user-agent": "pithagoras", ...(type ? { "content-type": type } : {}), "content-length": bytes.length, accept: "application/json", ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
+        headers: { "user-agent": "yulify", ...(type ? { "content-type": type } : {}), "content-length": bytes.length, accept: "application/json", ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
       },
       (res) => {
         const status = res.statusCode ?? 0;

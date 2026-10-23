@@ -8,7 +8,7 @@ import { inProcessHome } from "./server-harness.mjs";
 // made by that code itself, at 0718375: two conversations, the event types the
 // newer indexes cover, and settings. An upgrade has to bring it to the current
 // schema without losing any of it, and the portal has to read and write it after.
-const home = inProcessHome("pithagoras-unversioned-");
+const home = inProcessHome("yulify-unversioned-");
 const file = path.join(home, "portal.db");
 copyFileSync(new URL("./fixtures/portal-unversioned.db", import.meta.url), file);
 

@@ -24,7 +24,7 @@ export function subscribeMusic(sessionId: string, jobId: string, changed: () => 
       if (playing !== wasPlaying) {
         wasPlaying = playing;
         if (playing) for (const other of tracks.values()) if (other.audio !== audio) other.audio.pause();
-        window.dispatchEvent(new CustomEvent("pithagoras:music-playback", { detail: { sessionId, jobId, playing } }));
+        window.dispatchEvent(new CustomEvent("yulify:music-playback", { detail: { sessionId, jobId, playing } }));
       }
       for (const listener of listeners) listener();
     };
@@ -36,11 +36,11 @@ export function subscribeMusic(sessionId: string, jobId: string, changed: () => 
       if (detail.action === "play" || (detail.action === "toggle" && audio.paused)) void audio.play().catch(() => {});
       else if (detail.action === "pause" || detail.action === "toggle") audio.pause();
     };
-    window.addEventListener("pithagoras:music-control", control);
+    window.addEventListener("yulify:music-control", control);
     track = { audio, listeners, release: () => {
       audio.pause(); update();
       events.forEach(type => audio.removeEventListener(type, update));
-      window.removeEventListener("pithagoras:music-control", control);
+      window.removeEventListener("yulify:music-control", control);
       audio.removeAttribute("src"); audio.load();
     } };
     tracks.set(key, track);

@@ -321,7 +321,7 @@ test("the folders and files the portal hands pi or loads itself are held where t
   const named = (as) => places.filter((place) => place.as === as).length;
   assert.ok(named("code") >= 1 && named("tools") >= 1 && named("instructions") >= 2, "each kind of place is there");
   // The channel packages are code the portal runs: a write into the folder they are installed in.
-  const installed = path.join(process.env.CHANNELS_DIR, "node_modules", "pithagoras-channel-x", "index.js");
+  const installed = path.join(process.env.CHANNELS_DIR, "node_modules", "yulify-channel-x", "index.js");
   assert.equal(refused(guardAs("colleague", conversation), "write", installed), true);
 });
 

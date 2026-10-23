@@ -61,7 +61,7 @@ if (phase === 'pictures') events.push(
   ev('portal_prompt', { message: 'Paint a lighthouse, then make it blue.', images: [{ name: 'sketch.png', mimeType: 'image/png' }] }, 9),
   ev('tool_execution_start', { toolCallId: 'g1', toolName: 'generate_image', args: { prompt: 'A lighthouse at dusk', title: 'A lighthouse at dusk' } }, 8),
   ev('tool_execution_end', { toolCallId: 'g1', toolName: 'generate_image', result: { content: [{ type: 'text', text: 'Generated and shown to the user: generated-images/lighthouse.png' }], details: { path: 'generated-images/lighthouse.png', title: 'A lighthouse at dusk', portalImage: true } } }, 7),
-  ev('tool_execution_start', { toolCallId: 'e1', toolName: 'edit_image', args: { path: '/workspaces/pithagoras/generated-images/lighthouse.png', prompt: 'Make it blue' } }, 6),
+  ev('tool_execution_start', { toolCallId: 'e1', toolName: 'edit_image', args: { path: '/workspaces/yulify/generated-images/lighthouse.png', prompt: 'Make it blue' } }, 6),
   ev('tool_execution_end', { toolCallId: 'e1', toolName: 'edit_image', result: { content: [{ type: 'text', text: 'Edited and shown to the user: generated-images/lighthouse-edited.png' }], details: { path: 'generated-images/lighthouse-edited.png', title: 'The lighthouse, in blue', portalImage: true } } }, 5),
   ev('tool_execution_start', { toolCallId: 's1', toolName: 'show_image', args: { path: 'docs/diagram.png' } }, 4),
   ev('tool_execution_end', { toolCallId: 's1', toolName: 'show_image', result: { content: [{ type: 'text', text: 'Shown: docs/diagram.png' }], details: { path: 'docs/diagram.png' } } }, 3),
@@ -82,7 +82,7 @@ if (phase === 'args') events.push(
   ev('tool_execution_end', { toolCallId: 'ws', toolName: 'web_search', result: { content: [{ type: 'text', text: 'Found 10 results.' }] } }, 18),
   ev('tool_execution_start', { toolCallId: 'ed', toolName: 'edit', args: { path: 'web/src/main.tsx', edits: [{ oldText: 'const a = 1;', newText: 'const a = 2;' }, { oldText: 'render(<App />);', newText: 'render(\n  <App />\n);' }] } }, 17),
   ev('tool_execution_end', { toolCallId: 'ed', toolName: 'edit', result: { content: [{ type: 'text', text: 'Applied 2 edits.' }] } }, 16.5),
-  ev('tool_execution_start', { toolCallId: 'mc', toolName: 'mcp', args: { tool: 'github_list_issues', args: { owner: 'octo-org', repo: 'pithagoras', state: 'open', labels: ['bug', 'ui'] } } }, 16),
+  ev('tool_execution_start', { toolCallId: 'mc', toolName: 'mcp', args: { tool: 'github_list_issues', args: { owner: 'octo-org', repo: 'yulify', state: 'open', labels: ['bug', 'ui'] } } }, 16),
   ev('tool_execution_end', { toolCallId: 'mc', toolName: 'mcp', result: { content: [{ type: 'text', text: JSON.stringify([{ number: 21, title: 'Jump button over the tools menu', labels: ['bug', 'ui'] }, { number: 23, title: 'Copy beside the reply', labels: ['ui'] }]) }] } }, 15.5),
   // Numbers as they were written, spaces as they were given, and an id too long for JavaScript's numbers.
   ev('tool_execution_start', { toolCallId: 'cf', toolName: 'configure', args: { port: 8080, threshold: 0.0001, old_string: '    return x;' } }, 15),
@@ -144,7 +144,7 @@ if (phase === 'agents') {
     ev('portal_subagent', { op: 'event', id: 'sub1', event: { type: 'message_end', message: { role: 'user', content: 'Audit the deploy script for anything that could lose data.' } } }, 39),
     ev('portal_subagent', { op: 'event', id: 'sub1', event: { type: 'tool_execution_start', toolCallId: 'x1', toolName: 'read', args: { path: 'deploy/setup.sh' } } }, 38),
     ev('portal_subagent', { op: 'event', id: 'sub1', event: { type: 'tool_execution_end', toolCallId: 'x1', toolName: 'read', result: { content: [{ type: 'text', text: '#!/bin/sh…' }] } } }, 37),
-    ev('portal_subagent', { op: 'event', id: 'sub1', event: { type: 'message_end', message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'rm -rf on the old dir runs before the copy is verified.' }, { type: 'text', text: 'The script deletes `/opt/pithagoras.old` **before** checking that the new build started. I will look at the restart step next.' }] } } }, 20),
+    ev('portal_subagent', { op: 'event', id: 'sub1', event: { type: 'message_end', message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'rm -rf on the old dir runs before the copy is verified.' }, { type: 'text', text: 'The script deletes `/opt/yulify.old` **before** checking that the new build started. I will look at the restart step next.' }] } } }, 20),
     ev('portal_subagent_live', { op: 'event', id: 'sub1', event: { type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', delta: 'Now the systemd restart: does it wait for health?' } } }, 2),
   );
   const jobs = { supported: true, statuses: [{ key: 'background-tasks', text: 'bg 1 running' }, { key: 'bg-update', text: 'bg ⬆ v2.6.5 /bg-update' }, { key: 'paths', text: 'logs in /tmp/bg' }], widgets: [], jobs: [
@@ -209,10 +209,10 @@ if (phase === 'git') {
     if (u.endsWith('/git/gh')) return { installed: false, authed: false, repo: null, url: null, defaultBranch: null, note: 'Install gh' };
     if (/\/git(\?|$)/.test(u)) {
       (window as any).gitAsked++;
-      return { repo: true, root: '/workspaces/pithagoras', prefix: '', branch: 'main', head: 'a'.repeat(40), upstream: 'origin/main', ahead: 0, behind: 0, stashes: 0, operation: null, truncated: false, remotes: [], files: [{ path: 'README.md', x: '.', y: 'M', kind: 'changed', unstaged: { added: 2, removed: 1, binary: false } }, { path: 'notes.txt', x: '?', y: '?', kind: 'untracked' }] };
+      return { repo: true, root: '/workspaces/yulify', prefix: '', branch: 'main', head: 'a'.repeat(40), upstream: 'origin/main', ahead: 0, behind: 0, stashes: 0, operation: null, truncated: false, remotes: [], files: [{ path: 'README.md', x: '.', y: 'M', kind: 'changed', unstaged: { added: 2, removed: 1, binary: false } }, { path: 'notes.txt', x: '?', y: '?', kind: 'untracked' }] };
     }
     if (u.includes('/files?')) return { path: '', entries: [{ name: 'README.md', type: 'file', size: 12, mtime: 1 }], truncated: false };
-    if (u.includes('/file?')) return { content: '# Pithagoras\n', binary: false, size: 13, mtime: 1 };
+    if (u.includes('/file?')) return { content: '# Yulify\n', binary: false, size: 13, mtime: 1 };
     if (u.endsWith('/tools') && init?.method === 'PUT') {
       off = JSON.parse(init.body as string).off;
       (window as any).sentTools.push(off);
@@ -230,7 +230,7 @@ if (phase === 'git') {
   });
 }
 
-const session: Session = { id: 'preview', title: 'Fix the build', workspace: '/workspaces/pithagoras', executor: 'host', status: phase === 'interrupted' ? 'interrupted' : phase === 'args' || phase === 'pictures' || phase === 'stats' ? 'idle' : 'running', created_at: '', updated_at: '', last_error: null, pinned: false, provider: 'llama-server', model: 'Model A', thinking_level: 'medium' } as Session;
+const session: Session = { id: 'preview', title: 'Fix the build', workspace: '/workspaces/yulify', executor: 'host', status: phase === 'interrupted' ? 'interrupted' : phase === 'args' || phase === 'pictures' || phase === 'stats' ? 'idle' : 'running', created_at: '', updated_at: '', last_error: null, pinned: false, provider: 'llama-server', model: 'Model A', thinking_level: 'medium' } as Session;
 const noop = async () => {};
 // An extension moves its status twenty times a second: how often the chat asks for /background is counted.
 if (phase === 'nudge') {

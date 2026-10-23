@@ -11,7 +11,7 @@ import { inProcessHome } from "./server-harness.mjs";
  * do to the folder of skills pi reads. In this process, with no server around
  * it, so that what loads an extension is only what these routes do.
  */
-const home = inProcessHome("pithagoras-skills-api-");
+const home = inProcessHome("yulify-skills-api-");
 const agent = process.env.PI_CODING_AGENT_DIR;
 const skills = path.join(agent, "skills");
 const marker = path.join(home, "extension-ran");

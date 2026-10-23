@@ -128,7 +128,7 @@ export async function start(ctx) {
               d: {
                 token,
                 intents: INTENTS,
-                properties: { os: "linux", browser: "pithagoras", device: "pithagoras" },
+                properties: { os: "linux", browser: "yulify", device: "yulify" },
               },
             })
           );

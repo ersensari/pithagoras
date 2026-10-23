@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-settings-");
+const home = inProcessHome("yulify-settings-");
 
 const db = await import("../dist/db.js");
 const row = (key) => db.getDb().prepare("SELECT value FROM settings WHERE key = ?").get(key);

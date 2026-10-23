@@ -6,10 +6,10 @@
  * named by their content, are asked for fresh first, so a deploy is there on
  * the next load rather than the one after.
  */
-const SHELL = "pithagoras-shell-v2";
-const ASSETS = "pithagoras-assets-v1";
+const SHELL = "yulify-shell-v2";
+const ASSETS = "yulify-assets-v1";
 /** When each built asset was last used, so the ones no build asks for go first. */
-const USED = "pithagoras-assets-used-v1";
+const USED = "yulify-assets-used-v1";
 const CACHES = [SHELL, ASSETS, USED];
 
 /** A stale copy of these would run against a newer app. */

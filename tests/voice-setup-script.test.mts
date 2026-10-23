@@ -306,7 +306,7 @@ test('a volume from before engines could be chosen is built once for the pinned 
 test('a build from another audio.cpp revision is built again, and a clone that has not seen the pinned one fetches it first', () => {
   fresh();
   assert.equal(run(environment(DEFAULT_CHOICE)).status, 0);
-  const marker = path.join(volume, 'audio/build/portal/pithagoras-revision');
+  const marker = path.join(volume, 'audio/build/portal/yulify-revision');
   const pinned = readFileSync(marker, 'utf8').trim();
   assert.match(script, new RegExp(`audio_revision=${pinned}\n`));
   const again = run(environment(DEFAULT_CHOICE)).log;

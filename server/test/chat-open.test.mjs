@@ -8,7 +8,7 @@ import { freePort, inProcessHome, serverEnv, startServer } from "./server-harnes
  * Opening a chat, against the whole server: what the page asks for first, and
  * what it keeps open.
  */
-const home = inProcessHome("pithagoras-open-");
+const home = inProcessHome("yulify-open-");
 const agentDir = path.join(home, "agent");
 const map = (on) => Object.fromEntries(["off", "minimal", "low", "medium", "high", "xhigh", "max"].map((l) => [l, on.includes(l) ? l : null]));
 writeFileSync(path.join(agentDir, "models.json"), JSON.stringify({

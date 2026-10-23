@@ -11,7 +11,7 @@ async function portal(page: Page, theme: 'light' | 'dark') {
     if (p === '/api/projects') return { root: '/w', home: '/h', projects: [] };
     if (p === '/api/sessions') return { sessions: [], executor: 'host' };
   }, { settings: true });
-  await page.addInitScript((value) => localStorage.setItem('pithagoras.theme', value), theme);
+  await page.addInitScript((value) => localStorage.setItem('yulify.theme', value), theme);
 }
 
 /** The outline the browser draws round `el` while it has the focus, and the accent it should be. */

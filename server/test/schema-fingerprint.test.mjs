@@ -19,7 +19,7 @@ import { freePort, inProcessHome } from "./server-harness.mjs";
 // changed (below) that starts from a database made before it.
 const PINNED = { version: 3, fingerprint: "adcce7e7608d0fb960e55b42357b368bc7ba514d9b9ee4912963e1333375c9e5" };
 
-const home = inProcessHome("pithagoras-schema-");
+const home = inProcessHome("yulify-schema-");
 
 const { SCHEMA_VERSION } = await import("../dist/schema-version.js");
 const { getDb } = await import("../dist/db.js");

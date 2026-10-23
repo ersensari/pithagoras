@@ -13,7 +13,7 @@ Connected 2026-10-19 for ersensari@gmail.com.
   which need a paid security assessment).
 - Token: `data/home/.google_workspace_mcp/credentials/ersensari@gmail.com.json` (refresh token, kept across restarts).
 - Ports: `WORKSPACE_MCP_PORT`/`PORT` 8765 and `GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8765/oauth2callback` -
-  `PORT` matters: the server reads it before `WORKSPACE_MCP_PORT`, and Pithagoras's own `PORT=4100` leaked in (the
+  `PORT` matters: the server reads it before `WORKSPACE_MCP_PORT`, and Yulify's own `PORT=4100` leaked in (the
   callback listener ended up on 4101 while Google redirected to 8765).
 
 ## Re-authorizing (token revoked or scopes changed)

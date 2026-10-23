@@ -6,7 +6,7 @@ import { inProcessHome } from "./server-harness.mjs";
 
 // A browser wired under another name, as an older portal or a hand-written
 // mcp.json would have it. What makes it the browser is where it connects.
-const home = inProcessHome("pithagoras-name-");
+const home = inProcessHome("yulify-name-");
 const mcp = path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json");
 const CDP = "http://127.0.0.1:9222";
 writeFileSync(

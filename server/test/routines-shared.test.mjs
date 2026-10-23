@@ -5,7 +5,7 @@ import { inProcessHome } from "./server-harness.mjs";
 
 // The HTTP API and the agent's tools make and change routines by the same rules, and these hold them to it.
 
-const home = inProcessHome("pithagoras-routines-shared-");
+const home = inProcessHome("yulify-routines-shared-");
 
 const { default: express } = await import("express");
 const { routinesRouter } = await import("../dist/api/routines.js");

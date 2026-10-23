@@ -115,7 +115,7 @@ export async function mockPortal(page: Page, answer: (ask: Ask) => Answer | Prom
     return route.fulfill({ json: got });
   });
   await page.addInitScript(({ streams, setup }) => {
-    if (setup !== 'fresh') localStorage.setItem('pithagoras.setup', setup);
+    if (setup !== 'fresh') localStorage.setItem('yulify.setup', setup);
     if (streams === 'none') return;
     if (streams === 'idle') {
       (window as any).EventSource = class { onmessage: any; onopen: any; onerror: any; addEventListener() {} close() {} };

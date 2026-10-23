@@ -9,7 +9,7 @@ import { freePort, inProcessHome, serverEnv, startServer } from "./server-harnes
  * server: it goes back to the person as not sent, and a chat it was the start
  * of is not named after it.
  */
-const home = inProcessHome("pithagoras-unsent-");
+const home = inProcessHome("yulify-unsent-");
 
 // pi is not up until the test says so. How long it takes to start is the server's
 // own business, and a Stop that has to land inside that time was a race: an

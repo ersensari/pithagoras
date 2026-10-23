@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-ask-");
+const home = inProcessHome("yulify-ask-");
 
 const { createSession, getSession } = await import("../dist/db.js");
 const { sessions } = await import("../dist/session-manager.js");

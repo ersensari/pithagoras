@@ -22,12 +22,22 @@ const SOCKET = process.env.DOCKER_SOCKET || "/var/run/docker.sock";
 export const dockerAvailable = (): boolean => existsSync(SOCKET);
 
 /** `timeoutMs`: given up once so long has passed in all, answer or not — not only after a silence. */
-export function request<T = unknown>(
+export async function request<T = unknown>(
   method: string,
   path: string,
   body?: unknown,
   timeoutMs?: number,
 ): Promise<{ status: number; body: T }> {
+  // Verify ownership before a destructive Docker action, including deletion by ID.
+  const resource = /^\/(containers|volumes)\/([^/?]+)(?:\/(stop|kill))?(?:\?.*)?$/.exec(path);
+  if (resource && (method === "DELETE" || (method === "POST" && resource[3]))) {
+    const endpoint = resource[1] === "containers" ? `/containers/${resource[2]}/json` : `/volumes/${resource[2]}`;
+    const found = await request<{ Config?: { Labels?: Record<string, string> }; Labels?: Record<string, string> }>("GET", endpoint);
+    if (found.status !== 404) {
+      const labels = resource[1] === "containers" ? found.body?.Config?.Labels : found.body?.Labels;
+      if (found.status !== 200 || labels?.["forgeloop.managed"] !== "true" || labels?.["forgeloop.project"] !== "forgeloop-ai") throw new Error("Docker resource is not owned by forgeloop-ai; leaving it untouched.");
+    }
+  }
   return new Promise((resolve, reject) => {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const req = http.request(
@@ -192,3 +202,5 @@ export async function containerAction(name: string, verb: "start" | "stop" | "re
     throw new Error(res.body?.message || `${verb === "start" ? "Start" : "Stop"} failed (${res.status})`);
   }
 }
+
+export const managedLabels = (resource: string) => ({ "forgeloop.managed": "true", "forgeloop.project": "forgeloop-ai", "forgeloop.resource": resource });

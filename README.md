@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/hero.png" alt="Pithagoras" width="620">
+  <img src="assets/yulify-hero.svg" alt="Yulify" width="620">
 </p>
 
 <p align="center">
@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <a href="https://thecodacus.github.io/pithagoras/">Documentation</a> ·
-  <a href="https://thecodacus.github.io/pithagoras/guide/deploying">Deploying</a> ·
-  <a href="https://thecodacus.github.io/pithagoras/channels/writing-a-channel">Write a channel</a>
+  <a href="https://ersensari.github.io/yulify/">Documentation</a> ·
+  <a href="https://ersensari.github.io/yulify/guide/deploying">Deploying</a> ·
+  <a href="https://ersensari.github.io/yulify/channels/writing-a-channel">Write a channel</a>
 </p>
 
 ---
@@ -28,7 +28,7 @@ adds 150–300 tokens per tool.
 ## Quick start
 
 ```bash
-git clone https://github.com/thecodacus/pithagoras.git && cd pithagoras
+git clone https://github.com/ersensari/yulify.git && cd yulify
 cp .env.example .env      # set PORTAL_PASSWORD (8+ characters, in single quotes if it has a $ or #; it will not start without), and uncomment WORKSPACES_DIR with the folder your repos are in
 docker compose up -d --build
 ```
@@ -41,7 +41,7 @@ The container uses host networking, so pi and its extensions reach services on t
 `127.0.0.1` — a llama.cpp server on `:8080`, for example — exactly as they would outside a
 container. It needs the Docker socket mount to install the Browser and Voice add-ons.
 Running from source, the Portainer stack and the full variable list are in
-[Deploying](https://thecodacus.github.io/pithagoras/guide/deploying).
+[Deploying](https://ersensari.github.io/yulify/guide/deploying).
 
 Browsers install the portal as an app (PWA) only over HTTPS or on `localhost`.
 
@@ -84,7 +84,7 @@ the run continues server-side. The client reconnects with the last event id it s
 | `EXECUTOR` | What it does |
 |---|---|
 | `host` (default) | pi runs inside the portal process, working directly on the repos mounted at `/workspaces`. Fast, real git, full access to those directories. |
-| `container` | Each task gets its own container (`PI_IMAGE`, default `pithagoras-runner:latest`) with only its project mounted, dropped capabilities, `no-new-privileges`, and memory/CPU/PID caps. Needs the Docker socket mount. |
+| `container` | Each task gets its own container (`PI_IMAGE`, default `forgeloop-ai-yulify-runner:latest`) with only its project mounted, dropped capabilities, `no-new-privileges`, and memory/CPU/PID caps. Needs the Docker socket mount. |
 
 pi has **no approval prompts** — by design it runs with the permissions of its process
 ("real isolation needs to come from the OS or a container boundary"). That is what makes
@@ -105,7 +105,7 @@ on Tailscale/LAN rather than the public internet.
 | `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY` | — | Provider credentials, forwarded to pi. |
 | `TASK_MEMORY_MB` / `TASK_CPUS` / `TASK_PIDS_LIMIT` | `2048` / `2` / `512` | Per-task caps in `container` mode. |
 
-The rest is in [Configuration](https://thecodacus.github.io/pithagoras/reference/configuration).
+The rest is in [Configuration](https://ersensari.github.io/yulify/reference/configuration).
 
 ## Settings
 
@@ -146,6 +146,10 @@ npm run docs:build   # static build into docs/.vitepress/dist
 
 ## License
 
-Pithagoras is licensed under the [Apache License 2.0](LICENSE) (see also [NOTICE](NOTICE)). The voice
+Yulify is licensed under the [Apache License 2.0](LICENSE) (see also [NOTICE](NOTICE)). The voice
 mode ships a voice activity model and a WebAssembly runtime from other projects, under their own
 licences: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Origin
+
+Yulify is an independently maintained fork of [Pithagoras](https://github.com/thecodacus/pithagoras). Original copyright and Apache-2.0 notices are preserved in [NOTICE](NOTICE) and [LICENSE](LICENSE).

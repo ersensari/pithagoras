@@ -14,7 +14,7 @@ process.env.PORTAL_CONTAINER_NAME = 'portal-test';
 process.env.NVIDIA_SMI = path.join(dir, 'no-such-nvidia-smi');
 delete process.env.VOICE_GPU;
 const NO_RUNTIME = 'could not select device driver "nvidia" with capabilities: [[gpu]]';
-const CONTAINER = 'pithagoras-voice', VOLUME = 'pithagoras_voice-models';
+const CONTAINER = 'forgeloop-ai-yulify-voice', VOLUME = 'forgeloop-ai-yulify-voice-models';
 
 let container: any = null;
 let volumes = new Set<string>();
@@ -34,7 +34,7 @@ const docker = await fakeDocker(process.env.DOCKER_SOCKET!, async ({ method, url
   }
   if (url.startsWith('/images/')) return { status: images.has(decodeURIComponent(url.slice('/images/'.length, -'/json'.length))) ? 200 : 404 };
   // The throwaway container that reads nvidia-smi: Docker has no GPU runtime here.
-  if (url === '/containers/create') return { status: 500, json: { message: NO_RUNTIME } };
+  if (url.startsWith('/containers/create?name=forgeloop-ai-yulify-voice-probe-')) return { status: 500, json: { message: NO_RUNTIME } };
   if (url === '/volumes/create') { volumes.add(body.Name); return {}; }
   if (method === 'DELETE' && url.startsWith('/volumes/')) {
     const name = url.slice('/volumes/'.length);
@@ -83,7 +83,7 @@ const settle = async () => { for (let n = 0; n < 300 && (await get('/voice/insta
 const RECOGNITION_ONLY = { tts: 'none', asr: 'whisper', asrModel: 'base' };
 const install = async (choice: object = RECOGNITION_ONLY) => { assert.equal((await post('/voice/install', choice)).status, 200); return settle(); };
 /** A voice container as the installer of an older portal made it, with nothing remembered of the settings it overwrote. */
-const seedContainer = (running = true) => { container = { Config: { Labels: { 'pithagoras.addon': 'voice', 'pithagoras.voice-network': 'shared-v1' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: running } }; volumes.add(VOLUME); };
+const seedContainer = (running = true) => { container = { Config: { Labels: { 'yulify.addon': 'voice', 'yulify.voice-network': 'shared-v1' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: running } }; volumes.add(VOLUME); };
 const removed = () => calls.filter(c => c.method === 'DELETE').map(c => c.url);
 
 // A speech recognition server and a speech server the user runs themselves, with the model one of them is told to use.

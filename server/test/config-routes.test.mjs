@@ -261,7 +261,7 @@ test("a channel package is named, is not one that ships with the portal, and is 
   for (const name of ["%2E%2E%2Fescape", "a%20b", "-g", "x%2Fy%2Fz"]) {
     refused(await send(`/api/channel-packages/${name}`, "DELETE"), 400, /Invalid package name/);
   }
-  refused(await send("/api/channel-packages/pithagoras-channel-webhook", "DELETE"), 400, /ship with the portal/);
+  refused(await send("/api/channel-packages/yulify-channel-webhook", "DELETE"), 400, /ship with the portal/);
   for (const spec of [undefined, "", "   ", 5]) {
     refused(await send("/api/channel-packages", "POST", { spec }), 400, /spec required/);
   }

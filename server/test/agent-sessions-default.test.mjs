@@ -7,7 +7,7 @@ import { freePort, inProcessHome, serverEnv, startServer } from "./server-harnes
  * first agent is the one the portal calls that, not an id the code expects: a
  * database whose first agent has another id still has an Agent tab.
  */
-const home = inProcessHome("pithagoras-agent-default-");
+const home = inProcessHome("yulify-agent-default-");
 const { getDb } = await import("../dist/db.js");
 
 let base;

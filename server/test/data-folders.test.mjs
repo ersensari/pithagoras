@@ -8,10 +8,10 @@ import { freePort, runToEnd, serverEnv, startServer, testHome } from "./server-h
 // A portal started from source, as somebody who is not root: the folders it keeps for itself that nothing
 // names are inside its data directory. They used to be under a fixed /data, which only the image has,
 // and the server did not start without it.
-const home = testHome("pithagoras-data-folders-");
+const home = testHome("yulify-data-folders-");
 rmSync(path.join(home, "agent-home"), { recursive: true });
 // What this process itself reads is another one, as the server is running in the first.
-const own = testHome("pithagoras-data-folders-own-");
+const own = testHome("yulify-data-folders-own-");
 
 test("with only DATA_DIR given, the bin folder, the agent's home and the channels folder are made inside it", async () => {
   const env = serverEnv(home, await freePort());
@@ -38,7 +38,7 @@ test("the folders it names itself are where it says, and the local browser's pro
 });
 
 test("with no DATA_DIR at all, the local browser's profile is in ./data, not in /data", async () => {
-  const cwd = testHome("pithagoras-data-folders-cwd-");
+  const cwd = testHome("yulify-data-folders-cwd-");
   const env = { ...process.env };
   delete env.DATA_DIR;
   const module = fileURLToPath(new URL("../dist/extensions/browser-local.js", import.meta.url));

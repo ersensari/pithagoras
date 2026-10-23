@@ -12,10 +12,10 @@ import { scratch } from "./server-harness.mjs";
 // copy and the browser takes it, and kept for a year where the name says what is
 // in it.
 
-const root = scratch("pithagoras-web-static-");
-// Below a dot folder, as a build kept under `~/.pithagoras` is: Express takes a
+const root = scratch("yulify-web-static-");
+// Below a dot folder, as a build kept under `~/.yulify` is: Express takes a
 // file with one in its path for hidden and answers 404, unless it is told the root.
-const dist = path.join(root, ".pithagoras", "web", "dist");
+const dist = path.join(root, ".yulify", "web", "dist");
 // What a path that climbs out of the build can name: the folder above it, and the one above that.
 const outside = path.join(dist, "..", "secret.txt");
 const farther = path.join(dist, "..", "..", "secret.txt");

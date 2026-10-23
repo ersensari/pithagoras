@@ -1,5 +1,5 @@
 /**
- * The shared memory (mem0, the pithagoras-mem0 container), for the Memory page.
+ * The shared memory (mem0, the forgeloop-ai-yulify-mem0 container), for the Memory page.
  * The portal is the one door: the apps and the browser reach /api/mem0/* here,
  * with the portal's own login, and this forwards it to mem0's HTTP routes with
  * the bearer token. The token never leaves the server.

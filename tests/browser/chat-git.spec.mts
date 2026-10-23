@@ -14,7 +14,7 @@ test('Git is a panel of its own beside the chat, with its tabs in its header, an
 
   await panels.getByRole('button', { name: 'Open README.md in Files' }).click();
   // Files opens beside it, on that file.
-  await expect(panels.getByRole('textbox', { name: 'Contents of README.md' })).toHaveValue('# Pithagoras\n');
+  await expect(panels.getByRole('textbox', { name: 'Contents of README.md' })).toHaveValue('# Yulify\n');
   await expect(tabs).toBeVisible();
   // Asked once: Files closed and opened again shows the folder, not the file again.
   await panels.getByRole('button', { name: 'Close the files' }).click();
@@ -58,9 +58,9 @@ test('an edit not saved in Files outweighs keeping Git open: a third panel close
   const panels = page.getByRole('complementary', { name: 'Panels' });
   await panels.getByRole('button', { name: 'Open README.md in Files' }).click();
   const text = panels.getByRole('textbox', { name: 'Contents of README.md' });
-  await text.fill('# Pithagoras\nnot saved yet\n');
+  await text.fill('# Yulify\nnot saved yet\n');
   await page.getByRole('button', { name: 'Terminal', exact: true }).click();
-  await expect(text).toHaveValue('# Pithagoras\nnot saved yet\n');
+  await expect(text).toHaveValue('# Yulify\nnot saved yet\n');
   await expect(panels.getByRole('tablist', { name: 'Git' })).toHaveCount(0);
   await expect(panels.getByRole('tablist', { name: 'Terminals' })).toBeVisible();
 });

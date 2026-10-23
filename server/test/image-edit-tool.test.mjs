@@ -13,7 +13,7 @@ import { inProcessHome } from "./server-harness.mjs";
  * own client, so the tool's parameters are checked by pi as they are for a
  * real model.
  */
-const home = inProcessHome("pithagoras-edit-image-");
+const home = inProcessHome("yulify-edit-image-");
 
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);

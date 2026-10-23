@@ -6,7 +6,7 @@ import { inProcessHome } from "./server-harness.mjs";
 
 // An install from before the portal's own browser tools: the Playwright MCP
 // entry the portal wrote, and switches on its tools.
-const home = inProcessHome("pithagoras-adopt-");
+const home = inProcessHome("yulify-adopt-");
 const mcpFile = path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json");
 const CDP = "http://127.0.0.1:9222";
 const managed = { command: "npx", args: ["-y", "@playwright/mcp@0.0.79", "--cdp-endpoint", CDP] };

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inProcessHome } from './helpers.mts';
-inProcessHome('pithagoras-canvas-test-');
+inProcessHome('yulify-canvas-test-');
 const {getDb}=await import('../server/src/db.js');
 const {CanvasTools,WriteStream,canvasWritePrefix}=await import('../server/src/pi/canvas-tools.js');
 const {readCanvas,editCanvas,listCanvases,persistCanvas,restoreCanvas,forgetCanvases,createCanvas,interruptCanvasWrites}=await import('../server/src/canvases.js');

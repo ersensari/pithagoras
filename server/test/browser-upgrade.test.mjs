@@ -6,7 +6,7 @@ import { inProcessHome } from "./server-harness.mjs";
 
 // An install that already has conversations in it, opened the way a server
 // opens it after an upgrade: the database first, the tools later.
-const home = inProcessHome("pithagoras-upgrade-");
+const home = inProcessHome("yulify-upgrade-");
 writeFileSync(
   path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json"),
   JSON.stringify({ mcpServers: { browser: {} } })

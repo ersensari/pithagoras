@@ -9,9 +9,9 @@ import { freePort, inProcessHome, serverEnv, startServer } from "./server-harnes
  * served while the chat exists, and not after it is gone, whatever a failed
  * clean-up left on the disk.
  */
-// The data folder is below a dot folder, as it is for `~/.pithagoras` or
+// The data folder is below a dot folder, as it is for `~/.yulify` or
 // `~/.local/share/...`: Express takes a file under one for hidden and answers 404.
-const home = path.join(inProcessHome("pithagoras-image-route-"), ".pithagoras");
+const home = path.join(inProcessHome("yulify-image-route-"), ".yulify");
 mkdirSync(path.join(home, "agent"), { recursive: true });
 mkdirSync(path.join(home, "agent-home"), { recursive: true });
 process.env.DATA_DIR = home;

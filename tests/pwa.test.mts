@@ -186,7 +186,7 @@ test("the worker leaves the live parts of the portal to the server", async () =>
 
 test("installing keeps the page and the assets it loads, which the first visit fetched before the worker was there", async () => {
   const sw = await installed({ ...deployed });
-  assert.deepEqual(sw.stored("pithagoras-assets-v1"), ["/assets/index-a.css", "/assets/index-a.js"]);
+  assert.deepEqual(sw.stored("yulify-assets-v1"), ["/assets/index-a.css", "/assets/index-a.js"]);
   for (const path of Object.keys(deployed)) delete (sw.routes as Record<string, Route>)[path];
   // Offline: the page and its assets still open.
   assert.match(await (await sw.get("/s/abc", { mode: "navigate" }))!.text(), /index-a\.js/);
@@ -204,7 +204,7 @@ test("a failing server behind a proxy opens the kept page rather than the proxy'
 test("the page the server sends for a missing asset is never kept as that asset", async () => {
   const sw = await installed({ ...deployed, "/assets/gone.js": () => html("/assets/index-a.js") });
   await sw.get("/assets/gone.js");
-  assert.ok(!sw.stored("pithagoras-assets-v1").includes("/assets/gone.js"));
+  assert.ok(!sw.stored("yulify-assets-v1").includes("/assets/gone.js"));
 });
 
 test("theme-init.js is asked for fresh, so a deploy's copy runs on the next load", async () => {
@@ -227,7 +227,7 @@ test("a new deploy evicts the assets used longest ago, never the page's own", as
   routes["/"] = () => html("/assets/index-b.js");
   routes["/assets/index-b.js"] = () => js();
   await later.get("/", { mode: "navigate" });
-  const kept = later.stored("pithagoras-assets-v1");
+  const kept = later.stored("yulify-assets-v1");
   assert.equal(kept.length, 200);
   assert.ok(kept.includes("/assets/index-b.js"));
   assert.ok(kept.includes("/assets/old-0.js"));
@@ -252,7 +252,7 @@ test("a page that is not the portal's, like a login proxy's, is never kept as th
   await sw.get("/", { mode: "navigate" });
   delete (sw.routes as Record<string, Route>)["/"];
   assert.match(await (await sw.get("/", { mode: "navigate" }))!.text(), /index-a\.js/);
-  assert.deepEqual(sw.stored("pithagoras-assets-v1"), ["/assets/index-a.css", "/assets/index-a.js"]);
+  assert.deepEqual(sw.stored("yulify-assets-v1"), ["/assets/index-a.css", "/assets/index-a.js"]);
 });
 
 test("the first load after a deploy downloads each asset once, though the page and the worker both want it", async () => {

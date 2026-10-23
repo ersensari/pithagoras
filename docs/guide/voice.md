@@ -25,10 +25,10 @@ suppression are requested from the browser; headphones work best when speaker
 audio is still picked up by your microphone.
 
 VAD runs locally in your browser. Its pinned model and WebAssembly runtime are
-served by Pithagoras, with no CDN dependency or extra GPU allocation.
+served by Yulify, with no CDN dependency or extra GPU allocation.
 Whisper receives rolling snapshots while you speak (roughly every two seconds),
 and a fresh snapshot after about 200 ms of silence. The voice screen shows the
-latest partial transcript. At turn end, Pithagoras reuses a result only when it
+latest partial transcript. At turn end, Yulify reuses a result only when it
 covers the last detected speech; otherwise it transcribes the final recording.
 This overlaps recognition with the silence window instead of starting all work
 after it. The current Whisper API remains clip-based, so this is speculative
@@ -207,7 +207,7 @@ is `86` (consumer Ampere, such as an RTX 3060); use `FLASH_ATTN_CUDA_ARCHS=80`
 for A100 or `90` for Hopper. Match the build to your GPU
 and ensure the NVIDIA driver supports the upstream containers' CUDA versions.
 
-From the Pithagoras repository on that host:
+From the Yulify repository on that host:
 
 ```sh
 mkdir -p voice-runtime
@@ -318,7 +318,7 @@ cd /opt/audio.cpp
 scripts/build_linux.sh --backend cuda --target audiocpp_server
 ```
 
-The unit uses GPU 0 unless `/etc/default/pithagoras-audio-cpp-multilingual`
+The unit uses GPU 0 unless `/etc/default/yulify-audio-cpp-multilingual`
 sets another with `VOICE_GPU=<index>`, which is what a host with two GPUs does to
 leave the first to the session model.
 
@@ -708,8 +708,8 @@ prefill; subsequent turns can reuse it. No custom chat template is needed.
 ## Automatic setup from Settings
 
 On a Linux NVIDIA host with Docker and NVIDIA Container Toolkit, open
-**Settings → Add-ons → Voice → Install voice**. Pithagoras creates a separate
-`pithagoras-voice` container and displays the setup log. Under **Speech engines**
+**Settings → Add-ons → Voice → Install voice**. Yulify creates a separate
+`forgeloop-ai-yulify-voice` container and displays the setup log. Under **Speech engines**
 you choose the speech synthesis engine (Breeze, Chatterbox or Kokoro) and the speech
 recognition model (Whisper base or small, Qwen3-ASR 0.6B or 1.7B), or leave the
 choice to the installer, which reads the GPU and its free memory and picks the
@@ -730,7 +730,7 @@ Allow about 30 GB free disk space during setup. First installation can take seve
 minutes or longer depending on compilation and download speeds. Source downloads
 resume, completed models and builds are reused, and the quantized model is moved
 into place only after the converter inspects it successfully. The full-precision
-file is then removed. Models persist in `pithagoras_voice-models`. Choosing other
+file is then removed. Models persist in `forgeloop-ai-yulify-voice-models`. Choosing other
 engines later recreates the container and builds or downloads only what is new;
 an installation made before the choice existed is the default combination, and
 keeps working unchanged.

@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { inProcessHome, scratch } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-theme-");
+const home = inProcessHome("yulify-theme-");
 
 const { SdkPiClient, loadTheme } = await import("../dist/pi/sdk-client.js");
 
@@ -39,7 +39,7 @@ test("an extension reads what is in the chat box, and what it put there", () => 
 });
 
 test("the theme set in pi's settings is the one extensions get", async () => {
-  const cwd = scratch("pithagoras-theme-cwd-");
+  const cwd = scratch("yulify-theme-cwd-");
   writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, "settings.json"), JSON.stringify({ theme: "light" }));
   const pi = await import("@earendil-works/pi-coding-agent");
   const colour = () => SdkPiClient.prototype.buildUiContext.call({ pendingUi: new Map(), emit() {} }).theme.fg("text", "x");

@@ -33,7 +33,7 @@ const DEFAULT_LEVELS = EFFORT_LEVELS;
  * model's levels only change when its config does, so the last answer is a
  * better first guess than the full list.
  */
-const LEVELS_KEY = "pithagoras.thinkingLevels";
+const LEVELS_KEY = "yulify.thinkingLevels";
 
 const levelsKey = (provider: string | undefined, model: string | undefined) => `${provider ?? ""}:${model ?? ""}`;
 
@@ -61,7 +61,7 @@ const cachedLevels = (provider: string | null | undefined, model: string | null 
  * told apart from another model's — the default's before it was changed —
  * nor from the same model's, and either stayed wrongly or went wrongly.
  */
-const FOLLOWS_KEY = "pithagoras.thinkingLevelsFollow";
+const FOLLOWS_KEY = "yulify.thinkingLevelsFollow";
 
 function readFollows(): Record<string, string> {
   try {
@@ -99,7 +99,7 @@ function cacheLevels(provider: string, model: string, levels: string[], named?: 
   if (follows) local.set(FOLLOWS_KEY, JSON.stringify({ ...readFollows(), [follows]: levelsKey(provider, model) }));
 }
 
-const RECENTS_KEY = "pithagoras.recentModels";
+const RECENTS_KEY = "yulify.recentModels";
 const MAX_RECENTS = 4;
 
 /**

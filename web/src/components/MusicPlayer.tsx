@@ -85,7 +85,7 @@ export function MusicPlayer({ sessionId, jobId, compact = false, controlsOnly = 
   }
   const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
   const remoteControls = <div className="flex min-w-0 items-center gap-2 text-xs text-fg-muted">
-    <button type="button" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent hover:bg-accent/20" aria-label={t(playing ? "Pause" : "Play")} title={t(playing ? "Pause" : "Play")} onClick={() => window.dispatchEvent(new CustomEvent("pithagoras:music-control", { detail: { sessionId, jobId, action: "toggle" } }))}>{playing ? <LuPause aria-hidden /> : <LuPlay aria-hidden />}</button>
+    <button type="button" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent hover:bg-accent/20" aria-label={t(playing ? "Pause" : "Play")} title={t(playing ? "Pause" : "Play")} onClick={() => window.dispatchEvent(new CustomEvent("yulify:music-control", { detail: { sessionId, jobId, action: "toggle" } }))}>{playing ? <LuPause aria-hidden /> : <LuPlay aria-hidden />}</button>
     {compact ? <span className="min-w-0 flex-1 truncate">{t(playing ? "Music playing" : "Play")}</span> : <>
       <span className="shrink-0 tabular-nums">{clock(position)}</span>
       <input type="range" className="min-w-0 flex-1 accent-accent" aria-label={t("Playback position")} min={0} max={duration || 0} step={0.1} value={Math.min(position, duration)} disabled={!duration} onChange={event => { const element = sourceAudio(); if (element) { element.currentTime = Number(event.target.value); setPosition(element.currentTime); } }} />

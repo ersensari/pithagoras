@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-agent-channels-");
+const home = inProcessHome("yulify-agent-channels-");
 
 const { getDb } = await import("../dist/db.js");
 const { createAgent, deleteAgent } = await import("../dist/agents.js");

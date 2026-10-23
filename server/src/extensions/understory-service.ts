@@ -1,3 +1,4 @@
+import { managedLabels } from "./docker.js";
 import { randomBytes } from "node:crypto";
 import { getSetting, putSetting } from "../db.js";
 import { tlsFiles } from "../http-security.js";
@@ -21,8 +22,8 @@ import { voiceNetworkMode as sharedNetworkMode } from "./voice-service.js";
  */
 
 export const IMAGE = "ghcr.io/thecodacus/understory:latest";
-export const CONTAINER = "pithagoras-understory";
-export const VOLUME = process.env.UNDERSTORY_VOLUME || "pithagoras_understory-memory";
+export const CONTAINER = "forgeloop-ai-yulify-understory";
+export const VOLUME = process.env.UNDERSTORY_VOLUME || "forgeloop-ai-yulify-understory-memory";
 export const port = (): number => Number(process.env.UNDERSTORY_PORT) || 3800;
 export const managedUrl = (): string => `http://127.0.0.1:${port()}/mcp`;
 
@@ -172,9 +173,9 @@ export function llmEnv(llm: LlmChoice): { baseUrl: string; apiKey: string; model
 }
 
 /** How the portal's own container is told from anything else by that name: its label. */
-export const LABEL = "pithagoras.addon";
+export const LABEL = "yulify.addon";
 const ours = (labels: Record<string, string> | undefined) =>
-  labels?.[LABEL] === "understory" || labels?.["pithagoras.managed"] === "true";
+  labels?.[LABEL] === "understory" || labels?.["yulify.managed"] === "true";
 
 /**
  * `networkMode`: the portal's own network — the host's, or the portal
@@ -195,7 +196,7 @@ export function spec(cfg: UnderstoryConfig, auth: string, networkMode = "host") 
       // At a set time the portal starts the pass itself: Understory's timer stays off.
       ...(cfg.dreamInterval && !cfg.dreamAt ? [`DREAM_INTERVAL=${cfg.dreamInterval}`] : []),
     ],
-    Labels: { [LABEL]: "understory" },
+    Labels: { ...managedLabels("understory"), [LABEL]: "understory" },
     HostConfig: {
       NetworkMode: networkMode,
       RestartPolicy: { Name: "unless-stopped" },
@@ -272,7 +273,7 @@ async function installNow(start = true): Promise<void> {
   const cfg = config();
   const made = spec(cfg, token(), await sharedNetworkMode());
   await ensureImage(IMAGE, (state) => (pulling = state));
-  await request("POST", "/volumes/create", { Name: VOLUME });
+  await request("POST", "/volumes/create", { Name: VOLUME, Labels: managedLabels("volume") });
   if ((await onlyOurs()).exists) await removeNow();
   const created = await request<{ message?: string }>("POST", `/containers/create?name=${CONTAINER}`, made);
   if (created.status >= 400) throw new Error(created.body?.message || `Create failed (${created.status})`);
@@ -326,7 +327,7 @@ export function lastDream(): DreamRun | null {
 }
 
 /** In every script the portal runs there, so one given up on can be found and ended. */
-const MARK = "pithagoras-portal-run";
+const MARK = "yulify-portal-run";
 
 /**
  * Code run inside Understory's container, with its own library, settings and

@@ -39,12 +39,12 @@ gpu=0; if [ "$speech_gpu" = 1 ] || [ "$asr_device" = gpu ]; then gpu=1; fi
 cpu_server=0; if { [ "$asr" = qwen3-asr ] && [ "$asr_device" = cpu ]; } || { [ "$tts" != none ] && [ "$tts_device" = cpu ]; }; then cpu_server=1; fi
 cd /voice
 if [ -n "${VOICE_PLAN:-}" ]; then echo "VOICE_STAGE: $VOICE_PLAN"; fi
-if [ ! -f /usr/local/share/pithagoras-voice-deps ]; then
+if [ ! -f /usr/local/share/forgeloop-ai-yulify-voice-deps ]; then
   echo 'VOICE_STAGE: Installing build tools'
   dpkg --configure -a
   apt-get update
   apt-get install -y --no-install-recommends git cmake ninja-build build-essential curl ca-certificates python3 libssl-dev aria2
-  touch /usr/local/share/pithagoras-voice-deps
+  touch /usr/local/share/forgeloop-ai-yulify-voice-deps
 fi
 # Kokoro turns text into phonemes with eSpeak NG, which audio.cpp loads from the system library and its data.
 if [ "$tts" = kokoro ] && ! dpkg -s libespeak-ng1 espeak-ng-data >/dev/null 2>&1; then
@@ -78,29 +78,29 @@ audio_revision=795c45fbde0a7d29c93b22199728ff5caaec02e5
 build_audio() {
   local dir="$1" cuda="$2" have models architecture='' built_architecture=''
   shift 2
-  local built="$dir/pithagoras-families"
+  local built="$dir/yulify-families"
   # A build from before this was written down is from the earlier pin.
   local built_revision
-  built_revision=$(cat "$dir/pithagoras-revision" 2>/dev/null || true)
+  built_revision=$(cat "$dir/yulify-revision" 2>/dev/null || true)
   # A volume from before engines could be chosen was built for Breeze alone.
   if [ -f "$built" ]; then have=$(cat "$built"); elif [ "$cuda" = on ] && [ -x "$dir/bin/audiocpp_server" ]; then have=breeze_tts; else have=; fi
   models=$(printf '%s,' "$have" "$@" | tr ',' '\n' | sed '/^$/d' | sort -u | paste -sd, -)
   if [ "$cuda" = on ]; then
     architecture=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d '. ')
     # A volume from before this was written down has it in the CMake cache.
-    built_architecture=$(cat "$dir/pithagoras-architecture" 2>/dev/null || sed -n 's/^CMAKE_CUDA_ARCHITECTURES:[A-Z]*=//p' "$dir/CMakeCache.txt" 2>/dev/null || true)
+    built_architecture=$(cat "$dir/yulify-architecture" 2>/dev/null || sed -n 's/^CMAKE_CUDA_ARCHITECTURES:[A-Z]*=//p' "$dir/CMakeCache.txt" 2>/dev/null || true)
   fi
   if [ "$models" != "$have" ] || [ "$built_revision" != "$audio_revision" ] || { [ -n "$built_architecture" ] && [ "$built_architecture" != "$architecture" ]; } || [ ! -x "$dir/bin/audiocpp_server" ] || { [ "$cuda" = on ] && [ ! -x "$dir/bin/audiocpp_gguf" ]; } || ! grep -q 'AUDIOCPP_BUILD_NATIVE_MODEL_MANAGER:BOOL=ON' "$dir/CMakeCache.txt" 2>/dev/null; then
     if [ "$cuda" = on ]; then
       echo "VOICE_STAGE: Building CUDA speech runtime and quantizer ($models, sm_$architecture)"
       (cd audio && bash scripts/build_linux.sh --native-model-manager --system-openssl --cuda on --cuda-arch "$architecture" --build-dir "/voice/$dir" --build-type Release --model-set custom --models "$models" --target audiocpp_server --target audiocpp_gguf --jobs 4) 2>&1 | tr '\r' '\n'
-      echo "$architecture" > "$dir/pithagoras-architecture"
+      echo "$architecture" > "$dir/yulify-architecture"
     else
       echo "VOICE_STAGE: Building CPU audio runtime ($models)"
       (cd audio && bash scripts/build_linux.sh --native-model-manager --system-openssl --cuda off --build-dir "/voice/$dir" --build-type Release --model-set custom --models "$models" --target audiocpp_server --jobs 4) 2>&1 | tr '\r' '\n'
     fi
     echo "$models" > "$built"
-    echo "$audio_revision" > "$dir/pithagoras-revision"
+    echo "$audio_revision" > "$dir/yulify-revision"
   fi
 }
 # No audio.cpp at all for Whisper alone. Without a GPU it is a CPU build of its own, with no CUDA toolchain.

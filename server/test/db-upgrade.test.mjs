@@ -7,7 +7,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { freePort, inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-upgrade-");
+const home = inProcessHome("yulify-upgrade-");
 
 const { DamagedDatabase, backupTo, backupsIn, integrityProblems, pruneBackups, runUpgrade } = await import("../dist/db-upgrade-steps.js");
 const { SCHEMA_VERSION } = await import("../dist/schema-version.js");
@@ -197,8 +197,8 @@ test("the repair steps name the container the portal is told it has, and have a 
   assert.match(named, /docker stop pi-portal/);
   assert.match(named, /\.Mounts.*pi-portal\)/);
   assert.match(named, /docker start pi-portal/);
-  assert.doesNotMatch(named, /pithagoras/);
-  assert.match(repairSteps({}, "/srv/data", true).join("\n"), /docker stop pithagoras/, "the name the Compose files give it, when none is said");
+  assert.doesNotMatch(named, /yulify/);
+  assert.match(repairSteps({}, "/srv/data", true).join("\n"), /docker stop yulify/, "the name the Compose files give it, when none is said");
   assert.doesNotMatch(repairSteps({ PORTAL_CONTAINER_NAME: "x; rm -rf /" }, "/srv/data", true).join("\n"), /x; rm/, "a name that is no container's is not put in a command");
   const native = repairSteps({}, "/srv/my data", false).join("\n");
   assert.match(native, /sqlite3 '\/srv\/my data\/portal\.db' \.recover \| sqlite3 '\/srv\/my data\/portal-recovered\.db'/);

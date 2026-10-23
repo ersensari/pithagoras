@@ -21,7 +21,7 @@ import { EXECUTOR_KIND } from "./executor-kind.js";
  * Linux only, and only for the host executor: a container's processes are
  * not in this /proc with paths that mean anything here.
  */
-export const MARKER = "PITHAGORAS_AGENT=1";
+export const MARKER = "YULIFY_AGENT=1";
 
 /** Whether this portal can see the agent's processes at all: not a container's, and not off Linux. */
 export const BACKGROUND_SUPPORTED = EXECUTOR_KIND !== "container" && process.platform === "linux";
@@ -172,7 +172,7 @@ async function walk(roots: string[]): Promise<Proc[]> {
       const cwd = await readlink(`/proc/${pid}/cwd`);
       if (!roots.some((root) => within(root, cwd))) return;
       const env = await readFile(`/proc/${pid}/environ`, "latin1");
-      if (!env.split("\0").includes(MARKER)) return;
+      if (!env.split("\0").some(value => value === MARKER || value === "PITHAGORAS_AGENT=1")) return;
       const stat = await readFile(`/proc/${pid}/stat`, "utf8");
       const f = fieldsOf(stat);
       const sid = Number(f[3]);

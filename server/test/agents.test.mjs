@@ -85,7 +85,7 @@ test("an agent renamed and deleted with its folder kept comes back under its las
 
 /** A job as the agent's tool call starts one: marked as the portal's, in the folder, in a Unix session of its own. */
 async function withJob(folder, run) {
-  const job = spawn("sleep", ["60"], { cwd: folder, detached: true, stdio: "ignore", env: { ...process.env, PITHAGORAS_AGENT: "1" } });
+  const job = spawn("sleep", ["60"], { cwd: folder, detached: true, stdio: "ignore", env: { ...process.env, YULIFY_AGENT: "1" } });
   const ended = once(job, "exit");
   try {
     await run();

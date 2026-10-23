@@ -1,7 +1,7 @@
 {
-  "name": "pithagoras-subagent",
+  "name": "yulify-subagent",
   "version": "0.1.0",
-  "description": "A subagent tool for pi that the Pithagoras portal can show and steer, over the subagent protocol",
+  "description": "A subagent tool for pi that the Yulify portal can show and steer, over the subagent protocol",
   "type": "module",
   "keywords": ["pi-package"],
   "pi": { "extensions": ["./index.ts"] },

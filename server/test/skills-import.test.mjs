@@ -16,7 +16,7 @@ import { inProcessHome } from "./server-harness.mjs";
  * that leads into the portal's own files, an address that goes up out of the
  * clone, and one that has changed between the look and the import.
  */
-const home = inProcessHome("pithagoras-skills-import-");
+const home = inProcessHome("yulify-skills-import-");
 const agent = process.env.PI_CODING_AGENT_DIR;
 const skills = path.join(agent, "skills");
 const remote = path.join(home, "remote");

@@ -77,8 +77,8 @@ const pill = (page: Page) => page.locator('.composer-settings button').nth(1);
 /** What a page that has seen chats before keeps: the default's levels, as last reported, and which model they were for. */
 const seen = (page: Page, levels: Record<string, string[]>, follows: Record<string, string> = {}) =>
   page.addInitScript(([l, f]) => {
-    localStorage.setItem('pithagoras.thinkingLevels', JSON.stringify(l));
-    localStorage.setItem('pithagoras.thinkingLevelsFollow', JSON.stringify(f));
+    localStorage.setItem('yulify.thinkingLevels', JSON.stringify(l));
+    localStorage.setItem('yulify.thinkingLevelsFollow', JSON.stringify(f));
   }, [levels, follows] as const);
 const open = async (page: Page, title: string, id: string) => {
   await page.getByText(title).first().click();

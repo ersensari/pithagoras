@@ -32,7 +32,7 @@ function Fixture() {
   const [shortcuts, setShortcuts] = useState(false);
   // The chat open: another one is the same page shown for another session, as the portal's own switches.
   const [chat, setChat] = useState('test');
-  const session: Session = { id: chat, title: 'A little room to think', workspace: '/workspaces/pithagoras', executor: 'host', status: running ? 'running' : 'idle', created_at: '', updated_at: '', last_error: null, pinned: false, provider: 'llama-server', model: 'Model A', thinking_level: 'medium' };
+  const session: Session = { id: chat, title: 'A little room to think', workspace: '/workspaces/yulify', executor: 'host', status: running ? 'running' : 'idle', created_at: '', updated_at: '', last_error: null, pinned: false, provider: 'llama-server', model: 'Model A', thinking_level: 'medium' };
   return <>
     <main data-testid="workspace" style={{ maxWidth: 980, height: 'calc(100vh - 96px)', minHeight: 540, margin: '16px auto 0' }}>
       <Chat session={session} events={events} onClientCommand={() => {}} onEditMessage={async () => {}} onDeleteMessage={async () => {}} onRename={async () => {}} onAbort={async () => { setAborted(n => n + 1); setRunning(false); }} onSend={async (message, options) => {
@@ -83,9 +83,9 @@ function Fixture() {
         { seq: previous.length + 2, type: 'tool_execution_end', payload: { toolName: 'generate_image', toolCallId: 'gen-failed', isError: true, result: { content: [{ type: 'text', text: 'The image endpoint answered 401: the key was refused' }] } } }]); }}>Fail generating a picture</button>
       <button onClick={() => setEvents(previous => [...previous,
         { seq: previous.length + 1, type: 'tool_execution_start', payload: { toolName: 'generate_image', toolCallId: `other-${previous.length}`, input: { prompt: 'A cat on a sofa' } } },
-        { seq: previous.length + 2, type: 'tool_execution_end', payload: { toolName: 'generate_image', toolCallId: `other-${previous.length}`, result: { content: [{ type: 'text', text: 'Saved /workspaces/pithagoras/out/cat.png' }], details: { path: '/workspaces/pithagoras/out/cat.png' } } } }])}>Call an extension's generate_image</button>
+        { seq: previous.length + 2, type: 'tool_execution_end', payload: { toolName: 'generate_image', toolCallId: `other-${previous.length}`, result: { content: [{ type: 'text', text: 'Saved /workspaces/yulify/out/cat.png' }], details: { path: '/workspaces/yulify/out/cat.png' } } } }])}>Call an extension's generate_image</button>
       <button onClick={() => setEvents(previous => [...previous,
-        { seq: previous.length + 1, type: 'tool_execution_start', payload: { toolName: 'edit', toolCallId: `edit-${previous.length}`, input: { path: '/workspaces/pithagoras/src/app.ts' } } },
+        { seq: previous.length + 1, type: 'tool_execution_start', payload: { toolName: 'edit', toolCallId: `edit-${previous.length}`, input: { path: '/workspaces/yulify/src/app.ts' } } },
         { seq: previous.length + 2, type: 'tool_execution_end', payload: { toolName: 'edit', toolCallId: `edit-${previous.length}`, result: { content: [{ type: 'text', text: 'ok' }], details: { diff: ' 1 a\n-2 b\n+2 c\n+3 d' } } } }])}>Edit file</button>
       <button onClick={() => { setRunning(true); setEvents(previous => [...previous, { seq: previous.length + 1, type: 'tool_execution_start', payload: { toolName: 'grep', toolCallId: `grep-${previous.length}`, input: { pattern: 'retry', glob: '*.ts' } } }]); }}>Start search</button>
       <button onClick={() => setEvents(previous => [...previous, { seq: previous.length + 1, type: 'message_update', payload: { assistantMessageEvent: { type: 'thinking_delta', delta: 'Checking the latest build results and comparing the browser state. The next step is to verify the page layout.' } } }])}>Stream thinking</button>

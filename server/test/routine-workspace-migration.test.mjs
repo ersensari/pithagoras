@@ -5,7 +5,7 @@ import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
 // The server's own database, made by another process first: this one is told the same folders.
-inProcessHome("pithagoras-routine-migration-");
+inProcessHome("yulify-routine-migration-");
 const env = { ...process.env };
 
 test("routine sessions from before routines had a place are moved to where Home is now", async () => {

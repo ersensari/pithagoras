@@ -159,7 +159,7 @@ const storedSize = (key: string, fallback: number, least: number) => {
   return Number.isFinite(n) && n >= least ? n : fallback;
 };
 
-const COMPOSER_HEIGHT_KEY = "pithagoras.composerHeight";
+const COMPOSER_HEIGHT_KEY = "yulify.composerHeight";
 const DEFAULT_COMPOSER_HEIGHT = 72;
 const MIN_COMPOSER_HEIGHT = 56;
 

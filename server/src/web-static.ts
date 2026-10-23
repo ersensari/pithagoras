@@ -74,7 +74,7 @@ export function serveWeb(app: express.Application, root: string): void {
     // Of the file, not of its copy.
     res.type(path.extname(file));
     const hashed = asked.startsWith(HASHED);
-    // Named from the root, so that a dot folder above the build (`~/.pithagoras`)
+    // Named from the root, so that a dot folder above the build (`~/.yulify`)
     // is not taken for a hidden file, which Express answers with a 404.
     res.sendFile(path.relative(root, file) + copy.ext, {
       root,

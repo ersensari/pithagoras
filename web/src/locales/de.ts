@@ -813,7 +813,7 @@ const de: Locale = {
     "Tidying up — this takes as long as the model needs…": "Wird aufgeräumt — das dauert so lange, wie das Modell braucht…",
     "Tidy up now": "Jetzt aufräumen",
     "Save and restart Understory": "Speichern und Understory neu starten",
-    "A container named pithagoras-understory is there that the portal did not make. It is left alone: rename or remove it to run Understory here.": "Es gibt einen Container namens pithagoras-understory, den nicht das Portal angelegt hat. Er bleibt unangetastet: Benenne ihn um oder entferne ihn, um Understory hier zu betreiben.",
+    "A container named forgeloop-ai-yulify-understory is there that the portal did not make. It is left alone: rename or remove it to run Understory here.": "Es gibt einen Container namens forgeloop-ai-yulify-understory, den nicht das Portal angelegt hat. Er bleibt unangetastet: Benenne ihn um oder entferne ihn, um Understory hier zu betreiben.",
     "Save the settings first": "Erst die Einstellungen speichern",
     "Install and use as the agent's memory": "Installieren und als Gedächtnis des Agenten nutzen",
     "Stopping…": "Wird gestoppt…",

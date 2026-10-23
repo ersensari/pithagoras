@@ -43,8 +43,8 @@ let probeDelay = 0;                     // the probe container is slow to be mad
 let onStop: (() => void) | null = null; // what stopping the voice container changes: the memory it held is given back
 const docker = await fakeDocker(process.env.DOCKER_SOCKET!, async ({ method, url, path: p, query, body, req }) => {
   if (url === '/containers/portal-test/json') return { json: { Id: portalId, State: { Running: true } } };
-  if (url === '/containers/pithagoras-voice/json') return { status: container ? 200 : 404, json: container };
-  if (url.startsWith('/containers/pithagoras-voice/logs')) return { json: 'services ready' };
+  if (url === '/containers/forgeloop-ai-yulify-voice/json') return { status: container ? 200 : 404, json: container };
+  if (url.startsWith('/containers/forgeloop-ai-yulify-voice/logs')) return { json: 'services ready' };
   if (p === '/images/create') {
     if (pullFails) return { status: 500, json: { message: 'no route to host' } };
     images.add(`${query.get('fromImage')}:${query.get('tag')}`);
@@ -52,7 +52,7 @@ const docker = await fakeDocker(process.env.DOCKER_SOCKET!, async ({ method, url
   }
   if (p.startsWith('/images/') && p.endsWith('/json')) return { status: images.has(decodeURIComponent(p.slice('/images/'.length, -'/json'.length))) ? 200 : 404 };
   // The throwaway container that reads nvidia-smi inside the image.
-  if (url === '/containers/create') {
+  if (url.startsWith('/containers/create?name=forgeloop-ai-yulify-voice-probe-')) {
     if (probeDelay) await new Promise(r => setTimeout(r, probeDelay));
     if (hangUp) { req.socket.destroy(); return 'handled'; }
     if (probeError) return { status: 500, json: { message: probeError } };
@@ -60,16 +60,16 @@ const docker = await fakeDocker(process.env.DOCKER_SOCKET!, async ({ method, url
     return { json: { Id: 'probe-1' } };
   }
   // Only a container that asks for a GPU is refused one.
-  if (noGpuRuntime && (url === '/containers/probe-1/start' || (url === '/containers/pithagoras-voice/start' && container?.HostConfig?.DeviceRequests))) return { status: 500, json: { message: NO_RUNTIME } };
+  if (noGpuRuntime && (url === '/containers/probe-1/start' || (url === '/containers/forgeloop-ai-yulify-voice/start' && container?.HostConfig?.DeviceRequests))) return { status: 500, json: { message: NO_RUNTIME } };
   if (p === '/volumes/create') return {};
   if (url === '/containers/probe-1/start') return { status: 204, text: '' };
   if (url === '/containers/probe-1/wait') return { json: { StatusCode: 0 } };
   if (url.startsWith('/containers/probe-1/logs')) return { text: dockerGpus ?? '' };
   if (url.startsWith('/containers/probe-1?')) return {};
-  if (url.startsWith('/containers/pithagoras-voice/stop?')) { container.State.Running = false; onStop?.(); return {}; }
-  if (method === 'DELETE' && p === '/containers/pithagoras-voice') { container = null; return {}; }
-  if (url.startsWith('/containers/create?name=pithagoras-voice')) { container = { Config: body, HostConfig: body.HostConfig, State: { Running: false } }; return {}; }
-  if (url === '/containers/pithagoras-voice/start') { container.State.Running = true; return {}; }
+  if (url.startsWith('/containers/forgeloop-ai-yulify-voice/stop?')) { container.State.Running = false; onStop?.(); return {}; }
+  if (method === 'DELETE' && p === '/containers/forgeloop-ai-yulify-voice') { container = null; return {}; }
+  if (url.startsWith('/containers/create?name=forgeloop-ai-yulify-voice')) { container = { Config: body, HostConfig: body.HostConfig, State: { Running: false } }; return {}; }
+  if (url === '/containers/forgeloop-ai-yulify-voice/start') { container.State.Running = true; return {}; }
 });
 const { calls } = docker;
 const oldFetch = globalThis.fetch;
@@ -86,9 +86,9 @@ const { NO_GPU_MESSAGE, NO_GPU_FOR_SPEECH, NO_GPU_FOR_SPEECH_UNUSABLE, DRIVER_TO
 const host = (patch = {}) => { voice.hostReader.read = () => ({ totalMiB: 16384, freeMiB: 12000, threads: 8, ...patch }); };
 const reset = () => { host(); portalId = 'portal-one'; container = null; dockerGpus = ''; images = new Set([CUDA, BASE]); pullFails = false; noGpuRuntime = false; probeError = null; hangUp = false; probeDelay = 0; onStop = null; docker.reset(); unhealthy = []; delete process.env.VOICE_GPU; delete process.env.VOICE_VRAM_RESERVE_MIB; };
 const settle = async () => { for (let n = 0; n < 200 && (await voice.status()).busy; n++) await new Promise(r => setTimeout(r, 10)); };
-const created = () => calls.filter(c => c.url === '/containers/create?name=pithagoras-voice');
+const created = () => calls.filter(c => c.url === '/containers/create?name=forgeloop-ai-yulify-voice');
 /** The voice container was deleted, not the throwaway one that reads nvidia-smi. */
-const gone = () => calls.some(c => c.method === 'DELETE' && c.url === '/containers/pithagoras-voice?force=true');
+const gone = () => calls.some(c => c.method === 'DELETE' && c.url === '/containers/forgeloop-ai-yulify-voice?force=true');
 const GPU = (index: number, total: number, free: number, name = `Test GPU ${index}`) => `${index}, ${name}, ${total}, ${free}\n`;
 const env = (spec: any) => Object.fromEntries(spec.Env.map((e: string) => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)]));
 
@@ -100,7 +100,7 @@ test('a first install without a choice takes what the GPU check suggests, and sa
   const spec = created()[0].body;
   assert.deepEqual(env(spec).VOICE_ASR, 'qwen3-asr');
   assert.deepEqual([env(spec).VOICE_TTS, env(spec).VOICE_ASR_MODEL], ['breeze', '1.7b']);
-  assert.equal(spec.Labels['pithagoras.voice-recipe'], 'breeze+qwen3-asr:1.7b');
+  assert.equal(spec.Labels['yulify.voice-recipe'], 'breeze+qwen3-asr:1.7b');
   assert.match(env(spec).VOICE_PLAN, /^Detected Test GPU 0 \(12\.0 GiB, 10\.7 GiB free\): Breeze speech with Qwen3-ASR 1\.7B needs about 7\.0 GiB, which fits\.$/);
   // One card: Docker's own pick, as it has always been.
   assert.deepEqual(spec.HostConfig.DeviceRequests, [{ Driver: 'nvidia', Count: 1, Capabilities: [['gpu']] }]);
@@ -118,7 +118,7 @@ test('a portal without nvidia-smi reads the GPUs in a throwaway container, and n
   dockerGpus = GPU(0, 8192, 1000) + GPU(1, 12288, 12000);
   await voice.install({ tts: 'chatterbox', asr: 'qwen3-asr', asrModel: '0.6b' });
   await settle();
-  const probe = calls.find(c => c.url === '/containers/create')!.body;
+  const probe = calls.find(c => c.url.startsWith('/containers/create?name=forgeloop-ai-yulify-voice-probe-'))!.body;
   assert.deepEqual(probe.Cmd.slice(0, 1), ['nvidia-smi']);
   assert.equal(probe.Image, BASE, 'the small image, not the CUDA one');
   assert.deepEqual(probe.Env, ['NVIDIA_DRIVER_CAPABILITIES=utility']);
@@ -127,7 +127,7 @@ test('a portal without nvidia-smi reads the GPUs in a throwaway container, and n
   assert.equal(calls.some(c => c.url.includes('/images/create')), false, 'the check never pulls an image of its own');
   const spec = created()[0].body;
   assert.deepEqual(spec.HostConfig.DeviceRequests, [{ Driver: 'nvidia', DeviceIDs: ['1'], Capabilities: [['gpu']] }]);
-  assert.equal(spec.Labels['pithagoras.voice-recipe'], 'chatterbox+qwen3-asr:0.6b');
+  assert.equal(spec.Labels['yulify.voice-recipe'], 'chatterbox+qwen3-asr:0.6b');
   assert.match(env(spec).VOICE_PLAN, /^Detected Test GPU 1 /);
 });
 
@@ -137,13 +137,13 @@ test('VOICE_GPU picks the card and VOICE_VRAM_RESERVE_MIB keeps memory on it fre
   await voice.install();
   await settle();
   assert.deepEqual(created()[0].body.HostConfig.DeviceRequests[0].DeviceIDs, ['0']);
-  assert.equal(created()[0].body.Labels['pithagoras.voice-recipe'], 'breeze+qwen3-asr:0.6b', '6.5 GB free holds Breeze and the small model, not the large one');
+  assert.equal(created()[0].body.Labels['yulify.voice-recipe'], 'breeze+qwen3-asr:0.6b', '6.5 GB free holds Breeze and the small model, not the large one');
   reset(); hostGpus(GPU(0, 8192, 8000));
   // Without the reserve 8 GB holds the large model too.
   process.env.VOICE_VRAM_RESERVE_MIB = '2500';
   await voice.install();
   await settle();
-  assert.equal(created()[0].body.Labels['pithagoras.voice-recipe'], 'breeze+whisper:base', 'room is kept for something else');
+  assert.equal(created()[0].body.Labels['yulify.voice-recipe'], 'breeze+whisper:base', 'room is kept for something else');
   const hardware = await voice.hardware();
   assert.deepEqual([hardware.reserveMiB, hardware.selected, hardware.suggestion], [2500, 0, DEFAULT_CHOICE]);
 });
@@ -199,7 +199,7 @@ test('no GPU for Docker is "no GPU", not an error, however Docker or the driver 
     const spec = created()[0].body;
     assert.equal(spec.Image, BASE, why);
     assert.equal('DeviceRequests' in spec.HostConfig, false, why);
-    assert.equal(spec.Labels['pithagoras.voice-recipe'], 'kokoro@cpu+qwen3-asr:0.6b', why);
+    assert.equal(spec.Labels['yulify.voice-recipe'], 'kokoro@cpu+qwen3-asr:0.6b', why);
     assert.match(env(spec).VOICE_PLAN, /^No GPU detected: installing Kokoro speech on the CPU with Qwen3-ASR 0\.6B needing about 2\.8 GiB of memory on the CPU, which fits\.$/, why);
     assert.deepEqual([env(spec).VOICE_TTS_DEVICE, JSON.parse(env(spec).VOICE_CPU_CONFIG).models.map((m: any) => m.id)], ['cpu', ['kokoro', 'qwen3-asr']], why);
     assert.deepEqual([state.state, state.choice], ['running', { tts: 'kokoro', ttsDevice: 'cpu', asr: 'qwen3-asr', asrModel: '0.6b' }], why);
@@ -240,7 +240,7 @@ test('on a host without a GPU a speech engine on the GPU is refused, Kokoro on t
   const kokoro = created()[0].body;
   assert.equal(kokoro.Image, BASE);
   assert.equal('DeviceRequests' in kokoro.HostConfig, false);
-  assert.equal(kokoro.Labels['pithagoras.voice-recipe'], 'kokoro@cpu+whisper:base');
+  assert.equal(kokoro.Labels['yulify.voice-recipe'], 'kokoro@cpu+whisper:base');
   assert.deepEqual([env(kokoro).VOICE_TTS_DEVICE, env(kokoro).VOICE_THREADS, 'VOICE_SERVER_CONFIG' in env(kokoro)], ['cpu', '8', false]);
   assert.deepEqual(JSON.parse(env(kokoro).VOICE_CPU_CONFIG).models.map((m: any) => m.id), ['kokoro']);
   // On the GPU it is refused like any other.
@@ -298,7 +298,7 @@ test('a GPU host can put recognition on the CPU, to keep its memory: one image, 
   const spec = created()[0].body;
   assert.equal(spec.Image, CUDA);
   assert.deepEqual(spec.HostConfig.DeviceRequests, [{ Driver: 'nvidia', Count: 1, Capabilities: [['gpu']] }]);
-  assert.equal(spec.Labels['pithagoras.voice-recipe'], 'breeze+qwen3-asr:1.7b@cpu');
+  assert.equal(spec.Labels['yulify.voice-recipe'], 'breeze+qwen3-asr:1.7b@cpu');
   assert.deepEqual(JSON.parse(env(spec).VOICE_SERVER_CONFIG).models.map((m: any) => m.id), ['breeze']);
   assert.deepEqual(JSON.parse(env(spec).VOICE_CPU_CONFIG).models.map((m: any) => m.id), ['qwen3-asr']);
   assert.match(env(spec).VOICE_PLAN, /^Detected Test GPU 0 \(6\.0 GiB, 5\.9 GiB free\): Breeze speech with Qwen3-ASR 1\.7B on the CPU needs about 4\.5 GiB, which fits, and about 2\.9 GiB of memory on the CPU, which fits\.$/);
@@ -329,7 +329,7 @@ test('a GPU that Docker cannot hand on is told in one plain sentence, not as the
   assert.doesNotMatch(state.error, /none was found/);
   // A container that was made and exited with Docker's own words is shown the same way.
   reset(); hostGpus(GPU(0, 12288, 11000));
-  container = { Config: { Labels: { 'pithagoras.addon': 'voice' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: false, ExitCode: 128, Error: `failed to create task for container: ${NO_RUNTIME}` } };
+  container = { Config: { Labels: { 'yulify.addon': 'voice' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: false, ExitCode: 128, Error: `failed to create task for container: ${NO_RUNTIME}` } };
   await voice.stop();   // the install's own error is gone; what is left is what Docker says of the container
   container.State.Running = false;
   const failed = await voice.status();
@@ -343,7 +343,7 @@ test('a GPU that Docker cannot hand on is told in one plain sentence, not as the
 test('a driver too old for the CUDA image is told as that, and the toolkit\'s other errors are left as they are', async () => {
   const requirement = 'failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process: error during container init: error running hook #0: error running hook: exit status 1, stdout: , stderr: Auto-detected mode as \'legacy\'\nnvidia-container-cli: requirement error: unsatisfied condition: cuda>=12.4, please update your driver to a newer version, or use an earlier cuda container: unknown';
   reset(); hostGpus(GPU(0, 12288, 11000));
-  container = { Config: { Labels: { 'pithagoras.addon': 'voice' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: false, ExitCode: 128, Error: requirement } };
+  container = { Config: { Labels: { 'yulify.addon': 'voice' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: false, ExitCode: 128, Error: requirement } };
   await voice.stop();
   container.State.Running = false;
   const old = await voice.status();
@@ -400,7 +400,7 @@ test('a host with the driver but without the toolkit has no GPU for voice: the c
 
 test('a container made before engines could be chosen keeps its engines through start and through a restating of the same choice', async () => {
   reset(); hostGpus(GPU(0, 1024, 1000));   // far too small: a restart must not be refused on that
-  container = { Config: { Labels: { 'pithagoras.addon': 'voice', 'pithagoras.voice-network': 'shared-v1' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: false } };
+  container = { Config: { Labels: { 'yulify.addon': 'voice', 'yulify.voice-network': 'shared-v1' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: false } };
   assert.deepEqual((await voice.status()).choice, DEFAULT_CHOICE);
   await voice.start();
   await settle();
@@ -414,16 +414,16 @@ test('a container made before engines could be chosen keeps its engines through 
 
 test('a legacy container moved to a new network namespace is recreated as the original combination, without a GPU check', async () => {
   reset(); hostGpus(GPU(0, 1024, 1000));   // a card the original combination would be refused on
-  container = { Config: { Labels: { 'pithagoras.addon': 'voice' } }, HostConfig: { NetworkMode: 'bridge' }, State: { Running: true } };
+  container = { Config: { Labels: { 'yulify.addon': 'voice' } }, HostConfig: { NetworkMode: 'bridge' }, State: { Running: true } };
   assert.equal((await voice.status()).state, 'installing');
   await settle();
   assert.equal((await voice.status()).error, '');
   const spec = created()[0].body;
   assert.equal(spec.HostConfig.NetworkMode, 'container:portal-one');
-  assert.equal(spec.Labels['pithagoras.voice-recipe'], 'breeze+whisper:base');
+  assert.equal(spec.Labels['yulify.voice-recipe'], 'breeze+whisper:base');
   assert.deepEqual(spec.HostConfig.DeviceRequests, [{ Driver: 'nvidia', Count: 1, Capabilities: [['gpu']] }]);
   assert.equal('VOICE_PLAN' in env(spec), false, 'no check was made, so there is nothing to report');
-  assert.equal(calls.some(c => c.url === '/containers/create'), false);
+  assert.equal(calls.some(c => c.url.startsWith('/containers/create?name=forgeloop-ai-yulify-voice-probe-')), false);
 });
 
 test('a container recreated for a new portal namespace stays on the card it was given', async () => {
@@ -439,13 +439,13 @@ test('a container recreated for a new portal namespace stays on the card it was 
   await settle();
   assert.equal(created()[0].body.HostConfig.NetworkMode, 'container:portal-two');
   assert.deepEqual(created()[0].body.HostConfig.DeviceRequests, [{ Driver: 'nvidia', DeviceIDs: ['1'], Capabilities: [['gpu']] }]);
-  assert.equal(created()[0].body.Labels['pithagoras.voice-recipe'], 'breeze+whisper:base');
+  assert.equal(created()[0].body.Labels['yulify.voice-recipe'], 'breeze+whisper:base');
   assert.equal((await voice.status()).error, '', 'a kept choice is not checked again');
 });
 
 test('VOICE_GPU decides the card of a recreated container, and of one installed without a GPU reading', async () => {
   reset(); hostGpus(GPU(0, 12288, 12000) + GPU(1, 12288, 3000));
-  container = { Config: { Labels: { 'pithagoras.addon': 'voice' } }, HostConfig: { NetworkMode: 'bridge' }, State: { Running: true } };
+  container = { Config: { Labels: { 'yulify.addon': 'voice' } }, HostConfig: { NetworkMode: 'bridge' }, State: { Running: true } };
   process.env.VOICE_GPU = '1';
   assert.equal((await voice.status()).state, 'installing');
   await settle();
@@ -472,7 +472,7 @@ test('a VOICE_GPU that no card has is ignored when the cards can be read, at ins
   assert.equal((await voice.status()).error, '');
   // One card, and a setting that names a second: Docker's own pick, as an install makes it.
   reset(); hostGpus(GPU(0, 12288, 12000));
-  container = { Config: { Labels: { 'pithagoras.addon': 'voice' } }, HostConfig: { NetworkMode: 'bridge' }, State: { Running: true } };
+  container = { Config: { Labels: { 'yulify.addon': 'voice' } }, HostConfig: { NetworkMode: 'bridge' }, State: { Running: true } };
   process.env.VOICE_GPU = '1';
   assert.equal((await voice.status()).state, 'installing');
   await settle();
@@ -480,7 +480,7 @@ test('a VOICE_GPU that no card has is ignored when the cards can be read, at ins
 });
 
 test('Start moves a container to the card VOICE_GPU names, and leaves one that is on it alone', async () => {
-  const stopped = (devices: any) => ({ Config: { Labels: { 'pithagoras.addon': 'voice', 'pithagoras.voice-network': 'shared-v1', 'pithagoras.voice-recipe': 'breeze+whisper:base' } }, HostConfig: { NetworkMode: 'container:portal-one', DeviceRequests: [devices] }, State: { Running: false } });
+  const stopped = (devices: any) => ({ Config: { Labels: { 'yulify.addon': 'voice', 'yulify.voice-network': 'shared-v1', 'yulify.voice-recipe': 'breeze+whisper:base' } }, HostConfig: { NetworkMode: 'container:portal-one', DeviceRequests: [devices] }, State: { Running: false } });
   const cards = GPU(0, 12288, 12000) + GPU(1, 12288, 12000);
   reset(); hostGpus(cards);
   container = stopped({ Driver: 'nvidia', DeviceIDs: ['0'], Capabilities: [['gpu']] });
@@ -488,7 +488,7 @@ test('Start moves a container to the card VOICE_GPU names, and leaves one that i
   await voice.start();
   await settle();
   assert.deepEqual(created()[0].body.HostConfig.DeviceRequests[0].DeviceIDs, ['1']);
-  assert.equal(container.Config.Labels['pithagoras.voice-recipe'], 'breeze+whisper:base');
+  assert.equal(container.Config.Labels['yulify.voice-recipe'], 'breeze+whisper:base');
   // Already there: started as it is. So is one that asked Docker for any one GPU, which is the first.
   for (const [devices, asked] of [[{ Driver: 'nvidia', DeviceIDs: ['1'], Capabilities: [['gpu']] }, '1'], [{ Driver: 'nvidia', Count: 1, Capabilities: [['gpu']] }, '0']] as const) {
     reset(); hostGpus(cards);
@@ -511,10 +511,10 @@ test('the page is told the card the installed service is on, not the one with th
   const cards = GPU(0, 6144, 6000) + GPU(1, 12288, 5000);
   reset(); hostGpus(cards);
   assert.equal((await voice.hardware()).selected, 0, 'nothing installed: the card with the most room');
-  container = { Config: { Labels: { 'pithagoras.addon': 'voice', 'pithagoras.voice-recipe': 'breeze+qwen3-asr:1.7b' } }, HostConfig: { DeviceRequests: [{ Driver: 'nvidia', DeviceIDs: ['1'], Capabilities: [['gpu']] }] }, State: { Running: true } };
+  container = { Config: { Labels: { 'yulify.addon': 'voice', 'yulify.voice-recipe': 'breeze+qwen3-asr:1.7b' } }, HostConfig: { DeviceRequests: [{ Driver: 'nvidia', DeviceIDs: ['1'], Capabilities: [['gpu']] }] }, State: { Running: true } };
   assert.equal((await voice.hardware()).selected, 1, 'the service holds memory there, which is why it has less free');
   // One made before the card was chosen has Docker's first.
-  container = { Config: { Labels: { 'pithagoras.addon': 'voice' } }, HostConfig: { DeviceRequests: [{ Driver: 'nvidia', Count: 1, Capabilities: [['gpu']] }] }, State: { Running: true } };
+  container = { Config: { Labels: { 'yulify.addon': 'voice' } }, HostConfig: { DeviceRequests: [{ Driver: 'nvidia', Count: 1, Capabilities: [['gpu']] }] }, State: { Running: true } };
   hostGpus(GPU(0, 6144, 1000) + GPU(1, 12288, 12000));
   assert.equal((await voice.hardware()).selected, 0);
   container = null;
@@ -524,7 +524,7 @@ test('the page is told the card the installed service is on, not the one with th
 
 test('a rebuild takes its own reading of the GPUs after the stop, not that of a check of the page which began before it', async () => {
   // Two cards: the service runs on card 0, which looks full while it holds its memory (5000 MiB free) and has 12000 once it is stopped; card 1 has 9000.
-  const running = () => ({ Config: { Labels: { 'pithagoras.addon': 'voice', 'pithagoras.voice-network': 'shared-v1', 'pithagoras.voice-recipe': 'breeze+whisper:base' } }, HostConfig: { NetworkMode: 'container:portal-one', DeviceRequests: [{ Driver: 'nvidia', DeviceIDs: ['0'], Capabilities: [['gpu']] }] }, State: { Running: true } });
+  const running = () => ({ Config: { Labels: { 'yulify.addon': 'voice', 'yulify.voice-network': 'shared-v1', 'yulify.voice-recipe': 'breeze+whisper:base' } }, HostConfig: { NetworkMode: 'container:portal-one', DeviceRequests: [{ Driver: 'nvidia', DeviceIDs: ['0'], Capabilities: [['gpu']] }] }, State: { Running: true } });
   const setup = () => {
     reset(); hostGpus(GPU(0, 12288, 5000) + GPU(1, 12288, 9000)); container = running();
     onStop = () => writeFileSync(smiOutput, GPU(0, 12288, 12000) + GPU(1, 12288, 9000));
@@ -555,41 +555,41 @@ test('a rebuild takes its own reading of the GPUs after the stop, not that of a 
 
 test('a rebuild reads the GPU after the running service is stopped, and starts it again when the choice is refused', async () => {
   reset(); hostGpus(null); dockerGpus = GPU(0, 6144, 6000);
-  const running = () => ({ Config: { Labels: { 'pithagoras.addon': 'voice', 'pithagoras.voice-network': 'shared-v1', 'pithagoras.voice-recipe': 'breeze+whisper:base' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: true } });
+  const running = () => ({ Config: { Labels: { 'yulify.addon': 'voice', 'yulify.voice-network': 'shared-v1', 'yulify.voice-recipe': 'breeze+whisper:base' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: true } });
   container = running();
   await voice.install({ tts: 'breeze', asr: 'qwen3-asr', asrModel: '1.7b' });
   await settle();
   const at = (test: (c: { url: string }) => boolean) => calls.findIndex(test);
-  assert.ok(at(c => c.url.includes('/stop?')) >= 0 && at(c => c.url.includes('/stop?')) < at(c => c.url === '/containers/create'), 'its own memory is not counted as taken by others');
+  assert.ok(at(c => c.url.includes('/stop?')) >= 0 && at(c => c.url.includes('/stop?')) < at(c => c.url.startsWith('/containers/create?name=forgeloop-ai-yulify-voice-probe-')), 'its own memory is not counted as taken by others');
   assert.match((await voice.status()).error, /needs about 7\.0 GiB/);
   assert.equal(container.State.Running, true, 'the refusal leaves the service running');
-  assert.equal(calls.some(c => c.method === 'DELETE' && c.url === '/containers/pithagoras-voice?force=true'), false);
-  assert.equal(calls.filter(c => c.url === '/containers/pithagoras-voice/start').length, 1);
+  assert.equal(calls.some(c => c.method === 'DELETE' && c.url === '/containers/forgeloop-ai-yulify-voice?force=true'), false);
+  assert.equal(calls.filter(c => c.url === '/containers/forgeloop-ai-yulify-voice/start').length, 1);
   // A choice that fits is stopped once, probed, and replaced.
   docker.reset(); container = running();
   await voice.install({ tts: 'breeze', asr: 'qwen3-asr', asrModel: '0.6b' });
   await settle();
   assert.equal(calls.filter(c => c.url.includes('/stop?')).length, 1);
-  assert.ok(at(c => c.url.includes('/stop?')) < at(c => c.url === '/containers/create'));
-  assert.equal(created()[0].body.Labels['pithagoras.voice-recipe'], 'breeze+qwen3-asr:0.6b');
+  assert.ok(at(c => c.url.includes('/stop?')) < at(c => c.url.startsWith('/containers/create?name=forgeloop-ai-yulify-voice-probe-')));
+  assert.equal(created()[0].body.Labels['yulify.voice-recipe'], 'breeze+qwen3-asr:0.6b');
 });
 
 test('another choice recreates the container, keeps the volume and is not mistaken for a network change', async () => {
   reset(); hostGpus(GPU(0, 12288, 11000));
-  container = { Config: { Labels: { 'pithagoras.addon': 'voice', 'pithagoras.voice-network': 'shared-v1' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: true } };
+  container = { Config: { Labels: { 'yulify.addon': 'voice', 'yulify.voice-network': 'shared-v1' } }, HostConfig: { NetworkMode: 'container:portal-one' }, State: { Running: true } };
   await voice.install({ tts: 'chatterbox', asr: 'qwen3-asr', asrModel: '1.7b' });
   await settle();
-  assert.ok(calls.some(c => c.method === 'DELETE' && c.url === '/containers/pithagoras-voice?force=true'));
+  assert.ok(calls.some(c => c.method === 'DELETE' && c.url === '/containers/forgeloop-ai-yulify-voice?force=true'));
   assert.ok(calls.some(c => c.url.includes('/stop?')));
   assert.equal(calls.some(c => c.url.startsWith('/volumes') && c.method === 'DELETE'), false);
-  assert.deepEqual(created()[0].body.HostConfig.Binds, ['pithagoras_voice-models:/voice']);
-  assert.equal(container.Config.Labels['pithagoras.voice-recipe'], 'chatterbox+qwen3-asr:1.7b');
+  assert.deepEqual(created()[0].body.HostConfig.Binds, ['forgeloop-ai-yulify-voice-models:/voice']);
+  assert.equal(container.Config.Labels['yulify.voice-recipe'], 'chatterbox+qwen3-asr:1.7b');
   // Start now keeps what was built.
   docker.reset();
   await voice.start();
   await settle();
   assert.equal(gone(), false);
-  assert.equal(container.Config.Labels['pithagoras.voice-recipe'], 'chatterbox+qwen3-asr:1.7b');
+  assert.equal(container.Config.Labels['yulify.voice-recipe'], 'chatterbox+qwen3-asr:1.7b');
 });
 
 test('a request for an engine the installer does not make is refused before anything happens', async () => {
@@ -603,9 +603,9 @@ test('a request for an engine the installer does not make is refused before anyt
 test('the container spec of the original combination is the one it always was', () => {
   const spec = voice.containerSpec('echo test', 'host');
   assert.deepEqual(spec.HostConfig.DeviceRequests, [{ Driver: 'nvidia', Count: 1, Capabilities: [['gpu']] }]);
-  assert.deepEqual(spec.HostConfig.Binds, ['pithagoras_voice-models:/voice']);
-  assert.equal(spec.Labels['pithagoras.voice-network'], 'shared-v1');
-  assert.equal(spec.Labels['pithagoras.voice-recipe'], 'breeze+whisper:base');
+  assert.deepEqual(spec.HostConfig.Binds, ['forgeloop-ai-yulify-voice-models:/voice']);
+  assert.equal(spec.Labels['yulify.voice-network'], 'shared-v1');
+  assert.equal(spec.Labels['yulify.voice-recipe'], 'breeze+whisper:base');
   assert.deepEqual(spec.Cmd, ['bash', '-c', 'echo test']);
   assert.deepEqual(env(spec).VOICE_TTS + env(spec).VOICE_ASR + env(spec).VOICE_ASR_MODEL, 'breezewhisperbase');
   assert.equal('VOICE_PLAN' in env(spec), false);

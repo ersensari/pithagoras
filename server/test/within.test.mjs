@@ -42,7 +42,7 @@ test("what is written with .. or doubled separators is judged by where it goes",
 });
 
 test("by where it leads, a link into the folder counts as inside, and an empty place does not", (t) => {
-  const home = scratch("pithagoras-within-");
+  const home = scratch("yulify-within-");
   t.after(() => rmSync(home, { recursive: true, force: true }));
   const project = path.join(home, "site");
   mkdirSync(path.join(project, "docs"), { recursive: true });

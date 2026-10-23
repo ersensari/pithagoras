@@ -11,7 +11,7 @@ import { ENTRY, freePort, inProcessHome, runToEnd, serverEnv, startServer, testH
  * examples do, with this runtime and `process.argv[1]`, or as a second server,
  * by hand or by the agent in a chat.
  */
-const home = inProcessHome("pithagoras-second-");
+const home = inProcessHome("yulify-second-");
 const agentDir = path.join(home, "agent");
 
 /** A model that answers every request with the same words, streamed. */
@@ -100,7 +100,7 @@ test("a second server on the same data says so, and leaves the first one's chats
 });
 
 test("a server killed outright does not keep the next one out", async () => {
-  const other = testHome("pithagoras-second-killed-");
+  const other = testHome("yulify-second-killed-");
   const { child } = await startServer(serverEnv(other, await freePort()));
   child.kill("SIGKILL");
   await once(child, "exit");
@@ -109,7 +109,7 @@ test("a server killed outright does not keep the next one out", async () => {
 });
 
 test("a data directory too long for a socket in it is held all the same", async () => {
-  const deep = path.join(testHome("pithagoras-second-deep-"), "x".repeat(60), "y".repeat(60));
+  const deep = path.join(testHome("yulify-second-deep-"), "x".repeat(60), "y".repeat(60));
   const lock = new URL("../dist/instance-lock.js", import.meta.url).href;
   const { code, out, err } = await runToEnd(["--input-type=module", "-e", `
     import { holdDataDir } from ${JSON.stringify(lock)};
@@ -121,7 +121,7 @@ test("a data directory too long for a socket in it is held all the same", async 
 });
 
 test("a server that cannot listen says where and why, without a stack trace", async () => {
-  const { code, out, err } = await runToEnd([ENTRY], serverEnv(testHome("pithagoras-second-other-"), port));
+  const { code, out, err } = await runToEnd([ENTRY], serverEnv(testHome("yulify-second-other-"), port));
   assert.equal(code, 1, out + err);
   assert.match(err, new RegExp(`could not listen on 127\\.0\\.0\\.1:${port}: .*address already in use`));
   assert.doesNotMatch(out + err, /at Server\.|at listen/);

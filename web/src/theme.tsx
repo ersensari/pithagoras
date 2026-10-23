@@ -10,7 +10,7 @@ import { local } from "./safe-storage";
  */
 export type Theme = "light" | "dark" | "system";
 
-const KEY = "pithagoras.theme";
+const KEY = "yulify.theme";
 const media = () => window.matchMedia("(prefers-color-scheme: light)");
 
 export const resolve = (theme: Theme): "light" | "dark" =>

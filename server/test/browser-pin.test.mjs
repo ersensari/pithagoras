@@ -6,7 +6,7 @@ import { inProcessHome } from "./server-harness.mjs";
 
 // A browser connection written before vision: the portal's own, and one
 // somebody gave capabilities of their own.
-const home = inProcessHome("pithagoras-pin-");
+const home = inProcessHome("yulify-pin-");
 const mcp = path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json");
 const CDP = "http://127.0.0.1:9222";
 writeFileSync(

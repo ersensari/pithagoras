@@ -1,6 +1,14 @@
 (function () {
         try {
-          var t = localStorage.getItem("pithagoras.theme") || "system";
+          // Copy prior browser preferences and drafts once; retain old values for rollback.
+          [localStorage, sessionStorage].forEach(function (store) {
+            Object.keys(store).forEach(function (key) {
+              if (key.indexOf("pithagoras.") !== 0) return;
+              var next = "yulify." + key.slice("pithagoras.".length);
+              if (store.getItem(next) === null) store.setItem(next, store.getItem(key));
+            });
+          });
+          var t = localStorage.getItem("yulify.theme") || "system";
           var dark =
             t === "dark" ||
             (t === "system" && !matchMedia("(prefers-color-scheme: light)").matches);

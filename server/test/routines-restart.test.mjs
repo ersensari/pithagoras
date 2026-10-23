@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-routines-restart-");
+const home = inProcessHome("yulify-routines-restart-");
 
 const { default: express } = await import("express");
 const { routineSupervisor } = await import("../dist/routines/supervisor.js");

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-agent-names-");
+const home = inProcessHome("yulify-agent-names-");
 
 const { default: express } = await import("express");
 const { agentOf, agentsRoot, chatsOf, createAgent, deleteAgent, listAgents, slugOf } = await import("../dist/agents.js");

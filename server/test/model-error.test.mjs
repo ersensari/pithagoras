@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-model-error-");
+const home = inProcessHome("yulify-model-error-");
 
 const { createSession, eventsSince } = await import("../dist/db.js");
 const { ModelErrors, plainFailure } = await import("../dist/model-errors.js");

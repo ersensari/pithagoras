@@ -310,7 +310,7 @@ export interface PortalEvent {
  * the portal restarted without PORTAL_SECRET — so the page can ask for the
  * password again instead of failing every request with "Unauthorized".
  */
-export const SIGNED_OUT = "pithagoras:signed-out";
+export const SIGNED_OUT = "yulify:signed-out";
 
 /**
  * A request, as every one the page makes is: the portal being away is said in words

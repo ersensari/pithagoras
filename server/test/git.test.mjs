@@ -7,7 +7,7 @@ import { scratch } from "./server-harness.mjs";
 
 // A home of its own: who commits, what a new repository's branch is called,
 // and no config of the person running the tests.
-const home = scratch("pithagoras-git-");
+const home = scratch("yulify-git-");
 process.env.HOME = home;
 process.env.GIT_CONFIG_GLOBAL = path.join(home, ".gitconfig");
 process.env.GIT_CONFIG_NOSYSTEM = "1";

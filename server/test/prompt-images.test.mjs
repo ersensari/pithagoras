@@ -4,7 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { inProcessHome, scratch } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-images-");
+const home = inProcessHome("yulify-images-");
 
 const { parseImages, decodeBase64, saveImages, imagePath, loadImages, MAX_IMAGE_BYTES } = await import("../dist/prompt-images.js");
 const { parseEdit } = await import("../dist/api/images.js");

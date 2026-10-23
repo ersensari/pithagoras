@@ -6,7 +6,7 @@ import { inProcessHome } from "./server-harness.mjs";
 
 // Tool settings per project: a layer between the portal-wide default and a
 // chat's own exceptions, resolved from where the chat works.
-const home = inProcessHome("pithagoras-project-tools-");
+const home = inProcessHome("yulify-project-tools-");
 const ws = process.env.WORKSPACE_ROOT;
 // A server called `browser`, so its tools are the browser's.
 writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json"), JSON.stringify({ mcpServers: { browser: {} } }));

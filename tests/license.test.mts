@@ -66,6 +66,6 @@ test('the web build puts the notices next to the voice files', () => {
 
 test('the README names the licence and points at the notices', () => {
   const readme = read('README.md');
-  assert.match(readme, /## License\n+Pithagoras is licensed under the \[Apache License 2\.0\]\(LICENSE\)/);
+  assert.match(readme, /## License\n+Yulify is licensed under the \[Apache License 2\.0\]\(LICENSE\)/);
   assert.ok(readme.includes('(THIRD_PARTY_NOTICES.md)'));
 });

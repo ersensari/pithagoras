@@ -10,7 +10,7 @@ import { inProcessHome } from "./server-harness.mjs";
 // a conversation never recovers from the least trusted person who spoke in it, and
 // what a sender writes is never taken for the portal's own words.
 
-const home = inProcessHome("pithagoras-trust-");
+const home = inProcessHome("yulify-trust-");
 
 const { resolveChannelSession } = await import("../dist/agent.js");
 const { addNote, createSession, eventsSince, findChannelSession, getDb, getSession, listAudit, listToolRules, pendingNotes, setDefaultReportTo, useGrant } = await import("../dist/db.js");

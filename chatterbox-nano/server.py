@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Chatterbox-Nano (English-only, CPU) TTS server for Pithagoras's Voice add-on.
+"""Chatterbox-Nano (English-only, CPU) TTS server for Yulify's Voice add-on.
 
-Pithagoras's managed Voice installer only offers audio.cpp's GGUF conversion
+Yulify's managed Voice installer only offers audio.cpp's GGUF conversion
 of Chatterbox *Multilingual* (one ~500M-param file, all 23 languages baked
 in, GPU-only, and its CMake build failed on this host). This server speaks
-the same wire contract Pithagoras's runtime="chatterbox" branch already
+the same wire contract Yulify's runtime="chatterbox" branch already
 sends to `breezeUrl` (api/voice.ts's /sessions/:id/voice/speech handler), so
 it's a drop-in replacement: point breezeUrl at this server instead of the
 managed container's 127.0.0.1:7860.
@@ -14,11 +14,11 @@ needed (README: "3x realtime on 8 CPU cores"). Deliberately NOT the
 Multilingual model: the point of this server is to avoid downloading/running
 the ~500M multilingual weights when only English is wanted.
 
-Request body (exact shape Pithagoras sends for runtime="chatterbox"):
+Request body (exact shape Yulify sends for runtime="chatterbox"):
   {"model": "chatterbox", "input": "<text>", "language": "<ignored, English-only>",
    "response_format": "wav", "options": {"exaggeration": "0.5", "seed": "42"},
    "voice_ref": {"type": "base64", "data": "<base64 wav>"}}
-Response: raw WAV bytes, Content-Type: audio/wav (Pithagoras checks this
+Response: raw WAV bytes, Content-Type: audio/wav (Yulify checks this
 content-type and converts the WAV itself - see wavPcm() in api/voice.ts).
 """
 import base64
@@ -82,7 +82,7 @@ def audio_speech(req: dict = Body(...)):
 
     audio = wav.squeeze().cpu().numpy()
     buf = io.BytesIO()
-    # Pithagoras's wavPcm() (api/voice.ts) refuses anything but mono/24kHz/16-bit
+    # Yulify's wavPcm() (api/voice.ts) refuses anything but mono/24kHz/16-bit
     # PCM and does not resample - PCM_16 must be explicit, soundfile defaults to
     # float32 for a float input array otherwise.
     sf.write(buf, audio, model.sr, format="WAV", subtype="PCM_16")

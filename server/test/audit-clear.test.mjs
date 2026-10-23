@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inProcessHome } from './server-harness.mjs';
 
-const dataDir = inProcessHome('pithagoras-audit-');
+const dataDir = inProcessHome('yulify-audit-');
 
 const { default: express } = await import('express');
 const { peopleRouter } = await import('../dist/api/people.js');

@@ -11,7 +11,7 @@ import { freePort, inProcessHome, serverEnv, startServer } from "./server-harnes
  * writes at /api/projects/:name/tools, and what a chat in the project then
  * sees from /api/sessions/:id/tools.
  */
-const home = inProcessHome("pithagoras-project-tools-api-");
+const home = inProcessHome("yulify-project-tools-api-");
 const ws = path.join(home, "ws");
 mkdirSync(path.join(ws, "research"), { recursive: true });
 mkdirSync(path.join(ws, "dev"), { recursive: true });

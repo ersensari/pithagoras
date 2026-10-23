@@ -5,7 +5,7 @@ import http from "node:http";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-term-");
+const home = inProcessHome("yulify-term-");
 // `script` runs its command through $SHELL, so it has to be a lone path.
 process.env.SHELL = "/bin/sh";
 mkdirSync(process.env.PI_CODING_AGENT_DIR, { recursive: true });
@@ -114,9 +114,9 @@ test("a resize reaches the shell without being typed into it", async (t) => {
 
 test("what the person starts in their terminal is not marked as the agent's", async (t) => {
   // The portal marks everything it starts, for the background list to find.
-  process.env.PITHAGORAS_AGENT = "1";
+  process.env.YULIFY_AGENT = "1";
   const id = await openShell(t);
-  await post(`/terminal/${id}/input`, { data: 'echo "mark:[${PITHAGORAS_AGENT:-none}]"\n' });
+  await post(`/terminal/${id}/input`, { data: 'echo "mark:[${YULIFY_AGENT:-none}]"\n' });
   const text = await read(id, /mark:\[(none|1)\]/);
   assert.match(text, /mark:\[none\]/);
 });

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { finishedRuns, tabTitle } from "../web/src/attention.ts";
 
 test("the tab says what the chat is doing", () => {
-  assert.equal(tabTitle(null, false), "Pithagoras");
-  assert.equal(tabTitle({ title: "Fix login", status: "idle" }, false), "Fix login · Pithagoras");
+  assert.equal(tabTitle(null, false), "Yulify");
+  assert.equal(tabTitle({ title: "Fix login", status: "idle" }, false), "Fix login · Yulify");
   assert.equal(tabTitle({ title: "Fix login", status: "running" }, false), "● Fix login · working");
 });
 
@@ -13,7 +13,7 @@ test("being asked something outranks working", () => {
 });
 
 test("a chat without a name still has one in the tab", () => {
-  assert.equal(tabTitle({ title: "  ", status: "idle" }, false), "New chat · Pithagoras");
+  assert.equal(tabTitle({ title: "  ", status: "idle" }, false), "New chat · Yulify");
 });
 
 test("a run that ended is reported, one that is still going is not", () => {

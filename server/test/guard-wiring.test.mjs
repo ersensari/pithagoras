@@ -11,7 +11,7 @@ import { inProcessHome } from "./server-harness.mjs";
  * the guard's rules call its handlers with calls made by hand; this is the one
  * that would notice pi changing what a call is called or what a refusal does.
  */
-const home = inProcessHome("pithagoras-guard-wiring-");
+const home = inProcessHome("yulify-guard-wiring-");
 mkdirSync(path.join(process.env.PI_CODING_AGENT_DIR, "extensions"), { recursive: true });
 mkdirSync(process.env.WORKSPACE_ROOT, { recursive: true });
 

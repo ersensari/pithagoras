@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-steer-");
+const home = inProcessHome("yulify-steer-");
 
 const { SdkPiClient } = await import("../dist/pi/sdk-client.js");
 const { createSession, eventsSince, sentMessages, getDb, getSession, appendEvent, deleteEventsBetween, updateSession } =

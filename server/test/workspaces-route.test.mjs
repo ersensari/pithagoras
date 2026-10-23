@@ -9,7 +9,7 @@ import { freePort, serverEnv, startServer, testHome } from "./server-harness.mjs
  * rules the old workspace route never kept: it made "home", the name Home is
  * read by, and a routine set to it then ran in Home.
  */
-const home = testHome("pithagoras-workspaces-");
+const home = testHome("yulify-workspaces-");
 let base;
 before(async () => {
   ({ base } = await startServer(serverEnv(home, await freePort())));

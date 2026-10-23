@@ -1,5 +1,5 @@
 [Unit]
-Description=Pithagoras multilingual speech (Chatterbox TTS + Qwen3-ASR, audio.cpp)
+Description=Yulify multilingual speech (Chatterbox TTS + Qwen3-ASR, audio.cpp)
 After=network.target
 
 [Service]
@@ -9,8 +9,8 @@ WorkingDirectory=/opt/audio.cpp
 # environment file, e.g. VOICE_GPU=1 to leave GPU 0 to the session model.
 Environment=CUDA_DEVICE_ORDER=PCI_BUS_ID
 Environment=VOICE_GPU=0
-EnvironmentFile=-/etc/default/pithagoras-audio-cpp-multilingual
-ExecStart=/usr/bin/env CUDA_VISIBLE_DEVICES=${VOICE_GPU} /opt/audio.cpp/build/linux-cuda-release/bin/audiocpp_server --config /opt/pithagoras/deploy/voice-multilingual/server.json
+EnvironmentFile=-/etc/default/yulify-audio-cpp-multilingual
+ExecStart=/usr/bin/env CUDA_VISIBLE_DEVICES=${VOICE_GPU} /opt/audio.cpp/build/linux-cuda-release/bin/audiocpp_server --config /opt/yulify/deploy/voice-multilingual/server.json
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30

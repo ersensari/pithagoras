@@ -567,7 +567,7 @@ export function MemoryAddon({ onError }: { onError: (e: string) => void }) {
 
           {foreign && (
             <p role="alert" className="text-[11px] text-warn">
-              {t("A container named pithagoras-understory is there that the portal did not make. It is left alone: rename or remove it to run Understory here.")}
+              {t("A container named forgeloop-ai-yulify-understory is there that the portal did not make. It is left alone: rename or remove it to run Understory here.")}
             </p>
           )}
           <div className="flex flex-wrap gap-2 border-t border-line pt-3">

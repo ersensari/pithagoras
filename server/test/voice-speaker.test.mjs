@@ -2,7 +2,7 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-voice-speaker-");
+const home = inProcessHome("forgeloop-ai-yulify-voice-speaker-");
 after(() => home.cleanup?.());
 
 const { parseSpokenBy, speakerNote, withSpeaker } = await import("../dist/pi/voice-speaker.js");

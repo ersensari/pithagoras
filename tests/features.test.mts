@@ -446,7 +446,7 @@ test("a package pi lists by its folder is found as a full path, ~ for home inclu
   const home = process.env.HOME;
   process.env.HOME = "/home/someone";
   try {
-    assert.equal(localPackagePath("~/src/pithagoras/extensions/subagent", "/home/someone/.pi/agent"), "/home/someone/src/pithagoras/extensions/subagent");
+    assert.equal(localPackagePath("~/src/yulify/extensions/subagent", "/home/someone/.pi/agent"), "/home/someone/src/yulify/extensions/subagent");
     assert.equal(localPackagePath("../../src/x", "/home/someone/.pi/agent"), "/home/someone/src/x");
     assert.equal(localPackagePath("/abs/x", "/home/someone/.pi/agent"), "/abs/x");
   } finally {

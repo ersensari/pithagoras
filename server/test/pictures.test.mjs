@@ -4,7 +4,7 @@ import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-pictures-");
+const home = inProcessHome("yulify-pictures-");
 
 const { default: express } = await import("express");
 const { filesRouter } = await import("../dist/api/files.js");

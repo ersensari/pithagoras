@@ -10,7 +10,7 @@ import { freePort, inProcessHome, serverEnv, startServer } from "./server-harnes
  * cannot read is not one it may start over from: the portal's own key would
  * then be all that is left in it.
  */
-const home = inProcessHome("pithagoras-pi-settings-");
+const home = inProcessHome("yulify-pi-settings-");
 const agent = path.join(home, "agent");
 const file = path.join(agent, "settings.json");
 const { updatePiSettings, writePiSettingsText, inTurnWithSettings, readPiSettings } = await import("../dist/pi-settings.js");

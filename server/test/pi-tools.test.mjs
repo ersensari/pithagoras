@@ -7,7 +7,7 @@ import { inProcessHome } from "./server-harness.mjs";
 // and marks an error only when `execute` throws: a tool that answers with anything else says
 // nothing, and every failure of it reads as success.
 
-const home = inProcessHome("pithagoras-pi-tools-");
+const home = inProcessHome("yulify-pi-tools-");
 
 const { createSession, getDb, listRoutineSessions, setDefaultReportTo } = await import("../dist/db.js");
 const { createAgent } = await import("../dist/agents.js");

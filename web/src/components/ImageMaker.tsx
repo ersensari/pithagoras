@@ -27,7 +27,7 @@ const leftOutText = (left: number, multiple: boolean): string =>
 export type Mode = "make" | "edit";
 
 /** What a thumbnail carries while it is dragged to another place in the row: nothing else is dropped on the row. */
-const SOURCE_TYPE = "application/x-pithagoras-source";
+const SOURCE_TYPE = "application/x-yulify-source";
 
 /** What is wrong with a setting, in words. */
 const problemText = (problem: Problem): string => {

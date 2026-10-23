@@ -5,7 +5,7 @@ import { freePort, serverEnv, startServer, testHome } from "./server-harness.mjs
 // A chat with no model to answer it (the provider of the default was removed, or none is set up) says so in the portal's
 // words, not with pi's text that sends the reader to its /login and to files in node_modules.
 
-const home = testHome("pithagoras-no-model-");
+const home = testHome("yulify-no-model-");
 const { base } = await startServer(serverEnv(home, await freePort()));
 
 const call = async (method, url, body) => {

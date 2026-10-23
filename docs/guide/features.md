@@ -1,6 +1,6 @@
 # Opt-in features
 
-Three capabilities ship with Pithagoras and are **off** until you switch them on
+Three capabilities ship with Yulify and are **off** until you switch them on
 in **Settings**: a **subagent tool** and **Understory** as the agent's memory
 under **Add-ons**, and **image generation and editing** under **Agent → Images**. A fresh
 install has none of them. (The Add-ons page also holds the Docker-based
@@ -384,8 +384,8 @@ The bundle is human-readable and git-diffable.
 ### Running it here
 
 With Docker access (see [Docker add-ons](/guide/add-ons#docker-access)), the
-portal runs Understory itself, in a container of its own (`pithagoras-understory`)
-with its memory in a volume (`pithagoras_understory-memory`). In Settings → Add-ons → Memory:
+portal runs Understory itself, in a container of its own (`forgeloop-ai-yulify-understory`)
+with its memory in a volume (`forgeloop-ai-yulify-understory-memory`). In Settings → Add-ons → Memory:
 
 - **The model that keeps the memory.** Understory uses a model to file, link
   and tidy notes. By default **the chat's model**: the one the chat calling its
@@ -428,7 +428,7 @@ and uses for the Memory page; nothing else can read the memory through it.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `UNDERSTORY_PORT` | `3800` | The port the portal's Understory listens on. |
-| `UNDERSTORY_VOLUME` | `pithagoras_understory-memory` | The volume that holds its memory. |
+| `UNDERSTORY_VOLUME` | `forgeloop-ai-yulify-understory-memory` | The volume that holds its memory. |
 
 Without Docker access, or to keep running your own, see
 [Running your own](#running-your-own).

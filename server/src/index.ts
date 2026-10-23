@@ -25,11 +25,11 @@ let ours: boolean;
 try {
   ours = await holdDataDir(DATA_DIR);
 } catch (e) {
-  console.error(`pithagoras could not hold its data in ${path.resolve(DATA_DIR)}: ${(e as Error).message}`);
+  console.error(`yulify could not hold its data in ${path.resolve(DATA_DIR)}: ${(e as Error).message}`);
   process.exit(1);
 }
 if (!ours) {
-  console.error(`pithagoras is already running on ${path.resolve(DATA_DIR)}. Not starting a second one.`);
+  console.error(`yulify is already running on ${path.resolve(DATA_DIR)}. Not starting a second one.`);
   process.exit(1);
 }
 

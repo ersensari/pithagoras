@@ -1,19 +1,19 @@
 {
   "name": "Yulify",
   "short_name": "Yulify",
-  "description": "Hand tasks to pi and pick them up again from anywhere.",
+  "description": "Your voice, ideas and personal AI assistant.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0a0a0c",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icon-192.png?v=yulify-1", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png?v=yulify-1", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png?v=yulify-1", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Sessions", "url": "/sessions", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Projects", "url": "/projects", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Sessions", "url": "/sessions", "icons": [{ "src": "/icon-192.png?v=yulify-1", "sizes": "192x192" }] },
+    { "name": "Projects", "url": "/projects", "icons": [{ "src": "/icon-192.png?v=yulify-1", "sizes": "192x192" }] }
   ]
 }

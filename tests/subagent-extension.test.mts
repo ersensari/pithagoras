@@ -348,7 +348,7 @@ test('waiting for a slot leaves no listener behind on the parent\'s signal, nor 
  stop.abort();
  await waiting;
  assert.equal(listeners,0);
- assert.equal((globalThis as any)[Symbol.for('pithagoras-subagent:slots')].waiting.length,0);
+ assert.equal((globalThis as any)[Symbol.for('yulify-subagent:slots')].waiting.length,0);
  events.emit('subagent:v1:stop',{id:first});
  await running;
 });

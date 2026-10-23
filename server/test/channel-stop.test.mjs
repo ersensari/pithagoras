@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-channel-stop-");
+const home = inProcessHome("yulify-channel-stop-");
 
 const { channelSupervisor } = await import("../dist/channels/supervisor.js");
 

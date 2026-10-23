@@ -85,7 +85,7 @@ export const channelsDir = (): string => {
 const builtinDir = (): string => bundledPath("channels") ?? path.resolve(process.cwd(), "channels");
 
 const isChannelPackage = (meta: any) =>
-  Boolean(meta?.pithagoras?.channel) || /^pithagoras-channel-/.test(meta?.name ?? "");
+  Boolean(meta?.yulify?.channel) || Boolean(meta?.pithagoras?.channel) || /^(?:yulify|pithagoras)-channel-/.test(meta?.name ?? "");
 
 function candidateDirs(): { dir: string; builtin: boolean }[] {
   const out: { dir: string; builtin: boolean }[] = [];
@@ -210,7 +210,7 @@ async function installChannelPackageNow(spec: string): Promise<string> {
   if (!existsSync(path.join(dir, "package.json"))) {
     // npm needs somewhere to record the dependency, or it walks up and installs
     // into whatever project happens to be above this directory.
-    const stub = { name: "pithagoras-channels", private: true, dependencies: {} };
+    const stub = { name: "yulify-channels", private: true, dependencies: {} };
     mkdirSync(dir, { recursive: true });
     writeFileSync(path.join(dir, "package.json"), JSON.stringify(stub, null, 2) + "\n");
   }

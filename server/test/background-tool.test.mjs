@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { inProcessHome } from "./server-harness.mjs";
 
-inProcessHome("pithagoras-background-");
+inProcessHome("yulify-background-");
 
 const { backgroundTool, BACKGROUND_TOOL, BACKGROUND_SOURCE } = await import("../dist/pi/background-tool.js");
 const { AUDIO_MESSAGE_PREFIX } = await import("../dist/pi/voice-first.js");

@@ -11,7 +11,7 @@ test("a port that something else answers on is not taken for the server that was
   const other = createServer((req, res) => res.end(JSON.stringify({ ok: true, from: "other" }))).listen(port, "127.0.0.1");
   await new Promise((resolve) => other.once("listening", resolve));
   try {
-    const server = await startServer(serverEnv(testHome("pithagoras-harness-port-"), port));
+    const server = await startServer(serverEnv(testHome("yulify-harness-port-"), port));
     assert.notEqual(server.port, port, "it listens on a port of its own");
     assert.equal(server.base, `http://127.0.0.1:${server.port}`);
     const answer = await (await fetch(`${server.base}/api/auth/status`)).json();

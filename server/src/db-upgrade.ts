@@ -54,7 +54,7 @@ const inContainer = (env: NodeJS.ProcessEnv) => Boolean(env.PORTAL_CONTAINER_NAM
 /**
  * How to repair a damaged database, shown on the page and in the log. In a
  * container, by the container's name (`PORTAL_CONTAINER_NAME`, which both
- * shipped Compose files set to `pithagoras`) and the volume it has at /data,
+ * shipped Compose files set to `yulify`) and the volume it has at /data,
  * read from it: the Compose service and the volume are named differently in
  * each. Natively, on the data folder itself.
  */
@@ -68,7 +68,7 @@ export function repairSteps(env: NodeJS.ProcessEnv = process.env, dataDir = DATA
     ];
   }
   // A container's name is of this shape; anything else is not put in a command to be pasted.
-  const name = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(env.PORTAL_CONTAINER_NAME ?? "") ? env.PORTAL_CONTAINER_NAME! : "pithagoras";
+  const name = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(env.PORTAL_CONTAINER_NAME ?? "") ? env.PORTAL_CONTAINER_NAME! : "yulify";
   const volumeOf = `DATA=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{if .Name}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' ${name})`;
   return [
     `Stop the portal (docker stop ${name}).`,

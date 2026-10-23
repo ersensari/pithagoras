@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """mem0-based long-term memory, as an MCP server - local replacement for
-Pithagoras's Understory add-on.
+Yulify's Understory add-on.
 
 Why: Understory's own memory_query spawns an internal LLM agent that reads
 through markdown concept files to answer - no vector index, so latency and
@@ -96,7 +96,7 @@ def memory_search(query: str) -> str:
     return "\n".join(f"- {m.get('memory', m)}" for m in found)
 
 
-# --- plain HTTP routes for the Pithagoras memory page (same bearer token) ---
+# --- plain HTTP routes for the Yulify memory page (same bearer token) ---
 # mem0's client is synchronous and not safe to call from two threads at once
 # (embedded Qdrant), so every call goes through one lock, MCP tools included.
 _memory_lock = threading.Lock()

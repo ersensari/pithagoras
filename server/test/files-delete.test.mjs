@@ -6,7 +6,7 @@ import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
 // A home of its own: who commits, and no config of the person running the tests.
-const home = inProcessHome("pithagoras-files-delete-");
+const home = inProcessHome("yulify-files-delete-");
 process.env.HOME = home;
 process.env.GIT_CONFIG_GLOBAL = path.join(home, ".gitconfig");
 process.env.GIT_CONFIG_NOSYSTEM = "1";

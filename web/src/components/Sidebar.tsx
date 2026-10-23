@@ -31,7 +31,7 @@ import { t, useLanguage } from "../i18n";
 /** How many unpinned sessions the sidebar shows before deferring to Sessions. */
 const RECENTS_LIMIT = 12;
 /** Remembers which agent's home a chat was last explicitly started in, so the bare "+ New" button can reuse it instead of always opening Home. */
-const PREFERRED_NEW_CHAT_KEY = "pithagoras.preferredNewChatWorkspace";
+const PREFERRED_NEW_CHAT_KEY = "yulify.preferredNewChatWorkspace";
 /** How many of a folder's chats the sidebar shows before deferring to Sessions, opened at that folder. */
 const FOLDER_LIMIT = 8;
 

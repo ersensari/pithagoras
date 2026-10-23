@@ -26,7 +26,7 @@ async function chat(page: Page, theme: 'light' | 'dark', percent: number) {
     live: true, state: { model, thinkingLevel: 'medium' }, thinking: { levels: ['off', 'low', 'medium', 'high'] }, models: { models: [model] }, named: { provider: null, model: null },
     stats: { tokens: { input: 1000, output: 500, total: 1500 }, cost: 0.01, contextUsage: { tokens: percent * 100, contextWindow: 10000, percent }, toolCalls: 2, totalMessages: 4 },
   };
-  await page.addInitScript((value) => localStorage.setItem('pithagoras.theme', value), theme);
+  await page.addInitScript((value) => localStorage.setItem('yulify.theme', value), theme);
   await mockPortal(page, ({ path: p, method }) => {
     if (method !== 'GET') return;
     if (p === '/api/sessions') return { sessions: [session], executor: 'host' };
@@ -61,7 +61,7 @@ for (const theme of ['light', 'dark'] as const) {
   });
   test(`${theme}: the canvas's warnings, the delete question and the voice stage's focus ring use the theme's colours`, async ({ page }) => {
     await mockPortal(page);
-    await page.addInitScript((value) => localStorage.setItem('pithagoras.theme', value), theme);
+    await page.addInitScript((value) => localStorage.setItem('yulify.theme', value), theme);
     await page.goto('/sessions');
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     const read = await page.evaluate(() => {
@@ -87,7 +87,7 @@ test('the "Run at" field follows the theme, and is not forced to the dark colour
     if (p === '/api/workspaces') return { root: '/w', workspaces: [] };
     if (p === '/api/projects') return { root: '/w', home: '/h', projects: [] };
   }, { settings: true });
-  await page.addInitScript(() => localStorage.setItem('pithagoras.theme', 'light'));
+  await page.addInitScript(() => localStorage.setItem('yulify.theme', 'light'));
   await page.goto('/routines');
   await page.getByRole('button', { name: /Once/ }).first().click();
   const field = page.getByLabel('Run at');

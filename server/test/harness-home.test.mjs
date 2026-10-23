@@ -11,7 +11,7 @@ const git = (cwd, ...args) => execFileSync("git", ["-c", "user.name=Test", "-c",
 
 test("a push from a test's chat folder cannot reach the repository that the temp folder lies in", () => {
   // A developer whose TMPDIR is inside a work tree: a repository with a remote of its own.
-  const outer = scratch("pithagoras-ceiling-");
+  const outer = scratch("yulify-ceiling-");
   const remote = path.join(outer, "remote.git");
   const repo = path.join(outer, "repo");
   mkdirSync(repo);
@@ -24,7 +24,7 @@ test("a push from a test's chat folder cannot reach the repository that the temp
   mkdirSync(path.join(repo, "tmp"));
   process.env.TMPDIR = path.join(repo, "tmp");
 
-  inProcessHome("pithagoras-inside-");
+  inProcessHome("yulify-inside-");
   const chat = path.join(process.env.WORKSPACE_ROOT, "chat-1");
   mkdirSync(chat);
   // As pi's bash tool runs it: in the chat folder, with this process's environment.
@@ -34,10 +34,10 @@ test("a push from a test's chat folder cannot reach the repository that the temp
 
 test("a commit in a test's home does not read the git config of the person running the tests", () => {
   // A developer who signs their commits, with a program that cannot sign now (a key that is not plugged in).
-  const theirs = path.join(scratch("pithagoras-theirs-"), "gitconfig");
+  const theirs = path.join(scratch("yulify-theirs-"), "gitconfig");
   writeFileSync(theirs, "[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = /bin/false\n");
   process.env.GIT_CONFIG_GLOBAL = theirs;
-  inProcessHome("pithagoras-signing-");
+  inProcessHome("yulify-signing-");
   const repo = path.join(process.env.WORKSPACE_ROOT, "signed");
   mkdirSync(repo);
   git(repo, "init", "-b", "main");

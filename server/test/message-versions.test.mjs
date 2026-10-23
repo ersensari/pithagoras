@@ -4,7 +4,7 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-versions-");
+const home = inProcessHome("yulify-versions-");
 
 const { createSession, eventsSince, sentMessages, getDb, getSession, appendEvent, updateSession } = await import("../dist/db.js");
 const { sessions } = await import("../dist/session-manager.js");

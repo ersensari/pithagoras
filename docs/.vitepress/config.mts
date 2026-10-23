@@ -4,10 +4,10 @@ import { defineConfig } from "vitepress";
 // prefix, spelled as the repository is: the paths are case-sensitive. The
 // docs workflow sets it from the repository's name; this is the upstream's for
 // a build by hand. Overridable for a custom domain, where the site is at the root.
-const base = (process.env.DOCS_BASE ?? "/pithagoras/").replace(/\/?$/, "/");
+const base = (process.env.DOCS_BASE ?? "/yulify/").replace(/\/?$/, "/");
 
 export default defineConfig({
-  title: "Pithagoras",
+  title: "Yulify",
   base,
   description: "A hosted web portal for the pi coding agent",
   lastUpdated: true,
@@ -18,7 +18,7 @@ export default defineConfig({
   themeConfig: {
     logo: "/logo.png",
     nav: [
-      { text: "Guide", link: "/guide/what-is-pithagoras" },
+      { text: "Guide", link: "/guide/what-is-yulify" },
       { text: "People", link: "/people/" },
       { text: "Channels", link: "/channels/" },
       { text: "Reference", link: "/reference/api" },
@@ -28,7 +28,7 @@ export default defineConfig({
       {
         text: "Guide",
         items: [
-          { text: "What is Pithagoras", link: "/guide/what-is-pithagoras" },
+          { text: "What is Yulify", link: "/guide/what-is-yulify" },
           { text: "Deploying", link: "/guide/deploying" },
           { text: "Upgrading", link: "/guide/upgrading" },
           { text: "Sessions", link: "/guide/sessions" },
@@ -85,13 +85,13 @@ export default defineConfig({
       },
     ],
 
-    socialLinks: [{ icon: "github", link: "https://github.com/thecodacus/pithagoras" }],
+    socialLinks: [{ icon: "github", link: "https://github.com/ersensari/yulify" }],
 
     search: { provider: "local" },
 
     footer: {
       message: "Give it a task, close the browser, come back later.",
-      copyright: "Pithagoras",
+      copyright: "Yulify",
     },
   },
 });

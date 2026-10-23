@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { inProcessHome } from "./server-harness.mjs";
 
-inProcessHome("pithagoras-replylang-");
+inProcessHome("yulify-replylang-");
 
 const { noteMessage, replyLanguage, forgetReplyLanguage } = await import("../dist/pi/reply-language.js");
 const { engineUrl } = await import("../dist/api/voice.js");

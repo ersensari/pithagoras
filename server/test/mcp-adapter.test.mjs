@@ -6,7 +6,7 @@ import { inProcessHome } from "./server-harness.mjs";
 
 // The MCP panel asks whether the adapter is installed each time it opens and after every change. It is answered from
 // pi's settings, which is a read of a file, and not by starting pi to list its packages.
-const home = inProcessHome("pithagoras-mcp-adapter-");
+const home = inProcessHome("yulify-mcp-adapter-");
 const agent = process.env.PI_CODING_AGENT_DIR;
 // A pi that says nothing and notes that it was asked.
 const bin = path.join(home, "bin");

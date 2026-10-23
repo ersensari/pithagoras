@@ -6,7 +6,7 @@ import { inProcessHome } from "./server-harness.mjs";
 
 // A database and an agent directory of their own, before anything opens the
 // real ones.
-const home = inProcessHome("pithagoras-browser-");
+const home = inProcessHome("forgeloop-ai-yulify-browser-");
 // A server called `browser`, and one whose name merely starts with it.
 writeFileSync(
   path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json"),

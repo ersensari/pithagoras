@@ -143,7 +143,7 @@ export function memoryLlmRouter(modelOf: ModelOf): Router {
 
   router.get("/understory-llm/v1/models", (req, res) => {
     if (!signedIn(req)) return res.status(401).json({ error: { message: "Not signed in" } });
-    res.json({ object: "list", data: [{ id: "auto", object: "model", owned_by: "pithagoras" }] });
+    res.json({ object: "list", data: [{ id: "auto", object: "model", owned_by: "yulify" }] });
   });
 
   // Signed in first: a conversation-sized body is read only for Understory,

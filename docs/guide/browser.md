@@ -69,7 +69,7 @@ would. Without TLS the page says so and offers a tab instead.
 Give the portal a certificate:
 
 ```
-PORTAL_TLS_DIR=/etc/pithagoras/certs
+PORTAL_TLS_DIR=/etc/yulify/certs
 PORTAL_TLS_CERT=/certs/portal.crt
 PORTAL_TLS_KEY=/certs/portal.key
 ```
@@ -77,9 +77,9 @@ PORTAL_TLS_KEY=/certs/portal.key
 A self-signed pair is enough:
 
 ```bash
-mkdir -p /etc/pithagoras/certs && cd /etc/pithagoras/certs
+mkdir -p /etc/yulify/certs && cd /etc/yulify/certs
 openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-  -keyout portal.key -out portal.crt -subj "/CN=pithagoras"
+  -keyout portal.key -out portal.crt -subj "/CN=yulify"
 ```
 
 On a tailnet, `tailscale cert <machine>.<tailnet>.ts.net` gives a real one and

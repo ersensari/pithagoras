@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}
+  IMAGE: ghcr.io/${{ github.repository_owner }}/forgeloop-ai-yulify
 
 # A push while an image is still being built replaces that build. Left to finish, it could
 # be the last to push and leave `latest` on the older commit.

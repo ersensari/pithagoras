@@ -4,7 +4,7 @@ import path from "node:path";
 import express from "express";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-people-api-");
+const home = inProcessHome("yulify-people-api-");
 
 const { peopleRouter } = await import("../dist/api/people.js");
 const { getPerson, hasPrimary, seen, setRole } = await import("../dist/people.js");

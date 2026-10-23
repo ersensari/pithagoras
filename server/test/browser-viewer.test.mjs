@@ -3,7 +3,7 @@ import test from "node:test";
 import { inProcessHome } from "./server-harness.mjs";
 
 // The side panel's view and input on the agent's browser tab. The page is a fake: no Chrome, no network.
-inProcessHome("pithagoras-browser-viewer-");
+inProcessHome("forgeloop-ai-yulify-browser-viewer-");
 
 const { default: express } = await import("express");
 const { browserRouter } = await import("../dist/api/browser.js");

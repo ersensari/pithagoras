@@ -15,12 +15,12 @@ import { ENTRY, freePort, inProcessHome, runToEnd, serverEnv, startServer, testH
  */
 const PASSWORD = "correct horse battery";
 const SECRET = "a-fixed-secret-for-the-tests";
-const home = testHome("pithagoras-auth-");
+const home = testHome("yulify-auth-");
 const BROWSER_PASSWORD = "the-browsers-own-password";
 
 // The same login in this process, to make the cookies a server would not hand
 // out: one that has run out.
-inProcessHome("pithagoras-auth-in-process-");
+inProcessHome("yulify-auth-in-process-");
 process.env.PORTAL_PASSWORD = PASSWORD;
 process.env.PORTAL_SECRET = SECRET;
 const auth = await import("../dist/auth.js");
@@ -139,7 +139,7 @@ test("signing out refuses the login it ended, also a copy of its cookie", async 
 
 test("changing the password ends the logins made under the old one", async () => {
   const cookie = await signedIn();
-  const other = testHome("pithagoras-auth-other-");
+  const other = testHome("yulify-auth-other-");
   let otherPort = await freePort();
   const env = (extra) => serverEnv(other, otherPort, { PORTAL_ALLOW_NO_PASSWORD: "", PORTAL_SECRET: SECRET, PORTAL_PASSWORD: PASSWORD, ...extra });
   const { child, base: there, port: took } = await startServer(env({ PORTAL_PASSWORD: "another long password" }));
@@ -179,7 +179,7 @@ test("the cookie is Secure where the portal serves TLS, and only there", () => {
 // --- starting ---
 
 test("the portal does not start without a password, with the example's, or with a short one", async () => {
-  const start = (overrides) => runToEnd([ENTRY], serverEnv(testHome("pithagoras-auth-start-"), 0, overrides), { ms: 20_000 });
+  const start = (overrides) => runToEnd([ENTRY], serverEnv(testHome("yulify-auth-start-"), 0, overrides), { ms: 20_000 });
   const none = await start({ PORTAL_PASSWORD: "", PORTAL_ALLOW_NO_PASSWORD: "" });
   assert.equal(none.code, 1);
   assert.match(none.err, /PORTAL_PASSWORD is not set/);
@@ -192,7 +192,7 @@ test("the portal does not start without a password, with the example's, or with 
 
 test("a secret that is a shell command, as a .env written from the old guide holds, is warned about", async () => {
   // Refused for its password, so that it ends: the warning comes before.
-  const start = (secret) => runToEnd([ENTRY], serverEnv(testHome("pithagoras-auth-secret-"), 0, { PORTAL_PASSWORD: "short", PORTAL_ALLOW_NO_PASSWORD: "", PORTAL_SECRET: secret }), { ms: 20_000 });
+  const start = (secret) => runToEnd([ENTRY], serverEnv(testHome("yulify-auth-secret-"), 0, { PORTAL_PASSWORD: "short", PORTAL_ALLOW_NO_PASSWORD: "", PORTAL_SECRET: secret }), { ms: 20_000 });
   const copied = await start("$(openssl rand -hex 32)");
   assert.match(copied.err, /PORTAL_SECRET is a shell command/);
   const real = await start("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
@@ -200,7 +200,7 @@ test("a secret that is a shell command, as a .env written from the old guide hol
 });
 
 test("a password shorter than the minimum only stops a portal it is new to: one that ran with it keeps working, with a warning", async () => {
-  const home = testHome("pithagoras-auth-kept-");
+  const home = testHome("yulify-auth-kept-");
   const run = (password, port) => startServer(serverEnv(home, port, { PORTAL_PASSWORD: password, PORTAL_ALLOW_NO_PASSWORD: password ? "" : "1" }));
   const refused = (password) => runToEnd([ENTRY], serverEnv(home, 0, { PORTAL_PASSWORD: password, PORTAL_ALLOW_NO_PASSWORD: "" }), { ms: 20_000 });
   const stop = async ({ child }) => { child.kill(); await new Promise((r) => child.once("exit", r)); };
@@ -233,7 +233,7 @@ test("a password shorter than the minimum only stops a portal it is new to: one 
   assert.equal((await refused(oldPassword)).code, 1);
 
   // A portal that was never used has nothing to keep.
-  const fresh = await runToEnd([ENTRY], serverEnv(testHome("pithagoras-auth-new-"), 0, { PORTAL_PASSWORD: oldPassword, PORTAL_ALLOW_NO_PASSWORD: "" }), { ms: 20_000 });
+  const fresh = await runToEnd([ENTRY], serverEnv(testHome("yulify-auth-new-"), 0, { PORTAL_PASSWORD: oldPassword, PORTAL_ALLOW_NO_PASSWORD: "" }), { ms: 20_000 });
   assert.equal(fresh.code, 1);
 });
 

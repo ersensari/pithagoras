@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-stale-");
+const home = inProcessHome("yulify-stale-");
 const settings = path.join(process.env.PI_CODING_AGENT_DIR, "settings.json");
 const listPackages = (packages) => writeFileSync(settings, JSON.stringify({ packages }));
 writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json"), JSON.stringify({ mcpServers: { jira: { command: "jira-mcp" } } }));

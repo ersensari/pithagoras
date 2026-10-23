@@ -1,14 +1,14 @@
 # Deploying
 
-Pithagoras ships as a container. It expects to run somewhere private — there is
+Yulify ships as a container. It expects to run somewhere private — there is
 a single password and no per-user separation, so put it behind Tailscale or a
 VPN rather than on a public address.
 
 ## Docker Compose
 
 ```bash
-git clone https://github.com/thecodacus/Pithagoras.git
-cd Pithagoras
+git clone https://github.com/thecodacus/Yulify.git
+cd Yulify
 ```
 
 Create a `.env` next to `docker-compose.yml`. This writes one, with a secret of
@@ -88,7 +88,7 @@ Follow [Docker add-ons](/guide/add-ons) for installation, controls, storage and 
 ## The runner image
 
 `EXECUTOR=container` starts each task from `PI_IMAGE` (default
-`pithagoras-runner:latest`) by running `pi` in it. The repository does not ship
+`forgeloop-ai-yulify-runner:latest`) by running `pi` in it. The repository does not ship
 that image, so build one — anything with `pi`, `git` and whatever your tasks
 need:
 
@@ -100,7 +100,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git openssh-cli
 ```
 
 ```bash
-docker build -t pithagoras-runner:latest .
+docker build -t forgeloop-ai-yulify-runner:latest .
 ```
 
 The per-task limits are `TASK_MEMORY_MB`, `TASK_CPUS` and `TASK_PIDS_LIMIT`.
@@ -130,7 +130,7 @@ chats interrupted.
 git pull && docker compose up -d --build
 ```
 
-Your data lives in a volume, not in the image (`portal-data`, or `pithagoras-data` in the Portainer stack). Sessions,
+Your data lives in a volume, not in the image (`portal-data`, or `yulify-data` in the Portainer stack). Sessions,
 transcripts, installed pi packages and installed channel packages all survive a
 rebuild. When the new version changes the database, the portal copies it aside
 and upgrades it before it starts serving; see [Upgrading](/guide/upgrading).
@@ -195,13 +195,13 @@ The upgrade backs the database up by itself, but only when it changes it (see
 your work:
 
 - **`/data`**: the folder `PORTAL_DATA_DIR` names, or else the volume the Compose
-  file declares (`<project>_portal-data`, and `<stack>_pithagoras-data` in
+  file declares (`<project>_portal-data`, and `<stack>_yulify-data` in
   Portainer: Docker puts the project's or the stack's name in front). The
   database, the chats' files, pi's settings and packages, the agents, the pictures.
 - **The memory of the Understory the portal runs**, if you use it: the volume
-  `pithagoras_understory-memory` (`UNDERSTORY_VOLUME`), plain markdown files.
+  `forgeloop-ai-yulify-understory-memory` (`UNDERSTORY_VOLUME`), plain markdown files.
 - **The browser's logins**, if you want to keep them: the volume
-  `pithagoras_browser-profile`. The voice models are downloads and can be fetched again.
+  `forgeloop-ai-yulify-browser-profile`. The voice models are downloads and can be fetched again.
 - **Your workspaces** are your own repositories: back them up as you do now.
 
 `portal.db` is in write-ahead mode: recent writes sit in `portal.db-wal` beside it
@@ -212,17 +212,17 @@ lacks the last hours. There are two ways around that.
 **Stop, copy, start.** The simplest, and it takes everything in one consistent step:
 
 ```sh
-docker stop pithagoras
-DATA=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{if .Name}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' pithagoras)
-docker run --rm -v "$DATA:/data:ro" -v "$PWD:/backup" alpine tar czf /backup/pithagoras-data.tgz -C /data .
-docker start pithagoras
+docker stop yulify
+DATA=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{if .Name}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' yulify)
+docker run --rm -v "$DATA:/data:ro" -v "$PWD:/backup" alpine tar czf /backup/yulify-data.tgz -C /data .
+docker start yulify
 ```
 
 **While it runs.** Have SQLite make the copy of the database, which is consistent
 while it is read and holds what the log holds, then copy the rest of `/data`:
 
 ```sh
-docker exec pithagoras node -e 'new (require("better-sqlite3"))("/data/portal.db", { fileMustExist: true }).backup("/data/portal-backup.db").then(() => console.log("done"))'
+docker exec forgeloop-ai-yulify node -e 'new (require("better-sqlite3"))("/data/portal.db", { fileMustExist: true }).backup("/data/portal-backup.db").then(() => console.log("done"))'
 ```
 
 This is the call the portal makes before an upgrade. Copy `/data` as you copy any
@@ -235,7 +235,7 @@ Understory first (**Settings → Add-ons → Memory → Stop**) if you want to b
 tidy-up pass is writing:
 
 ```sh
-docker run --rm -v pithagoras_understory-memory:/memory:ro -v "$PWD:/backup" alpine tar czf /backup/understory-memory.tgz -C /memory .
+docker run --rm -v forgeloop-ai-yulify-understory-memory:/memory:ro -v "$PWD:/backup" alpine tar czf /backup/understory-memory.tgz -C /memory .
 ```
 
 **Restoring.** Stop the portal, unpack into the data folder, and for a copy made
@@ -265,7 +265,7 @@ volume. Drop a binary there — no redeploy, no image change. It comes last on
 `pi`:
 
 ```bash
-docker exec pithagoras sh -c "curl -fsSL <url> -o /data/bin/tool && chmod +x /data/bin/tool"
+docker exec forgeloop-ai-yulify sh -c "curl -fsSL <url> -o /data/bin/tool && chmod +x /data/bin/tool"
 ```
 
 **The Dockerfile.** For anything that should be part of the deployment rather
@@ -289,10 +289,10 @@ Everything here is optional except the password and, with the Compose files,
 | `EXECUTOR` | `host` | `host` or `container` — see [Architecture](/reference/architecture#executors). |
 | `WORKSPACE_ROOT` | `/workspaces` | Where workspaces live inside the container. |
 | `WORKSPACES_DIR` | — (required) | Compose only: the host folder mounted at `/workspaces`. |
-| `PORTAL_DATA_DIR` | `portal-data` volume (`pithagoras-data` in the Portainer stack) | Compose only: an absolute host path to mount at `/data` instead of the volume. |
+| `PORTAL_DATA_DIR` | `portal-data` volume (`yulify-data` in the Portainer stack) | Compose only: an absolute host path to mount at `/data` instead of the volume. |
 | `PORTAL_TLS_CERT` / `PORTAL_TLS_KEY` | — | Serve over HTTPS when both name a file; both Compose files mount `PORTAL_TLS_DIR` at `/certs`, so name the files there (`/certs/portal.crt`). |
-| `PORTAL_CONTAINER_NAME` | `pithagoras` (Compose) | The portal's own container name, for managed add-ons and container mounts. Unset natively. |
-| `PI_IMAGE` | `pithagoras-runner:latest` | Container executor's image. |
+| `PORTAL_CONTAINER_NAME` | `yulify` (Compose) | The portal's own container name, for managed add-ons and container mounts. Unset natively. |
+| `PI_IMAGE` | `forgeloop-ai-yulify-runner:latest` | Container executor's image. |
 | `TASK_MEMORY_MB` / `TASK_CPUS` / `TASK_PIDS_LIMIT` | `2048` / `2` / `512` | Container executor limits. |
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | The Docker socket the add-ons and container executor talk to. |
 | `VOICE_GPU` / `VOICE_VRAM_RESERVE_MIB` | — | Managed voice: the GPU it uses where none is chosen on the voice page, and memory in MiB to keep free on it. Both Compose files pass them from `.env`; see [Docker add-ons](/guide/add-ons#engines-devices-and-memory). |
@@ -320,8 +320,8 @@ building locally. Point a Portainer stack at it and set the same environment
 variables: it passes everything `docker-compose.yml` does, the certificates and
 the TLS variables, the password settings and the provider keys included, and
 `WORKSPACES_DIR` is required there too. `PORTAL_DATA_DIR` works as it does there:
-without it the data is in the volume `pithagoras-data`, which Docker names
-`<stack>_pithagoras-data`. Set `PITHAGORAS_VERSION` to a release
+without it the data is in the volume `yulify-data`, which Docker names
+`<stack>_yulify-data`. Set `YULIFY_VERSION` to a release
 (see [Upgrading](/guide/upgrading#pin-a-version)).
 
 ## Running from source
@@ -376,7 +376,7 @@ GitHub Actions**.
 
 The site is served from `/<repository name>/`, so the workflow sets `base` to
 that, spelled as the repository is: GitHub Pages paths are case-sensitive, and a
-fork has a name of its own. A build by hand uses `/pithagoras/`, the upstream's,
+fork has a name of its own. A build by hand uses `/yulify/`, the upstream's,
 unless `DOCS_BASE` says otherwise. On a custom domain, where the site sits at the
 root, set it to `/` in the workflow's build step:
 
@@ -388,7 +388,7 @@ root, set it to `/` in the workflow's build step:
 
 ## Container executor mounts
 
-When the portal itself runs in Docker, set `PORTAL_CONTAINER_NAME` to its Docker container name. Both shipped Compose files set it to `pithagoras`, matching `container_name`. Update both values if you rename the container.
+When the portal itself runs in Docker, set `PORTAL_CONTAINER_NAME` to its Docker container name. Both shipped Compose files set it to `yulify`, matching `container_name`. Update both values if you rename the container.
 
 With `EXECUTOR=container`, the portal inspects its own mounts and translates workspace and session paths to their actual host locations, including named volumes and nested bind mounts. Paths outside those mounts are rejected rather than silently creating an empty host directory. The runtime image includes the Docker CLI and needs the Docker socket mount.
 

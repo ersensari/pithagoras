@@ -6,7 +6,7 @@ import { inProcessHome } from "./server-harness.mjs";
 
 // A new install: no conversations, so nothing was ever granted and there is
 // nothing to carry. The browser is a server like any other.
-const home = inProcessHome("pithagoras-fresh-");
+const home = inProcessHome("yulify-fresh-");
 const mcp = path.join(process.env.PI_CODING_AGENT_DIR, "mcp.json");
 writeFileSync(mcp, JSON.stringify({ mcpServers: { browser: {} } }));
 

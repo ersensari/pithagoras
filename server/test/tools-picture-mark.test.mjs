@@ -7,7 +7,7 @@ import { freePort, inProcessHome, serverEnv, startServer } from "./server-harnes
  * lists group the portal's own in one box and keep an extension's of the same
  * name with its extension, and go by the `inline` mark on the route's answer.
  */
-const home = inProcessHome("pithagoras-tools-picture-mark-");
+const home = inProcessHome("yulify-tools-picture-mark-");
 const db = await import("../dist/db.js");
 db.rememberTools([
   { name: "show_image", source: "pictures", package: null, inline: true },

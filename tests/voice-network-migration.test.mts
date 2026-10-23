@@ -9,10 +9,10 @@ test('managed networking automatically migrates running containers, preserves st
  process.env.DOCKER_SOCKET=path.join(dir,'docker.sock');
  process.env.PORTAL_CONTAINER_NAME='portal-test';
  let portalId='portal-one';
- let container:any={Config:{Labels:{'pithagoras.addon':'voice'}},HostConfig:{NetworkMode:'bridge'},State:{Running:true}};
+ let container:any={Config:{Labels:{'yulify.addon':'voice'}},HostConfig:{NetworkMode:'bridge'},State:{Running:true}};
  const docker=await fakeDocker(process.env.DOCKER_SOCKET!,({method,url,path:p,body})=>{
   if(url==='/containers/portal-test/json')return{json:{Id:portalId,State:{Running:true}}};
-  if(url==='/containers/pithagoras-voice/json')return{status:container?200:404,json:container};
+  if(url==='/containers/forgeloop-ai-yulify-voice/json')return{status:container?200:404,json:container};
   if(url.includes('/logs?'))return{json:'services ready'};
   if(p==='/volumes/create'||p.startsWith('/images/'))return{};
   if(url.includes('/stop?')){container.State.Running=false;return{};}
@@ -29,9 +29,9 @@ test('managed networking automatically migrates running containers, preserves st
   for(let n=0;n<100&&(await voice.status()).busy;n++)await new Promise(r=>setTimeout(r,10));
   assert.equal(container.HostConfig.NetworkMode,'container:portal-one');
   assert.equal(container.HostConfig.PortBindings,undefined);
-  assert.deepEqual(container.HostConfig.Binds,['pithagoras_voice-models:/voice']);
+  assert.deepEqual(container.HostConfig.Binds,['forgeloop-ai-yulify-voice-models:/voice']);
   assert.equal((await voice.status()).state,'running');
-  assert.ok(calls.some(c=>c.method==='DELETE'&&c.url==='/containers/pithagoras-voice?force=true'));
+  assert.ok(calls.some(c=>c.method==='DELETE'&&c.url==='/containers/forgeloop-ai-yulify-voice?force=true'));
   assert.ok(!calls.some(c=>c.method==='DELETE'&&c.url.startsWith('/volumes')));
   // Updating the portal's identity must reattach the still-running add-on.
   portalId='portal-two';assert.equal((await voice.status()).state,'installing');

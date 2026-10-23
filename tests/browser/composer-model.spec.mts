@@ -68,9 +68,9 @@ test('two providers offering a model of one id are told apart, in what is sent a
   await page.getByTitle('Shared', { exact: true }).nth(1).click();
   await expect(page.getByRole('button', { name: 'Refresh models' })).toHaveCount(0);
   expect(state.posts).toEqual([{ provider: 'prov-b', modelId: 'Shared' }]);
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('pithagoras.recentModels')!))).toEqual(['prov-b/Shared']);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('yulify.recentModels')!))).toEqual(['prov-b/Shared']);
   // Recents kept before they named the provider are bare ids: the first model of that id.
-  await page.evaluate(() => localStorage.setItem('pithagoras.recentModels', JSON.stringify(['Shared'])));
+  await page.evaluate(() => localStorage.setItem('yulify.recentModels', JSON.stringify(['Shared'])));
   await page.reload();
   await modelPill(page).click();
   const quick = page.locator('.composer-menu button[title]');

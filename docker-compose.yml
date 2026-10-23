@@ -1,8 +1,10 @@
+name: forgeloop-ai
+
 services:
   portal:
     build: .
-    image: forgeloop-ai-pithagoras:latest
-    container_name: forgeloop-ai-pithagoras
+    image: forgeloop-ai-yulify:latest
+    container_name: forgeloop-ai-yulify
     restart: unless-stopped
     # Docker's own init as PID 1: it collects the processes the agent's jobs and the terminal's shells
     # leave behind, which the portal never waits for and which would stay as zombies until a restart.
@@ -11,7 +13,7 @@ services:
     labels:
       forgeloop.managed: "true"
       forgeloop.project: "forgeloop-ai"
-      forgeloop.resource: "pithagoras"
+      forgeloop.resource: "yulify"
     volumes:
       # Database, pi's settings and packages, sessions. A named volume unless
       # PORTAL_DATA_DIR is set to an absolute path, which mounts that directory.
@@ -26,7 +28,9 @@ services:
     environment:
       # Must match container_name: managed voice shares this network namespace,
       # and the container executor translates its mounts to host paths through it.
-      PORTAL_CONTAINER_NAME: forgeloop-ai-pithagoras
+      PORTAL_CONTAINER_NAME: forgeloop-ai-yulify
+      # The existing browser is independent; preserve its profile and running instance.
+      BROWSER_EXTERNAL: ${BROWSER_EXTERNAL:-false}
       # With host networking the portal binds PORT directly on the host.
       PORT: ${PORT:-4100}
       PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
@@ -50,7 +54,7 @@ services:
       PORTAL_UPGRADE_BACKUP: ${PORTAL_UPGRADE_BACKUP:-}
       # host = pi runs in this container | container = one container per task
       EXECUTOR: ${EXECUTOR:-host}
-      PI_IMAGE: ${PI_IMAGE:-pithagoras-runner:latest}
+      PI_IMAGE: ${PI_IMAGE:-forgeloop-ai-yulify-runner:latest}
       TASK_MEMORY_MB: ${TASK_MEMORY_MB:-2048}
       TASK_CPUS: ${TASK_CPUS:-2}
       TASK_PIDS_LIMIT: ${TASK_PIDS_LIMIT:-512}
@@ -120,3 +124,8 @@ services:
 
 volumes:
   portal-data:
+    name: forgeloop-ai-yulify-data
+    labels:
+      forgeloop.managed: "true"
+      forgeloop.project: forgeloop-ai
+      forgeloop.resource: volume

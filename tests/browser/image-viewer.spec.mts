@@ -164,7 +164,7 @@ test("the browser's back button closes it on a phone, and the chat stays; any ot
   await thumb(page, 'A lighthouse at dusk').click();
   await viewer(page).getByRole('button', { name: 'Close' }).click();
   await expect(viewer(page)).toBeHidden();
-  await expect.poll(() => page.evaluate(() => history.state?.pithagorasOverlay ?? null)).toBeNull();
+  await expect.poll(() => page.evaluate(() => history.state?.yulifyOverlay ?? null)).toBeNull();
   await page.goBack();
   await expect.poll(() => page.url()).toBe('about:blank');
 });
@@ -180,7 +180,7 @@ test('reloaded with a picture open, one press of back leaves the chat', async ({
   await expect(thumb(page, 'A lighthouse at dusk')).toBeVisible();
   await expect(viewer(page)).toBeHidden();
   // What the viewer had pushed is not left behind to be pressed through (the page may load once more as it is taken off).
-  await expect.poll(() => page.evaluate(() => history.state?.pithagorasOverlay ?? null).catch(() => 'loading')).toBeNull();
+  await expect.poll(() => page.evaluate(() => history.state?.yulifyOverlay ?? null).catch(() => 'loading')).toBeNull();
   await expect(thumb(page, 'A lighthouse at dusk')).toBeVisible();
   await page.goBack();
   await expect.poll(() => page.url()).toBe('about:blank');
@@ -623,7 +623,7 @@ test('in the app on a phone, the viewer opens over the chat and the back button 
   await expect(viewer(page)).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(viewer(page)).toBeHidden();
-  await expect.poll(() => page.evaluate(() => history.state?.pithagorasOverlay ?? null)).toBeNull();
+  await expect.poll(() => page.evaluate(() => history.state?.yulifyOverlay ?? null)).toBeNull();
   expect(await page.evaluate(() => history.length)).toBeLessThanOrEqual(before + 1);
   expect(failures).toEqual([]);
 });
@@ -635,7 +635,7 @@ test('left for another chat with the viewer open, it is not open again on coming
     (window as any).overlays = 0;
     const push = history.pushState.bind(history);
     history.pushState = (state, ...rest) => {
-      if (state?.pithagorasOverlay) (window as any).overlays++;
+      if (state?.yulifyOverlay) (window as any).overlays++;
       return push(state, ...rest);
     };
   });

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { inProcessHome } from "./server-harness.mjs";
 
-inProcessHome("pithagoras-names-");
+inProcessHome("yulify-names-");
 const { toolGroupNames, setToolGroupNames } = await import("../dist/db.js");
 
 test("nothing named is an empty map, not a failure", () => {

@@ -9,7 +9,7 @@ import { freePort, inProcessHome, serverEnv, startServer } from "./server-harnes
  * path really leads. A link an agent made in a project is the case that matters:
  * it passes the check on the text of the path, and leads anywhere.
  */
-const home = inProcessHome("pithagoras-workspaces-");
+const home = inProcessHome("yulify-workspaces-");
 const root = path.join(home, "ws");
 const outside = path.join(home, "outside");
 mkdirSync(path.join(root, "site", "docs"), { recursive: true });

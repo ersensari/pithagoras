@@ -1,3 +1,4 @@
+import { managedLabels } from "./docker.js";
 import { randomBytes } from "node:crypto";
 import { browserCdp } from "../api/mcp.js";
 import { getSetting, putSetting } from "../db.js";
@@ -28,9 +29,9 @@ async function startOwn(): Promise<void> {
 export const localMode = (): boolean => !dockerAvailable() && process.env.BROWSER_EXTERNAL !== "true";
 
 export const IMAGE = "lscr.io/linuxserver/chromium:latest";
-export const CONTAINER = "pithagoras-browser";
+export const CONTAINER = "forgeloop-ai-yulify-browser";
 /** The name compose used, so an existing profile — and its logins — carries over. */
-export const VOLUME = process.env.BROWSER_VOLUME || "pithagoras_browser-profile";
+export const VOLUME = process.env.BROWSER_VOLUME || "forgeloop-ai-yulify-browser-profile";
 
 export interface BrowserConfig {
   user: string;
@@ -127,6 +128,7 @@ export async function status() {
 function spec(cfg: BrowserConfig) {
   return {
     Image: IMAGE,
+    Labels: managedLabels("browser"),
     Env: [
       "PUID=0",
       "PGID=0",
@@ -181,7 +183,7 @@ async function installNow(): Promise<void> {
 
   await ensureImage(IMAGE, (state) => (pulling = state));
 
-  await request("POST", `/volumes/create`, { Name: VOLUME });
+  await request("POST", `/volumes/create`, { Name: VOLUME, Labels: managedLabels("volume") });
 
   const existing = await containerState(CONTAINER);
   if (existing.exists) await remove();

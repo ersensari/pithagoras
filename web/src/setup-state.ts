@@ -1,6 +1,6 @@
 import { local } from "./safe-storage";
 
-const DONE_KEY = "pithagoras.setup";
+const DONE_KEY = "yulify.setup";
 
 /** Whether this browser has been through the setup assistant, or waved it away. */
 export function setupDismissed(): boolean {

@@ -10,7 +10,7 @@ import { inProcessHome } from "./server-harness.mjs";
 // starts, a restart in the middle of a run, a pi nobody uses any more, a file
 // that went missing, and what is kept of what pi says.
 
-const home = inProcessHome("pithagoras-lifecycle-");
+const home = inProcessHome("yulify-lifecycle-");
 mkdirSync(path.join(home, "work"), { recursive: true });
 
 const { appendEvent, createSession, deleteSession, eventsSince, getDb, getSession, pendingNotes, updateSession } = await import("../dist/db.js");
@@ -502,7 +502,7 @@ test("a pi that is let go is told first, so that its extensions stop what they s
 });
 
 /** Starts a job as the agent's tool call does: marked as the portal's, in the folder, in a Unix session of its own. */
-const startJob = (folder) => spawn("sleep", ["60"], { cwd: folder, detached: true, stdio: "ignore", env: { ...process.env, PITHAGORAS_AGENT: "1" } });
+const startJob = (folder) => spawn("sleep", ["60"], { cwd: folder, detached: true, stdio: "ignore", env: { ...process.env, YULIFY_AGENT: "1" } });
 const endJob = (job) => {
   try {
     process.kill(-job.pid, "SIGKILL");

@@ -10,7 +10,7 @@ import { inProcessHome } from "./server-harness.mjs";
 // because the portal is stopping, or because it ran out of time: a pi that
 // settles when it is aborted, as pi does, and the real supervisors around it.
 
-inProcessHome("pithagoras-shutdown-runs-");
+inProcessHome("yulify-shutdown-runs-");
 
 const { getDb, getSession } = await import("../dist/db.js");
 const { SdkPiClient } = await import("../dist/pi/sdk-client.js");
@@ -118,7 +118,7 @@ test("a clean-session run that runs out of time is stopped with its pi, and leav
 });
 
 /** What the agent's tool call starts in the background, as bg_run of pi-background-tasks does: marked, in the folder, in a session of its own. */
-const startJob = (folder) => spawn("sleep", ["60"], { cwd: folder, detached: true, stdio: "ignore", env: { ...process.env, PITHAGORAS_AGENT: "1" } });
+const startJob = (folder) => spawn("sleep", ["60"], { cwd: folder, detached: true, stdio: "ignore", env: { ...process.env, YULIFY_AGENT: "1" } });
 const endJob = (job) => {
   try {
     process.kill(-job.pid, "SIGKILL");

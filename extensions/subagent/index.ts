@@ -93,7 +93,7 @@ export function subagentLimit(): number {
  * it once per conversation, and the limit is on how many models run, not on
  * how many run in one chat.
  */
-const slots: { running: number; waiting: (() => void)[] } = ((globalThis as any)[Symbol.for("pithagoras-subagent:slots")] ??= {
+const slots: { running: number; waiting: (() => void)[] } = ((globalThis as any)[Symbol.for("yulify-subagent:slots")] ??= {
   running: 0,
   waiting: [],
 });

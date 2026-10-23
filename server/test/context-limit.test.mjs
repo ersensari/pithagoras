@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { inProcessHome } from './server-harness.mjs';
 
-const dataDir = inProcessHome('pithagoras-ctx-');
+const dataDir = inProcessHome('yulify-ctx-');
 const { getContextLimit, setContextLimit, getDefaultContextLimit, setDefaultContextLimit, contextWindowFor, contextLimitProblem, getDb } =
   await import('../dist/db.js');
 const { SdkPiClient } = await import('../dist/pi/sdk-client.js');

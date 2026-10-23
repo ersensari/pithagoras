@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { inProcessHome } from "./server-harness.mjs";
 
-inProcessHome("pithagoras-typedsearch-");
+inProcessHome("yulify-typedsearch-");
 
 // Unreachable on purpose: needsTools must fall back to looksLikeToolRequest, with no network call.
 process.env.LAYA_URL = "http://127.0.0.1:9/classify";

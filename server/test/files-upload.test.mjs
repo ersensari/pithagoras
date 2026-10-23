@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFil
 import path from "node:path";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-upload-");
+const home = inProcessHome("yulify-upload-");
 
 const { default: express } = await import("express");
 const { filesRouter } = await import("../dist/api/files.js");

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inProcessHome } from './server-harness.mjs';
-inProcessHome('pithagoras-event-retention-');
+inProcessHome('yulify-event-retention-');
 const {appendEvent,eventsSince,getDb}=await import('../dist/db.js');
 const {LiveEvents}=await import('../dist/live-events.js');
 test.after(()=>getDb().close());

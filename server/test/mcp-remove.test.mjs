@@ -6,7 +6,7 @@ import { inProcessHome } from "./server-harness.mjs";
 
 // A server that is removed takes its tools with it: the portal remembers every tool a chat has reported, and the
 // adapter caches what each server offered, so both would list a server that is gone for ever.
-inProcessHome("pithagoras-mcp-remove-");
+inProcessHome("yulify-mcp-remove-");
 const agent = process.env.PI_CODING_AGENT_DIR;
 const mcpFile = path.join(agent, "mcp.json");
 const cacheFile = path.join(agent, "mcp-cache.json");

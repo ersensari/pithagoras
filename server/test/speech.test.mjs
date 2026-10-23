@@ -6,7 +6,7 @@ import path from "node:path";
 import express from "express";
 import { inProcessHome } from "./server-harness.mjs";
 
-const home = inProcessHome("pithagoras-speech-");
+const home = inProcessHome("yulify-speech-");
 const { createSession } = await import("../dist/db.js");
 const { speechRouter } = await import("../dist/api/speech.js");
 

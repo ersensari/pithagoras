@@ -66,10 +66,10 @@ Four ship in the repo, between them covering every shape a transport takes:
 
 | Package | Shape | Notes |
 | --- | --- | --- |
-| `pithagoras-channel-telegram` | Long polling | Outbound only. The Bot API has no socket — see below. |
-| `pithagoras-channel-slack` | WebSocket | Socket Mode, which exists so an app needs no public URL. |
-| `pithagoras-channel-discord` | WebSocket | The Gateway, with the heartbeat it demands. |
-| `pithagoras-channel-webhook` | A listener | POST a message, the reply comes back in the response. |
+| `yulify-channel-telegram` | Long polling | Outbound only. The Bot API has no socket — see below. |
+| `yulify-channel-slack` | WebSocket | Socket Mode, which exists so an app needs no public URL. |
+| `yulify-channel-discord` | WebSocket | The Gateway, with the heartbeat it demands. |
+| `yulify-channel-webhook` | A listener | POST a message, the reply comes back in the response. |
 
 Slack sends a mention in a channel the app also reads twice, once as a message
 and once as a mention, and the agent answers it once. People joining, and

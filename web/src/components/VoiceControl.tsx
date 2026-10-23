@@ -331,8 +331,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       const detail = (event as CustomEvent<{ sessionId: string; playing: boolean }>).detail;
       if (detail?.sessionId === sessionId && session.get('voiceActive') === sessionId) void setMusicMicPaused(detail.playing);
     };
-    window.addEventListener("pithagoras:music-playback", playback);
-    return () => window.removeEventListener("pithagoras:music-playback", playback);
+    window.addEventListener("yulify:music-playback", playback);
+    return () => window.removeEventListener("yulify:music-playback", playback);
   }, [sessionId]);
   /** Push-to-talk pressed or let go. A press too short to hold a word is not sent. */
   const hold = (down: boolean) => {

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { inProcessHome } from "./server-harness.mjs";
 
-inProcessHome("pithagoras-reload-");
+inProcessHome("yulify-reload-");
 
 const { SdkPiClient } = await import("../dist/pi/sdk-client.js");
 

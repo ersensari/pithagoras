@@ -1,6 +1,6 @@
 # Upgrading
 
-Upgrading Pithagoras is pulling a newer version and starting it. When the new version changes the database, it checks and backs it up first. While that runs, it shows a page instead of the portal.
+Upgrading Yulify is pulling a newer version and starting it. When the new version changes the database, it checks and backs it up first. While that runs, it shows a page instead of the portal.
 
 ## What happens on the first start
 
@@ -34,11 +34,11 @@ Put it in `.env` and recreate the container (`docker compose up -d`): both Compo
 
 ### A damaged database
 
-SQLite can recover everything still readable into a new file. Both shipped Compose files name the container `pithagoras` and set `PORTAL_CONTAINER_NAME` to it; the page and the log show these steps with the name your portal has been told. The volume holding its data is read from the container, since the Compose files name it differently:
+SQLite can recover everything still readable into a new file. Both shipped Compose files name the container `yulify` and set `PORTAL_CONTAINER_NAME` to it; the page and the log show these steps with the name your portal has been told. The volume holding its data is read from the container, since the Compose files name it differently:
 
 ```sh
-docker stop pithagoras
-DATA=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{if .Name}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' pithagoras)
+docker stop yulify
+DATA=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{if .Name}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' yulify)
 
 # Recover what can be read into a new file
 docker run --rm -v "$DATA:/data" alpine sh -c \
@@ -48,7 +48,7 @@ docker run --rm -v "$DATA:/data" alpine sh -c \
 docker run --rm -v "$DATA:/data" alpine sh -c \
   "cd /data && mv portal.db portal-damaged.db && rm -f portal.db-wal portal.db-shm && mv portal-recovered.db portal.db"
 
-docker start pithagoras
+docker start yulify
 ```
 
 With `PORTAL_DATA_DIR` set to a folder on the host, `DATA` comes out as that folder.
@@ -71,7 +71,7 @@ What the first start after an install of version 0.1.0, or of any build made bef
 - **A voice add-on.** The container of a voice add-on that an older version made is made again, with the engines and the card it had, the next time it is started or installed from Settings → Add-ons; the models and builds in its volume are kept. Rebuilding the portal does not touch it until then.
 - **`WORKSPACES_DIR` is required.** An install whose `.env` never set it was mounting the folder `/root/repos` of the host, and Compose now stops until the variable is set. Set it to the folder your repositories are in; for an install that relied on the old default, that is `/root/repos`. The Portainer stack asks for it too.
 - **The password.** A portal whose `PORTAL_PASSWORD` is still `change-me`, the example of the first release's `.env.example`, no longer starts, so change it before you upgrade. A new or changed password has to be at least 8 characters; a portal that already ran with a shorter one keeps starting with it, with a warning. See [Deploying](/guide/deploying#environment).
-- **The Portainer stack's data folder.** The first release's Portainer stack ignored `PORTAL_DATA_DIR` and always kept its data in the volume `<stack>_pithagoras-data`. It now mounts the folder that variable names, as `docker-compose.yml` does. If your stack's environment sets `PORTAL_DATA_DIR`, the update would start the portal on that folder, empty if it did not exist, and everything you had would look gone. Either remove the variable to stay on the volume, or stop the stack first and copy the volume into the folder: `docker run --rm -v <stack>_pithagoras-data:/from:ro -v /that/folder:/to alpine cp -a /from/. /to/`.
+- **The Portainer stack's data folder.** The first release's Portainer stack ignored `PORTAL_DATA_DIR` and always kept its data in the volume `<stack>_yulify-data`. It now mounts the folder that variable names, as `docker-compose.yml` does. If your stack's environment sets `PORTAL_DATA_DIR`, the update would start the portal on that folder, empty if it did not exist, and everything you had would look gone. Either remove the variable to stay on the volume, or stop the stack first and copy the volume into the folder: `docker run --rm -v <stack>_yulify-data:/from:ro -v /that/folder:/to alpine cp -a /from/. /to/`.
 - **Rules for `subagent` and the routine tools.** `subagent`, `routine_create`, `routine_update` and `routine_run` run what a person writes with your rights, so no rule or approval opens them for anybody else now (see [roles](/people/roles#what-a-colleague-may-do)). A rule the first release let you or an approval make for one of them could never apply, so the upgrade removes it from Settings → People, a heartbeat's own excepted. A colleague who was allowed to delegate with `subagent` is not any more.
 - **Channel packages.** A third-party channel has to say who sent each message (`from` in `ctx.ask`, with the sender's id as a string), or once a primary user is named its messages are turned away like a stranger's. See [Writing a channel](/channels/writing-a-channel).
 - **Webhooks without a sender.** A webhook message that names nobody, by `from` in its body or the channel's `senderId`, is answered as a stranger's once a primary user is named. A cron job, CI step or home automation that posted without one ran as you before; give it a sender. The answer is an ordinary reply, not an HTTP error, so a script that only checks the status does not notice.
@@ -87,11 +87,11 @@ What the first start after an install of version 0.1.0, or of any build made bef
 
 Run a release rather than `latest`, so that going back is changing one value. Each release is published as an image tagged with its version.
 
-- **Portainer stack** (`docker-compose.portainer.yml`): set `PITHAGORAS_VERSION`, for example `0.2.0`, in the stack's environment.
-- **Built from source** (`docker-compose.yml`): check out the release tag, for example `git checkout v0.2.0`. Building replaces the image you had, so keep a copy before you upgrade. `docker compose images portal` shows its name, which is `pithagoras-portal` for a checkout in a folder called `pithagoras`:
+- **Portainer stack** (`docker-compose.portainer.yml`): set `YULIFY_VERSION`, for example `0.2.0`, in the stack's environment.
+- **Built from source** (`docker-compose.yml`): check out the release tag, for example `git checkout v0.2.0`. Building replaces the image you had, so keep a copy before you upgrade. `docker compose images portal` shows its name, which is `yulify-portal` for a checkout in a folder called `yulify`:
 
   ```sh
-  docker tag pithagoras-portal:latest pithagoras-portal:previous
+  docker tag yulify-portal:latest yulify-portal:previous
   ```
 
 ## Going back
@@ -99,7 +99,7 @@ Run a release rather than `latest`, so that going back is changing one value. Ea
 1. Stop the portal.
 2. Put the backup from `backups/` back as `portal.db`, and remove `portal.db-wal` and `portal.db-shm` beside it.
 3. Start the previous version:
-   - Portainer: set `PITHAGORAS_VERSION` to the release before.
-   - Built from source: `docker tag pithagoras-portal:previous pithagoras-portal:latest`, then `docker compose up -d --no-build portal`.
+   - Portainer: set `YULIFY_VERSION` to the release before.
+   - Built from source: `docker tag yulify-portal:previous yulify-portal:latest`, then `docker compose up -d --no-build portal`.
 
 From this version on, an older version does not start on a newer database: it stops at the page described above, because a newer version may have renamed or dropped columns, not only added them. Versions before this one open it anyway and run against it, so put the backup back before you start one of them. The backup from `backups/` is the database as it was before the newer version changed it, which is why going back means putting it back.

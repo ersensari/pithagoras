@@ -164,7 +164,7 @@ test("a project that lists the package and loads it has its tools, whatever the 
 
 test("a package is labelled as its tools were filed before it was recorded", () => {
   assert.equal(packageLabel("npm:@juicesharp/rpiv-todo@0.4.1"), "@juicesharp/rpiv-todo");
-  assert.equal(packageLabel("/opt/pithagoras/extensions/subagent/"), "subagent");
+  assert.equal(packageLabel("/opt/yulify/extensions/subagent/"), "subagent");
   assert.equal(packageLabel("../../extensions/subagent"), "subagent");
   assert.equal(packageLabel("git:github.com/user/repo@v1"), "repo");
   assert.equal(packageLabel("https://github.com/user/repo.git#main"), "repo");

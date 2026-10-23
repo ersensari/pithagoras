@@ -25,7 +25,7 @@ test('a tool call reads as its parameters, closed and opened, not as JSON', asyn
 
   // An MCP tool that answers in JSON: its answer is read the same way.
   const mcp = page.locator('.chat-tool', { hasText: 'github_list_issues' });
-  await expect(mcp.locator('.chat-tool-detail')).toHaveText('Owner: octo-org · Repo: pithagoras · State: open · Labels: bug, ui');
+  await expect(mcp.locator('.chat-tool-detail')).toHaveText('Owner: octo-org · Repo: yulify · State: open · Labels: bug, ui');
   await mcp.locator('.chat-tool-head').click();
   const output = mcp.locator('.chat-tool-output');
   await expect(output).toHaveClass(/is-structured/);
